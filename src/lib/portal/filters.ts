@@ -65,6 +65,8 @@ export function sanitizeQuote(q: Quote) {
   return {
     id: q.id,
     ref: q.ref,
+    proposal_title: q.proposal_title,
+    package_name: q.package_name,
     issue_date: q.issue_date,
     valid_until: q.valid_until,
     status: q.status,

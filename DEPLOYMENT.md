@@ -59,7 +59,12 @@ Exécute les fichiers **dans l'ordre exact** :
 1. supabase/schema.sql      ← crée toutes les tables, enums, triggers, vues
 2. supabase/policies.sql    ← active la RLS et installe les policies
 3. supabase/seed.sql        ← insère les données de démarrage
+4. supabase/migrations/*.sql ← évolutions (ex. types notification + colonne updated_at)
 ```
+
+> Si la base existait **avant** le livrable 5 : exécute au minimum  
+> `supabase/migrations/20260209120000_notification_types_deliverable5.sql` dans le SQL Editor  
+> pour ajouter les nouveaux `notification_type` et `notifications.updated_at`.
 
 Pour chacun :
 - Copie tout le contenu du fichier
@@ -284,39 +289,114 @@ auto-géré par Vercel.
 
 ## ⏰ Étape 8 — Activer les Cron Jobs
 
-Le fichier `vercel.json` configure déjà 4 cron jobs :
+Les handlers sont dans `src/app/api/cron/*/route.ts`. Ils répondent en **GET**
+et exigent **`CRON_SECRET`** via l’un des en-têtes :
 
-| Endpoint | Fréquence | Rôle |
+- `Authorization: Bearer <CRON_SECRET>`
+- `x-cron-secret: <CRON_SECRET>`
+
+### 8.1 Plan Hobby (équipe réduite) vs Pro
+
+- **Hobby / Free** : le nombre de **tâches cron déclarées** dans Vercel est limité. Ce dépôt n’en expose **qu’une** : **`/api/cron/daily`**, compatible petites équipes (ex. 5 personnes).
+- **`/api/cron/daily`** (planifié dans `vercel.json`) exécute **dans l’ordre** :
+  1. **Factures échues** (`runOverdueInvoices`) — statut `overdue`, notifications finance, e-mails si Resend.
+  2. **Alertes d’échéance** (`runDeadlineAlerts`) — tâches / vidéos / factures à venir / devis — **une fois par jour** (dédup inchangée).
+  3. **Rappels matinaux** (`runMorningReminders`) — récap + e-mail si préférences et Resend.
+
+| Plan | `vercel.json` | Horaire (UTC) |
 |---|---|---|
-| `/api/cron/morning-reminders` | tous les jours 09:00 (Casablanca) | Rappels matinaux par employé |
-| `/api/cron/deadline-alerts` | toutes les 2h | Alerts deadlines proches |
-| `/api/cron/evening-summary` | tous les jours 18:00 | Résumé fin de journée |
-| `/api/cron/overdue-invoices` | tous les jours 07:00 | Marque factures en retard |
+| **Hobby** | `/api/cron/daily` uniquement | `30 7 * * 1-5` → **lun–ven 07:30 UTC** |
 
-> Les endpoints seront créés au **Livrable 5**. Pour l'instant, le `vercel.json`
-> est en place mais les routes répondront 404 jusqu'à ce qu'on code les handlers.
+> Ajuste l’expression cron si tu veux un autre fuseau (ex. Casablanca ≈ UTC+1 en hiver) :  
+> 07:30 UTC ≈ 08:30 heure locale Maroc en hiver.
 
-Les cron jobs sont **automatiquement activés** dès le 1er deploy si tu es sur
-un plan Vercel Pro. Sur le plan Hobby (gratuit), tu as droit à 2 crons toutes
-les 24h. Si tu restes en Hobby, retire les 2 crons fréquents (`deadline-alerts`
-et `morning-reminders`) ou passe en Pro (~20$/mois).
+Les routes **individuelles** restent dans le code (tests manuels, split futur) :
 
-### 8.1 Sécuriser les cron endpoints
+| Route | Rôle | Hobby (Vercel) | Pro / manuel |
+|---|---|---|---|
+| `/api/cron/daily` | Job unique : overdue → deadlines → morning | **Planifié** | Idem |
+| `/api/cron/morning-reminders` | Rappels matin seuls | Non planifié | Option : ajouter au `crons` |
+| `/api/cron/overdue-invoices` | Factures en retard seules | Non planifié | Option |
+| `/api/cron/deadline-alerts` | Alertes échéance | Non planifié | **Recommandé Pro** : ex. toutes les 2 h en semaine |
+| `/api/cron/evening-summary` | Bilan fin de journée | Non planifié | **Pro-only recommandé** (2ᵉ slot cron ou scheduler externe) |
 
-Chaque endpoint cron vérifiera `Authorization: Bearer ${CRON_SECRET}`.
-Vercel envoie ce header automatiquement avec la valeur de la variable
-d'environnement `CRON_SECRET`. Code de référence (Livrable 5) :
+**Après passage à Vercel Pro**, tu peux ajouter d’autres entrées dans `vercel.json`, par exemple :
 
-```ts
-// app/api/cron/morning-reminders/route.ts
-export async function GET(req: Request) {
-  const auth = req.headers.get('authorization');
-  if (auth !== `Bearer ${process.env.CRON_SECRET}`) {
-    return new Response('Unauthorized', { status: 401 });
-  }
-  // ... envoi des rappels
-}
+- `"path": "/api/cron/evening-summary"`, `"schedule": "30 18 * * 1-5"` — bilan fin de journée ;
+- `"path": "/api/cron/deadline-alerts"`, `"schedule": "0 */2 * * 1-5"` — alertes plus fréquentes qu’une fois par jour.
+
+La **déduplication** (`createNotificationOnce`) limite les doublons si le même job tourne plusieurs fois ; si tu veux **éviter** d’exécuter deux fois la même logique le même jour, retire `runDeadlineAlerts` de `src/app/api/cron/daily/route.ts` et ne planifie que `/api/cron/deadline-alerts` à haute fréquence (choix d’architecture à documenter en interne).
+
+### 8.5 Vérifs notifications & portail (Deliverable 5)
+
+Après activation cron + variables Resend :
+
+- Vérifier la cloche notifications (topbar) : compteur non lues > 0 après un run cron.
+- Vérifier `/notifications` : filtres, marquage lu, lien d’ouverture fonctionnels.
+- Vérifier portail client :
+  - devis visible uniquement si `visible_to_client = true`
+  - `GET /api/portal/quotes/[id]/pdf` refuse token invalide/inactif
+  - `POST /api/portal/quotes/[id]/respond` accepte/refuse uniquement les devis au statut `sent`.
+
+> Les horaires cron sont en **UTC** sur Vercel. Ajuste les expressions si tu
+> veux un fuseau précis (ex. Casablanca).
+
+### 8.2 Variables d’environnement liées
+
+| Variable | Usage |
+|---|---|
+| `CRON_SECRET` | Obligatoire pour exécuter les crons |
+| `SUPABASE_SERVICE_ROLE_KEY` | Utilisé côté serveur par les jobs (déjà requis pour le portail) |
+| `RESEND_API_KEY` + `EMAIL_FROM` | Optionnel : sans eux, les jobs créent les notifications in-app et **sautent l’e-mail** proprement (`skipped`, pas d’erreur fatale) |
+| `NEXT_PUBLIC_APP_URL` | `https://app.suprav3.com` — liens dans les e-mails (fallback local : `http://localhost:3000`) |
+
+### 8.3 Test manuel (local ou prod)
+
+Job **consolidé** (recommandé, même comportement que Vercel Hobby) :
+
+```bash
+curl -s -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/daily
 ```
+
+Réponse : `ok` global + objets `overdueInvoices`, `deadlineAlerts`, `morningReminders` (chacun avec ses compteurs / `errors`).
+
+Routes **unitaires** (debug) :
+
+```bash
+curl -s -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/morning-reminders
+curl -s -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/overdue-invoices
+curl -s -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/deadline-alerts
+curl -s -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/evening-summary
+```
+
+### 8.4 Prévisualiser les e-mails (dev uniquement)
+
+En développement :  
+`http://localhost:3000/api/dev/email-preview?t=morning`  
+(`morning` \| `deadline` \| `evening` \| `invoice` \| `feedback` \| `quote`).  
+En production cette route répond **404** (aucune fuite de maquettes).
+
+### 8.4 bis — Envoi de test (admin, toutes environnements)
+
+Route : **`POST /api/dev/send-test-email`**  
+Corps JSON : `{ "template": "morning" }` (idem : `deadline`, `evening`, `invoice`, `feedback`, `quote`).
+
+- **Auth** : utilisateur connecté avec rôle **admin** uniquement.
+- **Destinataire** : l’adresse e-mail du compte Supabase Auth de l’admin.
+- **Réponse** : `{ "ok": true, "success": true, "template": "...", "id": "..." }` ou `{ "ok": true, "skipped": true, "detail": "email_not_configured" }` si Resend / `EMAIL_FROM` absents.
+- Aucune clé API n’est renvoyée au client.
+
+Exemple (navigateur, session admin ouverte) :
+
+```javascript
+fetch('/api/dev/send-test-email', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ template: 'morning' }),
+}).then((r) => r.json()).then(console.log);
+```
+
+**Resend (production)** : ajoute le domaine d’envoi dans le dashboard Resend et configure **SPF** + **DKIM** selon les enregistrements fournis ; sinon les messages peuvent partir en spam ou être refusés.
 
 ---
 
@@ -459,8 +539,8 @@ select * from v_client_editorial_status;
 
 ### Les cron Vercel ne s'exécutent pas
 
-→ Vérifie le plan (Hobby = 2/jour max).
-→ Vérifie l'onglet **Crons** dans le dashboard Vercel : ils doivent y apparaître.
+→ Vérifie le plan : **Hobby** limite le nombre de crons déclarés — ce projet n’en utilise qu’**un** (`/api/cron/daily`).
+→ Vérifie l'onglet **Crons** dans le dashboard Vercel : la tâche **daily** doit y figurer.
 → Logs : Project → **Logs** → filtre `path:/api/cron/`.
 
 ### `app.suprav3.com` ne pointe pas

@@ -16,6 +16,7 @@ const PUBLIC_PATHS = [
   '/login',
   '/portal/',          // /portal/client/[id] — token-based, no auth
   '/api/cron/',        // protected by CRON_SECRET, not by Supabase auth
+  '/api/dev/',         // dev-only helpers (handlers still gate by NODE_ENV)
   '/api/portal/',      // portal API uses token validation, not auth
   '/api/auth/login',   // server-side sign-in (session cookies) — must stay public
 ];

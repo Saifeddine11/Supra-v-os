@@ -15,7 +15,6 @@
 import { createServerClient } from '@supabase/ssr';
 import type { CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
-import type { Database } from '@/types/database';
 import { normalizeSupabaseProjectUrl } from '@/lib/supabase/normalize-url';
 
 export async function createClient() {
@@ -23,7 +22,8 @@ export async function createClient() {
   const url = normalizeSupabaseProjectUrl(process.env.NEXT_PUBLIC_SUPABASE_URL);
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
 
-  return createServerClient<Database>(url!, anonKey!, {
+  // Hand-maintained schema types do not yet match PostgREST `GenericTable` inference (→ `never` on `.from()`).
+  return createServerClient(url!, anonKey!, {
     cookies: {
       getAll() {
         return cookieStore.getAll();

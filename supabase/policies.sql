@@ -8,7 +8,7 @@
 --   - admin / project_manager: full access (select+modify).
 --   - Employees: read all internal data they need to do their job, but only
 --     modify what they own/are assigned to. Some tables (invoices, quotes,
---     payments) are restricted to admin + commercial.
+--     payments) are restricted to admin + commercial + finance.
 --   - Clients DO NOT use Supabase Auth → portal access goes through server-
 --     side validated tokens via the service role. We therefore do NOT add
 --     "client" policies here; instead we revoke direct access for the anon
@@ -37,6 +37,8 @@ alter table documents            enable row level security;
 alter table notifications        enable row level security;
 alter table comments             enable row level security;
 alter table activity_logs        enable row level security;
+alter table agency_settings      enable row level security;
+alter table user_notification_preferences enable row level security;
 
 -- ============================================================================
 -- EMPLOYEES
@@ -282,27 +284,27 @@ drop policy if exists "invoices_select_financial" on invoices;
 create policy "invoices_select_financial"
   on invoices for select
   to authenticated
-  using (auth_user_role() in ('admin', 'project_manager', 'commercial'));
+  using (auth_user_role() in ('admin', 'project_manager', 'commercial', 'finance'));
 
 drop policy if exists "invoices_modify_financial" on invoices;
 create policy "invoices_modify_financial"
   on invoices for all
   to authenticated
-  using (auth_user_role() in ('admin', 'commercial'))
-  with check (auth_user_role() in ('admin', 'commercial'));
+  using (auth_user_role() in ('admin', 'commercial', 'finance'))
+  with check (auth_user_role() in ('admin', 'commercial', 'finance'));
 
 drop policy if exists "invoice_items_select" on invoice_items;
 create policy "invoice_items_select"
   on invoice_items for select
   to authenticated
-  using (auth_user_role() in ('admin', 'project_manager', 'commercial'));
+  using (auth_user_role() in ('admin', 'project_manager', 'commercial', 'finance'));
 
 drop policy if exists "invoice_items_modify" on invoice_items;
 create policy "invoice_items_modify"
   on invoice_items for all
   to authenticated
-  using (auth_user_role() in ('admin', 'commercial'))
-  with check (auth_user_role() in ('admin', 'commercial'));
+  using (auth_user_role() in ('admin', 'commercial', 'finance'))
+  with check (auth_user_role() in ('admin', 'commercial', 'finance'));
 
 -- ============================================================================
 -- QUOTES & ITEMS
@@ -312,27 +314,27 @@ drop policy if exists "quotes_select_financial" on quotes;
 create policy "quotes_select_financial"
   on quotes for select
   to authenticated
-  using (auth_user_role() in ('admin', 'project_manager', 'commercial'));
+  using (auth_user_role() in ('admin', 'project_manager', 'commercial', 'finance'));
 
 drop policy if exists "quotes_modify_financial" on quotes;
 create policy "quotes_modify_financial"
   on quotes for all
   to authenticated
-  using (auth_user_role() in ('admin', 'commercial'))
-  with check (auth_user_role() in ('admin', 'commercial'));
+  using (auth_user_role() in ('admin', 'commercial', 'finance'))
+  with check (auth_user_role() in ('admin', 'commercial', 'finance'));
 
 drop policy if exists "quote_items_select" on quote_items;
 create policy "quote_items_select"
   on quote_items for select
   to authenticated
-  using (auth_user_role() in ('admin', 'project_manager', 'commercial'));
+  using (auth_user_role() in ('admin', 'project_manager', 'commercial', 'finance'));
 
 drop policy if exists "quote_items_modify" on quote_items;
 create policy "quote_items_modify"
   on quote_items for all
   to authenticated
-  using (auth_user_role() in ('admin', 'commercial'))
-  with check (auth_user_role() in ('admin', 'commercial'));
+  using (auth_user_role() in ('admin', 'commercial', 'finance'))
+  with check (auth_user_role() in ('admin', 'commercial', 'finance'));
 
 -- ============================================================================
 -- PAYMENTS
@@ -342,14 +344,14 @@ drop policy if exists "payments_select_financial" on payments;
 create policy "payments_select_financial"
   on payments for select
   to authenticated
-  using (auth_user_role() in ('admin', 'project_manager', 'commercial'));
+  using (auth_user_role() in ('admin', 'project_manager', 'commercial', 'finance'));
 
 drop policy if exists "payments_modify_admin_commercial" on payments;
 create policy "payments_modify_admin_commercial"
   on payments for all
   to authenticated
-  using (auth_user_role() in ('admin', 'commercial'))
-  with check (auth_user_role() in ('admin', 'commercial'));
+  using (auth_user_role() in ('admin', 'commercial', 'finance'))
+  with check (auth_user_role() in ('admin', 'commercial', 'finance'));
 
 -- ============================================================================
 -- REPORTS
@@ -446,16 +448,57 @@ create policy "comments_delete_own"
 -- ============================================================================
 
 drop policy if exists "logs_select_admin_pm" on activity_logs;
-create policy "logs_select_admin_pm"
+drop policy if exists "logs_select_internal" on activity_logs;
+create policy "logs_select_internal"
   on activity_logs for select
   to authenticated
-  using (auth_is_admin_or_pm());
+  using (auth_user_role() is not null);
 
 drop policy if exists "logs_insert_authenticated" on activity_logs;
 create policy "logs_insert_authenticated"
   on activity_logs for insert
   to authenticated
   with check (true);
+
+-- ============================================================================
+-- AGENCY SETTINGS (singleton)
+-- ============================================================================
+
+drop policy if exists "agency_settings_select_internal" on agency_settings;
+create policy "agency_settings_select_internal"
+  on agency_settings for select
+  to authenticated
+  using (auth_user_role() is not null);
+
+drop policy if exists "agency_settings_update_admin" on agency_settings;
+create policy "agency_settings_update_admin"
+  on agency_settings for update
+  to authenticated
+  using (auth_user_role() = 'admin')
+  with check (auth_user_role() = 'admin');
+
+-- ============================================================================
+-- USER NOTIFICATION PREFERENCES
+-- ============================================================================
+
+drop policy if exists "notif_prefs_select_own" on user_notification_preferences;
+create policy "notif_prefs_select_own"
+  on user_notification_preferences for select
+  to authenticated
+  using (user_id = auth.uid());
+
+drop policy if exists "notif_prefs_upsert_own" on user_notification_preferences;
+create policy "notif_prefs_upsert_own"
+  on user_notification_preferences for insert
+  to authenticated
+  with check (user_id = auth.uid());
+
+drop policy if exists "notif_prefs_update_own" on user_notification_preferences;
+create policy "notif_prefs_update_own"
+  on user_notification_preferences for update
+  to authenticated
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());
 
 -- (No update / delete on logs — they're an audit trail.)
 
@@ -470,7 +513,8 @@ create policy "logs_insert_authenticated"
 revoke all on employees, clients, client_portals, projects, internal_projects,
               tasks, videos, editorial_calendars, video_templates, content_ideas,
               invoices, invoice_items, quotes, quote_items, payments, reports,
-              documents, notifications, comments, activity_logs
+              documents, notifications, comments, activity_logs,
+              agency_settings, user_notification_preferences
        from anon;
 
 -- ============================================================================

@@ -23,6 +23,7 @@ export type UserRole =
   | 'seo'
   | 'commercial'
   | 'community_manager'
+  | 'finance'
   | 'client';
 
 export type ClientStatus = 'prospect' | 'active' | 'pause' | 'terminated';
@@ -125,13 +126,19 @@ export type NotificationType =
   | 'task_assigned'
   | 'task_overdue'
   | 'task_deadline_approaching'
+  | 'deadline_soon'
   | 'client_validated'
   | 'client_revision_requested'
   | 'invoice_overdue'
+  | 'invoice_due_soon'
+  | 'invoice_sent'
   | 'invoice_paid'
   | 'quote_accepted'
+  | 'quote_expiring'
+  | 'quote_converted'
   | 'quota_incomplete'
   | 'employee_overloaded'
+  | 'employee_task_not_updated'
   | 'report_due'
   | 'comment_added'
   | 'document_uploaded'
@@ -182,6 +189,9 @@ export interface Employee {
   hire_date: string | null;
   notes_internal: string | null;
   manager_id: string | null;
+  /** Compétences terrain (assignation) — ne remplace pas role pour les permissions. */
+  operational_skills: UserRole[];
+  archived_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -236,6 +246,7 @@ export interface Project {
   description: string | null;
   type: string;
   status: ProjectStatus;
+  priority: TaskPriority;
   progress: number;
   lead_id: string | null;
   team_ids: string[];
@@ -407,6 +418,14 @@ export interface InvoiceItem {
   created_at: string;
 }
 
+/** Strategic blocks rendered in proposal PDF (French copy). */
+export interface QuoteStrategicBlock {
+  title: string;
+  body: string;
+}
+
+export type QuoteDiscountMode = 'fixed' | 'percent';
+
 export interface Quote {
   id: string;
   client_id: string;
@@ -422,9 +441,30 @@ export interface Quote {
   discount: number;
   total: number;
   currency: string;
+  /** Internal — not exposed on client PDF or portal. */
   notes: string | null;
   conditions: string | null;
+  /** PDF template key; extend later (e.g. minimal_white). */
   template: string;
+  proposal_title: string | null;
+  package_name: string | null;
+  project_object: string | null;
+  strategic_positioning: string | null;
+  commercial_recommendation: string | null;
+  execution_assumptions: string | null;
+  strategic_value_blocks: QuoteStrategicBlock[];
+  promotional_label: string | null;
+  promotional_terms: string | null;
+  discount_mode: QuoteDiscountMode;
+  discount_percent: number | null;
+  first_month_total: number | null;
+  recurring_monthly_total: number | null;
+  commitment_months: number | null;
+  ads_budget_note: string | null;
+  maintenance_note: string | null;
+  revision_policy_note: string | null;
+  payment_terms: string | null;
+  include_signature_block: boolean;
   pdf_url: string | null;
   pdf_storage_path: string | null;
   converted_invoice_id: string | null;
@@ -439,6 +479,11 @@ export interface QuoteItem {
   quote_id: string;
   position: number;
   description: string;
+  service_name: string;
+  detail_text: string | null;
+  strategic_explanation: string | null;
+  is_optional: boolean;
+  is_recommended: boolean;
   quantity: number;
   unit: string | null;
   unit_price: number;
@@ -501,6 +546,7 @@ export interface DocumentRecord {
   mime_type: string | null;
   external_link: string | null;
   visible_to_client: boolean;
+  archived_at: string | null;
   uploaded_at: string;
   uploaded_by: string | null;
 }
@@ -518,6 +564,7 @@ export interface Notification {
   is_read: boolean;
   read_at: string | null;
   created_at: string;
+  updated_at?: string;
 }
 
 export interface Comment {
@@ -542,12 +589,37 @@ export interface ActivityLog {
   created_at: string;
 }
 
+export interface AgencySettingsRow {
+  id: number;
+  agency_name: string | null;
+  logo_url: string | null;
+  email: string | null;
+  phone: string | null;
+  address: string | null;
+  website: string | null;
+  tax_id: string | null;
+  invoice_prefix: string | null;
+  quote_prefix: string | null;
+  default_currency: string | null;
+  default_payment_terms: string | null;
+  default_tax_rate: number | null;
+  portal_base_url: string | null;
+  portal_show_branding: boolean;
+  updated_at: string;
+}
+
+export interface UserNotificationPreferencesRow {
+  user_id: string;
+  email_reminders_enabled: boolean;
+  morning_reminder_enabled: boolean;
+  evening_summary_enabled: boolean;
+  deadline_alerts_enabled: boolean;
+  updated_at: string;
+}
+
 // ─── DATABASE TYPE (Supabase shape) ─────────────────────────────────────────
 
 export type Database = {
-  __InternalSupabase: {
-    PostgrestVersion: '12';
-  };
   public: {
     Tables: {
       employees: {
@@ -556,7 +628,12 @@ export type Database = {
         Update: Partial<Employee>;
         Relationships: [];
       };
-      clients: { Row: Client; Insert: Partial<Client>; Update: Partial<Client>; Relationships: [] };
+      clients: {
+        Row: Client;
+        Insert: Partial<Client> & { name: string; sector: string };
+        Update: Partial<Client>;
+        Relationships: [];
+      };
       client_portals: {
         Row: ClientPortal;
         Insert: Partial<ClientPortal>;
@@ -623,6 +700,18 @@ export type Database = {
         Row: ActivityLog;
         Insert: Partial<ActivityLog>;
         Update: Partial<ActivityLog>;
+        Relationships: [];
+      };
+      agency_settings: {
+        Row: AgencySettingsRow;
+        Insert: Partial<AgencySettingsRow>;
+        Update: Partial<AgencySettingsRow>;
+        Relationships: [];
+      };
+      user_notification_preferences: {
+        Row: UserNotificationPreferencesRow;
+        Insert: Partial<UserNotificationPreferencesRow> & { user_id: string };
+        Update: Partial<UserNotificationPreferencesRow>;
         Relationships: [];
       };
     };
@@ -722,6 +811,12 @@ export interface TaskWithRelations extends Task {
   assignee?: Employee;
   client?: Client;
   project?: Project;
+}
+
+/** Task list row / kanban card (denormalized names) */
+export interface TaskEnriched extends Task {
+  assignee_name: string | null;
+  client_name: string | null;
 }
 
 /** Video enriched with related entities */

@@ -1,0 +1,645 @@
+import { createClient } from '@/lib/supabase/server';
+import { canViewInvoices } from '@/lib/auth/capabilities';
+import type { AuthContext } from '@/lib/auth/permissions';
+import type { FinanceSnapshot } from '@/data/dashboard-mock';
+import type { InvoiceStatus, UserRole } from '@/types/database';
+
+export interface DashboardFinanceAgg {
+  currency: string;
+  monthlyRevenue: number;
+  pendingAmount: number;
+  unpaidCount: number;
+  overdueCount: number;
+  pendingCount: number;
+  paidCount: number;
+  unpaidAmount: number;
+  acceptedQuotes: number;
+  pendingQuotes: number;
+}
+
+export type DashboardScope = 'full' | 'finance' | 'commercial' | 'individual';
+
+export interface PersonalWorkload {
+  myOpenTasks: number;
+  myOverdueTasks: number;
+  myUrgentTasks: number;
+  myTasksDueToday: number;
+  myBlockedTasks: number;
+  myVideosAsEditor: number;
+  myVideosAsCameraman: number;
+  myShootsPlanned: number;
+  myVideosInRevision: number;
+  myClientValidations: number;
+  myProjectsActive: number;
+  myReportsToSend: number;
+}
+
+export interface CommercialKpis {
+  myActiveClients: number;
+  myProspects: number;
+  quotesSent: number;
+  quotesAccepted: number;
+  quotesRefused: number;
+  quotesExpiring: number;
+  quotesPending: number;
+}
+
+export interface DashboardSummary {
+  scope: DashboardScope;
+  activeClients: number;
+  openTasks: number;
+  overdueTasks: number;
+  urgentTasks: number;
+  pendingInvoices: number | null;
+  activeVideos: number;
+  videosPublishedThisMonth: number;
+  projectsInProgress: number;
+  clientValidationsPending: number;
+  finance: DashboardFinanceAgg | null;
+  personal: PersonalWorkload;
+  commercial: CommercialKpis | null;
+}
+
+function emptyPersonal(): PersonalWorkload {
+  return {
+    myOpenTasks: 0,
+    myOverdueTasks: 0,
+    myUrgentTasks: 0,
+    myTasksDueToday: 0,
+    myBlockedTasks: 0,
+    myVideosAsEditor: 0,
+    myVideosAsCameraman: 0,
+    myShootsPlanned: 0,
+    myVideosInRevision: 0,
+    myClientValidations: 0,
+    myProjectsActive: 0,
+    myReportsToSend: 0,
+  };
+}
+
+function scopeKey(role: UserRole): UserRole {
+  return role === 'designer' ? 'developer' : role;
+}
+
+function startOfMonthIso(): string {
+  const d = new Date();
+  d.setDate(1);
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString();
+}
+
+function todayBoundsIso(): { start: string; end: string; day: string } {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const end = new Date();
+  end.setHours(23, 59, 59, 999);
+  return { start: start.toISOString(), end: end.toISOString(), day: start.toISOString().slice(0, 10) };
+}
+
+/** Agrège les factures côté serveur pour limiter le nombre de requêtes. */
+function reduceInvoiceStats(
+  rows: {
+    status: InvoiceStatus;
+    total: number;
+    due_date: string;
+    paid_at: string | null;
+    currency: string;
+  }[],
+  today: string,
+  monthStart: string
+): DashboardFinanceAgg | null {
+  if (!rows.length) {
+    return {
+      currency: 'MAD',
+      monthlyRevenue: 0,
+      pendingAmount: 0,
+      unpaidCount: 0,
+      overdueCount: 0,
+      pendingCount: 0,
+      paidCount: 0,
+      unpaidAmount: 0,
+      acceptedQuotes: 0,
+      pendingQuotes: 0,
+    };
+  }
+
+  const currency = rows.find((r) => r.currency)?.currency ?? 'MAD';
+  let monthlyRevenue = 0;
+  let pendingAmount = 0;
+  let unpaidCount = 0;
+  let overdueCount = 0;
+  let pendingCount = 0;
+  let paidCount = 0;
+  let unpaidAmount = 0;
+
+  for (const inv of rows) {
+    if (inv.status === 'paid') {
+      paidCount += 1;
+      if (inv.paid_at && inv.paid_at >= monthStart) {
+        monthlyRevenue += Number(inv.total);
+      }
+      continue;
+    }
+    if (inv.status === 'cancelled' || inv.status === 'draft') continue;
+
+    const isPendingLike = inv.status === 'sent' || inv.status === 'pending';
+    const isOverdueStatus = inv.status === 'overdue';
+    const dueOverdue = inv.due_date < today && isPendingLike;
+
+    if (isPendingLike) {
+      pendingCount += 1;
+      pendingAmount += Number(inv.total);
+    }
+    if (isPendingLike || isOverdueStatus) {
+      unpaidCount += 1;
+      unpaidAmount += Number(inv.total);
+    }
+    if (isOverdueStatus || dueOverdue) {
+      overdueCount += 1;
+    }
+  }
+
+  return {
+    currency,
+    monthlyRevenue,
+    pendingAmount,
+    unpaidCount,
+    overdueCount,
+    pendingCount,
+    paidCount,
+    unpaidAmount,
+    acceptedQuotes: 0,
+    pendingQuotes: 0,
+  };
+}
+
+/** Données finance pour la section « Finance » du dashboard (fusion avec maquette). */
+export function financeSnapshotFromAgg(agg: DashboardFinanceAgg | null): Partial<FinanceSnapshot> | null {
+  if (!agg) return null;
+  const c = agg.currency;
+  return {
+    monthlyRevenue: `${agg.monthlyRevenue.toLocaleString('fr-FR', { minimumFractionDigits: 0 })} ${c}`,
+    pending: `${agg.pendingAmount.toLocaleString('fr-FR', { minimumFractionDigits: 0 })} ${c}`,
+    unpaidInvoicesCount: agg.unpaidCount,
+    paidInvoicesCount: agg.paidCount,
+    pendingInvoicesCount: agg.pendingCount,
+    overdueInvoicesCount: agg.overdueCount,
+    acceptedQuotes: agg.acceptedQuotes,
+    pendingQuotes: agg.pendingQuotes,
+  };
+}
+
+async function fetchFinanceBlock(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  role: UserRole | null,
+  today: string,
+  monthStart: string
+): Promise<{ pendingInvoices: number | null; finance: DashboardFinanceAgg | null }> {
+  let pendingInvoices: number | null = null;
+  let finance: DashboardFinanceAgg | null = null;
+
+  if (role && canViewInvoices(role)) {
+    const [invR, quotesAccR, quotesPendR] = await Promise.all([
+      supabase.from('invoices').select('status,total,due_date,paid_at,currency'),
+      supabase.from('quotes').select('id', { count: 'exact', head: true }).eq('status', 'accepted'),
+      supabase
+        .from('quotes')
+        .select('id', { count: 'exact', head: true })
+        .in('status', ['draft', 'sent']),
+    ]);
+
+    if (!invR.error && invR.data) {
+      const base = reduceInvoiceStats(invR.data, today, monthStart);
+      if (base) {
+        base.acceptedQuotes = quotesAccR.count ?? 0;
+        base.pendingQuotes = quotesPendR.count ?? 0;
+        finance = base;
+      }
+      const pendOnly = invR.data.filter((i) => i.status === 'sent' || i.status === 'pending').length;
+      pendingInvoices = pendOnly;
+    }
+  }
+
+  return { pendingInvoices, finance };
+}
+
+async function fetchAgencyAggregates(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  now: string,
+  monthStart: string
+) {
+  const tasksOpenQ = supabase
+    .from('tasks')
+    .select('id', { count: 'exact', head: true })
+    .neq('status', 'done')
+    .neq('status', 'archived');
+
+  const tasksOverdueQ = supabase
+    .from('tasks')
+    .select('id', { count: 'exact', head: true })
+    .neq('status', 'done')
+    .neq('status', 'archived')
+    .lt('deadline', now);
+
+  const tasksUrgentQ = supabase
+    .from('tasks')
+    .select('id', { count: 'exact', head: true })
+    .eq('priority', 'urgent')
+    .neq('status', 'done')
+    .neq('status', 'archived');
+
+  const vidQ = supabase
+    .from('videos')
+    .select('id', { count: 'exact', head: true })
+    .neq('status', 'published')
+    .neq('status', 'archived')
+    .neq('status', 'cancelled');
+
+  const vidPublishedMonthQ = supabase
+    .from('videos')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'published')
+    .gte('updated_at', monthStart);
+
+  const clientsQ = supabase
+    .from('clients')
+    .select('id', { count: 'exact', head: true })
+    .eq('status', 'active');
+
+  const projectsQ = supabase
+    .from('projects')
+    .select('id', { count: 'exact', head: true })
+    .in('status', ['in_progress', 'waiting_client', 'waiting_content', 'review']);
+
+  const validationsQ = supabase
+    .from('videos')
+    .select('id', { count: 'exact', head: true })
+    .or('public_status.eq.in_validation,status.eq.sent_to_client');
+
+  const [
+    clientsR,
+    tasksOpenR,
+    tasksOverdueR,
+    tasksUrgentR,
+    vidR,
+    vidPubR,
+    projectsR,
+    validationsR,
+  ] = await Promise.all([
+    clientsQ,
+    tasksOpenQ,
+    tasksOverdueQ,
+    tasksUrgentQ,
+    vidQ,
+    vidPublishedMonthQ,
+    projectsQ,
+    validationsQ,
+  ]);
+
+  return {
+    activeClients: clientsR.count ?? 0,
+    openTasks: tasksOpenR.count ?? 0,
+    overdueTasks: tasksOverdueR.count ?? 0,
+    urgentTasks: tasksUrgentR.count ?? 0,
+    activeVideos: vidR.count ?? 0,
+    videosPublishedThisMonth: vidPubR.count ?? 0,
+    projectsInProgress: projectsR.count ?? 0,
+    clientValidationsPending: validationsR.count ?? 0,
+  };
+}
+
+async function fetchPersonalWorkload(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  employeeId: string,
+  userId: string,
+  role: UserRole
+): Promise<PersonalWorkload> {
+  const r = scopeKey(role);
+  const now = new Date().toISOString();
+  const { start, end } = todayBoundsIso();
+
+  const baseTask = () =>
+    supabase
+      .from('tasks')
+      .select('id', { count: 'exact', head: true })
+      .eq('assignee_id', employeeId)
+      .neq('status', 'done')
+      .neq('status', 'archived');
+
+  const myOpenQ = baseTask();
+  const myOverdueQ = supabase
+    .from('tasks')
+    .select('id', { count: 'exact', head: true })
+    .eq('assignee_id', employeeId)
+    .neq('status', 'done')
+    .neq('status', 'archived')
+    .lt('deadline', now);
+
+  const myUrgentQ = supabase
+    .from('tasks')
+    .select('id', { count: 'exact', head: true })
+    .eq('assignee_id', employeeId)
+    .eq('priority', 'urgent')
+    .neq('status', 'done')
+    .neq('status', 'archived');
+
+  const myDueTodayQ = supabase
+    .from('tasks')
+    .select('id', { count: 'exact', head: true })
+    .eq('assignee_id', employeeId)
+    .neq('status', 'done')
+    .neq('status', 'archived')
+    .gte('deadline', start)
+    .lte('deadline', end);
+
+  const myBlockedQ = supabase
+    .from('tasks')
+    .select('id', { count: 'exact', head: true })
+    .eq('assignee_id', employeeId)
+    .eq('status', 'blocked');
+
+  const myVideosEditorQ = supabase
+    .from('videos')
+    .select('id', { count: 'exact', head: true })
+    .eq('editor_id', employeeId)
+    .neq('status', 'published')
+    .neq('status', 'archived')
+    .neq('status', 'cancelled');
+
+  const myVideosCamQ = supabase
+    .from('videos')
+    .select('id', { count: 'exact', head: true })
+    .eq('cameraman_id', employeeId)
+    .neq('status', 'published')
+    .neq('status', 'archived')
+    .neq('status', 'cancelled');
+
+  const myShootsQ = supabase
+    .from('videos')
+    .select('id', { count: 'exact', head: true })
+    .eq('cameraman_id', employeeId)
+    .eq('status', 'shooting_planned');
+
+  const myRevisionQ = supabase
+    .from('videos')
+    .select('id', { count: 'exact', head: true })
+    .eq('editor_id', employeeId)
+    .eq('status', 'client_revision');
+
+  const myValQ = supabase
+    .from('videos')
+    .select('id', { count: 'exact', head: true })
+    .eq('editor_id', employeeId)
+    .or('public_status.eq.in_validation,status.eq.sent_to_client');
+
+  const activeProjectStatuses = ['in_progress', 'waiting_client', 'waiting_content', 'review'] as const;
+
+  const myProjectsQ = supabase
+    .from('projects')
+    .select('id', { count: 'exact', head: true })
+    .or(`lead_id.eq.${employeeId},team_ids.cs.{${employeeId}}`)
+    .in('status', [...activeProjectStatuses]);
+
+  let reportsQ = supabase
+    .from('reports')
+    .select('id', { count: 'exact', head: true })
+    .is('sent_at', null)
+    .eq('created_by', userId);
+
+  if (r === 'seo') {
+    reportsQ = reportsQ.eq('type', 'seo');
+  }
+
+  const [
+    openR,
+    overdueR,
+    urgentR,
+    dueTodayR,
+    blockedR,
+    edR,
+    camR,
+    shootR,
+    revR,
+    valR,
+    projR,
+    reportsR,
+  ] = await Promise.all([
+    myOpenQ,
+    myOverdueQ,
+    myUrgentQ,
+    myDueTodayQ,
+    myBlockedQ,
+    myVideosEditorQ,
+    myVideosCamQ,
+    myShootsQ,
+    myRevisionQ,
+    myValQ,
+    myProjectsQ,
+    reportsQ,
+  ]);
+
+  const myProjectsActive = projR.count ?? 0;
+
+  return {
+    myOpenTasks: openR.count ?? 0,
+    myOverdueTasks: overdueR.count ?? 0,
+    myUrgentTasks: urgentR.count ?? 0,
+    myTasksDueToday: dueTodayR.count ?? 0,
+    myBlockedTasks: blockedR.count ?? 0,
+    myVideosAsEditor: edR.count ?? 0,
+    myVideosAsCameraman: camR.count ?? 0,
+    myShootsPlanned: shootR.count ?? 0,
+    myVideosInRevision: revR.count ?? 0,
+    myClientValidations: valR.count ?? 0,
+    myProjectsActive,
+    myReportsToSend: reportsR.count ?? 0,
+  };
+}
+
+async function fetchCommercialKpis(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  employeeId: string,
+  today: string
+): Promise<CommercialKpis> {
+  const { data: rows, error } = await supabase
+    .from('clients')
+    .select('id, status')
+    .eq('account_manager_id', employeeId);
+
+  if (error || !rows?.length) {
+    return {
+      myActiveClients: 0,
+      myProspects: 0,
+      quotesSent: 0,
+      quotesAccepted: 0,
+      quotesRefused: 0,
+      quotesExpiring: 0,
+      quotesPending: 0,
+    };
+  }
+
+  const myActiveClients = rows.filter((c) => c.status === 'active').length;
+  const myProspects = rows.filter((c) => c.status === 'prospect').length;
+  const ids = rows.map((c) => c.id);
+
+  const exp = new Date(today);
+  exp.setDate(exp.getDate() + 7);
+  const expUntil = exp.toISOString().slice(0, 10);
+
+  const [sentR, accR, refR, expR, pendR] = await Promise.all([
+    supabase.from('quotes').select('id', { count: 'exact', head: true }).in('client_id', ids).eq('status', 'sent'),
+    supabase.from('quotes').select('id', { count: 'exact', head: true }).in('client_id', ids).eq('status', 'accepted'),
+    supabase.from('quotes').select('id', { count: 'exact', head: true }).in('client_id', ids).eq('status', 'refused'),
+    supabase
+      .from('quotes')
+      .select('id', { count: 'exact', head: true })
+      .in('client_id', ids)
+      .eq('status', 'sent')
+      .gte('valid_until', today)
+      .lte('valid_until', expUntil),
+    supabase
+      .from('quotes')
+      .select('id', { count: 'exact', head: true })
+      .in('client_id', ids)
+      .in('status', ['draft', 'sent']),
+  ]);
+
+  return {
+    myActiveClients,
+    myProspects,
+    quotesSent: sentR.count ?? 0,
+    quotesAccepted: accR.count ?? 0,
+    quotesRefused: refR.count ?? 0,
+    quotesExpiring: expR.count ?? 0,
+    quotesPending: pendR.count ?? 0,
+  };
+}
+
+/**
+ * Résumé dashboard selon le rôle : agrégats agence, périmètre commercial ou charges personnelles.
+ */
+export async function getDashboardSummary(ctx: AuthContext): Promise<DashboardSummary> {
+  const empty: DashboardSummary = {
+    scope: 'individual',
+    activeClients: 0,
+    openTasks: 0,
+    overdueTasks: 0,
+    urgentTasks: 0,
+    pendingInvoices: null,
+    activeVideos: 0,
+    videosPublishedThisMonth: 0,
+    projectsInProgress: 0,
+    clientValidationsPending: 0,
+    finance: null,
+    personal: emptyPersonal(),
+    commercial: null,
+  };
+
+  if (!ctx.employee || !ctx.role) {
+    return empty;
+  }
+
+  const supabase = await createClient();
+  const role = ctx.role;
+  const rk = scopeKey(role);
+  const empId = ctx.employee.id;
+  const now = new Date().toISOString();
+  const today = now.slice(0, 10);
+  const monthStart = startOfMonthIso();
+
+  const personal = await fetchPersonalWorkload(supabase, empId, ctx.userId, role);
+
+  if (role === 'admin' || role === 'project_manager') {
+    const [agency, fin, _p] = await Promise.all([
+      fetchAgencyAggregates(supabase, now, monthStart),
+      fetchFinanceBlock(supabase, role, today, monthStart),
+      Promise.resolve(personal),
+    ]);
+    return {
+      scope: 'full',
+      ...agency,
+      pendingInvoices: fin.pendingInvoices,
+      finance: fin.finance,
+      personal,
+      commercial: null,
+    };
+  }
+
+  if (role === 'finance') {
+    const fin = await fetchFinanceBlock(supabase, role, today, monthStart);
+    return {
+      scope: 'finance',
+      activeClients: 0,
+      openTasks: 0,
+      overdueTasks: 0,
+      urgentTasks: 0,
+      pendingInvoices: fin.pendingInvoices,
+      activeVideos: 0,
+      videosPublishedThisMonth: 0,
+      projectsInProgress: 0,
+      clientValidationsPending: 0,
+      finance: fin.finance,
+      personal,
+      commercial: null,
+    };
+  }
+
+  if (role === 'commercial') {
+    const [commercial, fin] = await Promise.all([
+      fetchCommercialKpis(supabase, empId, today),
+      fetchFinanceBlock(supabase, role, today, monthStart),
+    ]);
+    return {
+      scope: 'commercial',
+      activeClients: commercial.myActiveClients,
+      openTasks: personal.myOpenTasks,
+      overdueTasks: personal.myOverdueTasks,
+      urgentTasks: personal.myUrgentTasks,
+      pendingInvoices: fin.pendingInvoices,
+      activeVideos: 0,
+      videosPublishedThisMonth: 0,
+      projectsInProgress: 0,
+      clientValidationsPending: 0,
+      finance: fin.finance,
+      personal,
+      commercial,
+    };
+  }
+
+  if (
+    rk === 'editor' ||
+    rk === 'cameraman' ||
+    rk === 'developer' ||
+    rk === 'seo' ||
+    rk === 'community_manager'
+  ) {
+    const fin = canViewInvoices(role) ? await fetchFinanceBlock(supabase, role, today, monthStart) : { pendingInvoices: null, finance: null };
+    const myVids =
+      rk === 'editor'
+        ? personal.myVideosAsEditor
+        : rk === 'cameraman'
+          ? personal.myVideosAsCameraman
+          : personal.myVideosAsEditor + personal.myVideosAsCameraman;
+
+    return {
+      scope: 'individual',
+      activeClients: 0,
+      openTasks: personal.myOpenTasks,
+      overdueTasks: personal.myOverdueTasks,
+      urgentTasks: personal.myUrgentTasks,
+      pendingInvoices: fin.pendingInvoices,
+      activeVideos: myVids,
+      videosPublishedThisMonth: 0,
+      projectsInProgress: personal.myProjectsActive,
+      clientValidationsPending: personal.myClientValidations,
+      finance: fin.finance,
+      personal,
+      commercial: null,
+    };
+  }
+
+  return {
+    ...empty,
+    personal,
+  };
+}

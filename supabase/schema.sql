@@ -24,6 +24,7 @@ create type user_role as enum (
   'seo',
   'commercial',
   'community_manager',
+  'finance',
   'client'
 );
 
@@ -158,13 +159,19 @@ create type notification_type as enum (
   'task_assigned',
   'task_overdue',
   'task_deadline_approaching',
+  'deadline_soon',
   'client_validated',
   'client_revision_requested',
   'invoice_overdue',
+  'invoice_due_soon',
+  'invoice_sent',
   'invoice_paid',
   'quote_accepted',
+  'quote_expiring',
+  'quote_converted',
   'quota_incomplete',
   'employee_overloaded',
+  'employee_task_not_updated',
   'report_due',
   'comment_added',
   'document_uploaded',
@@ -224,6 +231,8 @@ create table employees (
   hire_date       date,
   notes_internal  text,
   manager_id      uuid references employees(id) on delete set null,
+  operational_skills user_role[] not null default '{}',
+  archived_at     timestamptz,
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now()
 );
@@ -231,6 +240,7 @@ create table employees (
 create index idx_employees_user on employees(user_id);
 create index idx_employees_role on employees(role);
 create index idx_employees_active on employees(is_active);
+create index idx_employees_archived on employees(archived_at);
 
 -- ============================================================================
 -- CLIENTS
@@ -313,6 +323,7 @@ create table projects (
   description       text,
   type              text not null,                   -- "Site Web", "SEO", "Branding"...
   status            project_status not null default 'todo',
+  priority          task_priority not null default 'normal',
   progress          int not null default 0 check (progress between 0 and 100),
 
   -- Team
@@ -341,6 +352,7 @@ create index idx_projects_client on projects(client_id);
 create index idx_projects_lead on projects(lead_id);
 create index idx_projects_status on projects(status);
 create index idx_projects_deadline on projects(deadline);
+create index idx_projects_priority on projects(priority);
 
 -- ============================================================================
 -- INTERNAL PROJECTS (Supra v. own initiatives)
@@ -643,7 +655,28 @@ create table quotes (
   -- Content
   notes             text,
   conditions        text,
-  template          text not null default 'classic_premium',
+  template          text not null default 'supra_premium_black_orange',
+
+  -- Commercial proposal (premium devis)
+  proposal_title           text,
+  package_name             text,
+  project_object           text,
+  strategic_positioning    text,
+  commercial_recommendation text,
+  execution_assumptions    text,
+  strategic_value_blocks   jsonb not null default '[]'::jsonb,
+  promotional_label        text,
+  promotional_terms        text,
+  discount_mode            text not null default 'fixed',
+  discount_percent         numeric(5,2),
+  first_month_total        numeric(12,2),
+  recurring_monthly_total  numeric(12,2),
+  commitment_months      integer,
+  ads_budget_note          text,
+  maintenance_note         text,
+  revision_policy_note     text,
+  payment_terms            text,
+  include_signature_block  boolean not null default true,
 
   -- File
   pdf_url           text,
@@ -670,6 +703,11 @@ create table quote_items (
   quote_id        uuid not null references quotes(id) on delete cascade,
   position        int not null default 0,
   description     text not null,
+  service_name    text not null default '',
+  detail_text     text,
+  strategic_explanation text,
+  is_optional     boolean not null default false,
+  is_recommended  boolean not null default false,
   quantity        numeric(10,2) not null default 1,
   unit            text,
   unit_price      numeric(12,2) not null default 0,
@@ -762,6 +800,8 @@ create table documents (
   -- Visibility
   visible_to_client boolean not null default false,
 
+  archived_at       timestamptz,
+
   -- Audit
   uploaded_at       timestamptz not null default now(),
   uploaded_by       uuid references auth.users(id) on delete set null
@@ -771,6 +811,43 @@ create index idx_documents_client on documents(client_id);
 create index idx_documents_project on documents(project_id);
 create index idx_documents_video on documents(video_id);
 create index idx_documents_visible on documents(visible_to_client);
+create index idx_documents_archived on documents(archived_at);
+
+-- ============================================================================
+-- AGENCY SETTINGS (singleton, id = 1)
+-- ============================================================================
+
+create table agency_settings (
+  id                  smallint primary key default 1 check (id = 1),
+  agency_name         text,
+  logo_url            text,
+  email               text,
+  phone               text,
+  address             text,
+  website             text,
+  tax_id              text,
+  invoice_prefix      text default 'FAC-',
+  quote_prefix        text default 'DEV-',
+  default_currency    text default 'MAD',
+  default_payment_terms text,
+  default_tax_rate    numeric(5, 2) default 20,
+  portal_base_url     text,
+  portal_show_branding boolean not null default true,
+  updated_at          timestamptz not null default now()
+);
+
+-- ============================================================================
+-- USER NOTIFICATION PREFERENCES
+-- ============================================================================
+
+create table user_notification_preferences (
+  user_id                   uuid primary key references auth.users(id) on delete cascade,
+  email_reminders_enabled   boolean not null default true,
+  morning_reminder_enabled  boolean not null default true,
+  evening_summary_enabled   boolean not null default true,
+  deadline_alerts_enabled   boolean not null default true,
+  updated_at                timestamptz not null default now()
+);
 
 -- ============================================================================
 -- NOTIFICATIONS
@@ -793,7 +870,8 @@ create table notifications (
   is_read             boolean not null default false,
   read_at             timestamptz,
 
-  created_at          timestamptz not null default now()
+  created_at          timestamptz not null default now(),
+  updated_at          timestamptz not null default now()
 );
 
 create index idx_notifications_recipient on notifications(recipient_user_id);
@@ -862,6 +940,54 @@ begin
        for each row execute function set_updated_at()', t, t);
   end loop;
 end$$;
+
+-- Employees: non-admins cannot self-escalate role / status / email
+create or replace function employees_enforce_update_rls()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  actor_role user_role;
+begin
+  select e.role into actor_role
+  from employees e
+  where e.user_id = auth.uid()
+  limit 1;
+
+  if actor_role = 'admin' then
+    return new;
+  end if;
+
+  if old.user_id is null or old.user_id <> auth.uid() then
+    raise exception 'Mise à jour non autorisée' using errcode = '42501';
+  end if;
+
+  if new.id is distinct from old.id
+     or new.role is distinct from old.role
+     or new.is_active is distinct from old.is_active
+     or new.email is distinct from old.email
+     or new.user_id is distinct from old.user_id
+     or new.archived_at is distinct from old.archived_at
+     or new.notes_internal is distinct from old.notes_internal
+     or new.full_name is distinct from old.full_name
+     or new.hire_date is distinct from old.hire_date
+     or new.manager_id is distinct from old.manager_id
+     or new.operational_skills is distinct from old.operational_skills
+  then
+    raise exception 'Seuls les administrateurs peuvent modifier ces champs.' using errcode = '42501';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists employees_enforce_update_rls on employees;
+create trigger employees_enforce_update_rls
+  before update on employees
+  for each row
+  execute function employees_enforce_update_rls();
 
 -- ============================================================================
 -- TRIGGERS — Invoice / Quote item totals auto-calculation

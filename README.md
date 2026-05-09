@@ -87,9 +87,25 @@ supra-os/
 ├── tsconfig.json
 ├── tailwind.config.ts
 ├── next.config.ts
-├── vercel.json             # Cron jobs + headers sécurité
+├── vercel.json             # 1 cron Hobby (`/api/cron/daily`) + headers sécurité
 └── DEPLOYMENT.md           # Guide complet de déploiement
 ```
+
+---
+
+## 📧 E-mails (Resend)
+
+| Variable | Rôle |
+|---|---|
+| `RESEND_API_KEY` | Clé **serveur** uniquement (jamais `NEXT_PUBLIC_`). |
+| `EMAIL_FROM` | Expéditeur vérifié dans Resend, ex. `Supra v. <notifications@app.suprav3.com>`. |
+| `NEXT_PUBLIC_APP_URL` | Base des liens (dashboard, factures, devis). |
+
+Sans `RESEND_API_KEY` ou sans `EMAIL_FROM`, **`sendEmail` ne lance pas d’exception** : retour `skipped: email_not_configured`, logs `[email] … skip send.` — les **notifications in-app** et les **crons** continuent.
+
+- **Prévisualisation HTML** (dev) : `/api/dev/email-preview?t=morning` (404 en production).
+- **Envoi de test** (session admin) : `POST /api/dev/send-test-email` — procédure dans [DEPLOYMENT.md](./DEPLOYMENT.md) (section 8.4 bis).
+- **Production** : vérifier le domaine dans Resend (**SPF**, **DKIM**).
 
 ---
 

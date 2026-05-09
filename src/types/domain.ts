@@ -17,6 +17,11 @@ import type {
   ClientStatus,
   NotificationType,
   UserRole,
+  DocumentType,
+  ReportType,
+  ProjectStatus,
+  InternalPriority,
+  PaymentMethod,
 } from './database';
 
 // ─── STATUS LABEL/COLOR MAPS ────────────────────────────────────────────────
@@ -93,12 +98,74 @@ export const QUOTE_STATUS_MAP: Record<QuoteStatus, StatusConfig> = {
   converted: { label: 'Converti',  color: '#FF450F' },
 };
 
+/** Libellés livrables — alignés sur l’enum SQL `document_type`. */
+export const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
+  video_final: 'Vidéo (fichier final)',
+  video_preview: 'Vidéo (aperçu)',
+  mockup: 'Maquette site / UI',
+  logo: 'Logo',
+  brand_guide: 'Charte & brand guidelines',
+  seo_report: 'Rapport SEO',
+  invoice_pdf: 'Facture PDF',
+  quote_pdf: 'Devis PDF',
+  contract: 'Contrat',
+  brief: 'Brief',
+  rushes: 'Rushes',
+  other: 'Autre',
+};
+
+export const REPORT_TYPE_LABELS: Record<ReportType, string> = {
+  weekly: 'Hebdomadaire',
+  monthly: 'Mensuel',
+  project: 'Projet',
+  video_production: 'Production vidéo',
+  seo: 'SEO',
+  social_media: 'Réseaux sociaux',
+};
+
 export const CLIENT_STATUS_MAP: Record<ClientStatus, StatusConfig> = {
   prospect:   { label: 'Prospect',  color: '#5B8FD4' },
   active:     { label: 'Actif',     color: '#3DBD7D' },
   pause:      { label: 'En pause',  color: '#8B8B8B' },
   terminated: { label: 'Terminé',   color: '#525252' },
 };
+
+export const PROJECT_STATUS_MAP: Record<ProjectStatus, StatusConfig> = {
+  todo:             { label: 'À planifier',      color: '#525252' },
+  in_progress:      { label: 'En cours',         color: '#FF450F' },
+  waiting_client:   { label: 'Attente client',   color: '#C4789B' },
+  waiting_content:  { label: 'Attente contenu',  color: '#7C8DB0' },
+  review:           { label: 'Révision',         color: '#E07B3A' },
+  validated:        { label: 'Validé',           color: '#6B9E7A' },
+  delivered:        { label: 'Livré',            color: '#3DBD7D' },
+  archived:         { label: 'Archivé',          color: '#525252' },
+};
+
+export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
+  bank_transfer: 'Virement',
+  cash: 'Espèces',
+  card: 'Carte',
+  check: 'Chèque',
+  other: 'Autre',
+};
+
+export const INTERNAL_PRIORITY_MAP: Record<InternalPriority, StatusConfig> = {
+  low:      { label: 'Basse',    color: '#525252' },
+  normal:   { label: 'Normale',  color: '#7C8DB0' },
+  high:     { label: 'Haute',    color: '#E07B3A' },
+  critical: { label: 'Critique', color: '#E05252' },
+};
+
+/** Suggested project types for selects (stored as free text in DB). */
+export const PROJECT_TYPE_OPTIONS = [
+  { value: 'website', label: 'Site web' },
+  { value: 'seo', label: 'SEO' },
+  { value: 'branding', label: 'Branding' },
+  { value: 'automation', label: 'Automatisation' },
+  { value: 'ads', label: 'Publicité' },
+  { value: 'video', label: 'Vidéo' },
+  { value: 'other', label: 'Autre' },
+] as const;
 
 // ─── ROLE LABELS ────────────────────────────────────────────────────────────
 
@@ -112,8 +179,39 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   seo:               'SEO',
   commercial:        'Commercial',
   community_manager: 'Community Manager',
+  finance:           'Finance',
   client:            'Client',
 };
+
+/** Rôles assignables à un collaborateur (hors compte portail client). */
+export const TEAM_ASSIGNABLE_ROLES: UserRole[] = [
+  'admin',
+  'project_manager',
+  'commercial',
+  'finance',
+  'editor',
+  'cameraman',
+  'developer',
+  'designer',
+  'seo',
+  'community_manager',
+];
+
+/**
+ * Compétences opérationnelles (multi-sélection) — pas de admin / client.
+ * Utilisées pour assignation vidéo, filtres équipe, charge ; pas pour RBAC.
+ */
+export const OPERATIONAL_SKILL_ROLES: UserRole[] = [
+  'project_manager',
+  'editor',
+  'cameraman',
+  'developer',
+  'designer',
+  'seo',
+  'community_manager',
+  'commercial',
+  'finance',
+];
 
 // ─── KANBAN GROUPINGS ───────────────────────────────────────────────────────
 
@@ -145,10 +243,21 @@ export const TASK_KANBAN_COLUMNS: Array<{
   { key: 'done',           label: 'Terminé',         color: '#3DBD7D' },
 ];
 
+/** Column order on the task board (client-safe — no server imports). */
+export const TASK_KANBAN_STATUSES: TaskStatus[] = [
+  'todo',
+  'in_progress',
+  'waiting_client',
+  'waiting_team',
+  'review',
+  'blocked',
+  'done',
+];
+
 // ─── PERMISSION HELPERS ─────────────────────────────────────────────────────
 
-export const FINANCIAL_ROLES: UserRole[] = ['admin', 'project_manager', 'commercial'];
-export const FINANCIAL_WRITE_ROLES: UserRole[] = ['admin', 'commercial'];
+export const FINANCIAL_ROLES: UserRole[] = ['admin', 'project_manager', 'commercial', 'finance'];
+export const FINANCIAL_WRITE_ROLES: UserRole[] = ['admin', 'commercial', 'finance'];
 export const PRODUCTION_ROLES: UserRole[] = ['admin', 'project_manager', 'editor', 'cameraman'];
 export const ADMIN_ROLES: UserRole[] = ['admin', 'project_manager'];
 

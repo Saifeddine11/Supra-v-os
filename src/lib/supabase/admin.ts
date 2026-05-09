@@ -14,11 +14,13 @@
  * server client (`./server.ts`) instead.
  */
 
-import { createClient } from '@supabase/supabase-js';
-import type { Database } from '@/types/database';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { normalizeSupabaseProjectUrl } from '@/lib/supabase/normalize-url';
 
-let cached: ReturnType<typeof createClient<Database>> | null = null;
+/** Schéma TS maison ≠ helper PostgREST — typage large pour éviter `never` sur `.from()`. */
+export type ServiceRoleClient = SupabaseClient<any, 'public', any>;
+
+let cached: ServiceRoleClient | null = null;
 
 /** À appeler après rotation de la clé service_role sans redémarrer (rare). */
 export function resetAdminClientCache() {
@@ -29,7 +31,7 @@ export function resetAdminClientCache() {
  * Après rotation de SUPABASE_SERVICE_ROLE_KEY, redémarrez `npm run dev`
  * (ou appelez resetAdminClientCache) — ne jamais logger la clé.
  */
-export function createAdminClient() {
+export function createAdminClient(): ServiceRoleClient {
   if (cached) return cached;
 
   const url = normalizeSupabaseProjectUrl(process.env.NEXT_PUBLIC_SUPABASE_URL);
@@ -42,12 +44,12 @@ export function createAdminClient() {
     );
   }
 
-  cached = createClient<Database>(url, serviceKey, {
+  cached = createClient(url, serviceKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
     },
-  });
+  }) as ServiceRoleClient;
 
   return cached;
 }

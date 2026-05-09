@@ -51,12 +51,12 @@ export async function requireAuth(): Promise<AuthContext> {
 }
 
 /**
- * Require one of the listed roles. Redirects to /dashboard if denied.
+ * Require one of the listed roles. Redirects to /access-denied if denied.
  */
 export async function requireRole(roles: UserRole[]): Promise<AuthContext> {
   const ctx = await requireAuth();
   if (!ctx.role || !roles.includes(ctx.role)) {
-    redirect('/dashboard?denied=1');
+    redirect('/access-denied');
   }
   return ctx;
 }
@@ -73,9 +73,9 @@ export async function requireAdminOrPM() {
 }
 
 export async function requireFinancialRole() {
-  return requireRole(['admin', 'project_manager', 'commercial']);
+  return requireRole(['admin', 'project_manager', 'commercial', 'finance']);
 }
 
 export async function requireFinancialWriteRole() {
-  return requireRole(['admin', 'commercial']);
+  return requireRole(['admin', 'commercial', 'finance']);
 }

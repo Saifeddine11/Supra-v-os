@@ -49,6 +49,9 @@ const config: Config = {
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
+        surface: 'hsl(var(--surface))',
+        'surface-secondary': 'hsl(var(--surface-secondary))',
+        'orange-glow': 'hsl(var(--orange-glow))',
 
         success: {
           DEFAULT: 'hsl(var(--success))',
@@ -101,7 +104,7 @@ const config: Config = {
         danger: '#c23b32',
         info: '#5b8fd4',
 
-        surface: {
+        surfaceScale: {
           0: '#080706',
           1: '#11100f',
           2: '#181513',

@@ -3,7 +3,7 @@
 -- ============================================================================
 -- Run after schema.sql + policies.sql.
 -- Provides realistic data based on Supra v.'s actual operations:
---   - 4 employees (Sif, Yasmine, Mohamed, Karim)
+--   - 9 employees (tous les rôles métier pour tester l’UI / dashboards)
 --   - 6 clients (Le Jardin, Riad Atlas, Villa Peninsula, Africa Beauty, etc.)
 --   - 13 videos in different production stages
 --   - 10 tasks across the team
@@ -23,8 +23,16 @@ insert into employees (id, full_name, role, email, phone, avatar_initials, avata
   ('11111111-1111-1111-1111-111111111111', 'Sif Eddine',      'admin',             'sif@suprav3.com',       '+212600000001', 'SE', '#C9A84C', 50, '2024-09-01'),
   ('22222222-2222-2222-2222-222222222222', 'Yasmine Kabbaj',  'editor',            'yasmine@suprav3.com',   '+212600000002', 'YK', '#C4789B', 40, '2025-01-15'),
   ('33333333-3333-3333-3333-333333333333', 'Mohamed Ouali',   'cameraman',         'mohamed@suprav3.com',   '+212600000003', 'MO', '#7C8DB0', 40, '2025-03-01'),
-  ('44444444-4444-4444-4444-444444444444', 'Karim Saidi',     'community_manager', 'karim@suprav3.com',     '+212600000004', 'KS', '#6B9E7A', 30, '2025-09-01')
+  ('44444444-4444-4444-4444-444444444444', 'Karim Saidi',     'community_manager', 'karim@suprav3.com',     '+212600000004', 'KS', '#6B9E7A', 30, '2025-09-01'),
+  ('55555555-5555-5555-5555-555555555555', 'Amina Benjelloun','project_manager',   'pm@suprav3.com',        '+212600000005', 'AB', '#9B8FD9', 45, '2025-06-01'),
+  ('66666666-6666-6666-6666-666666666666', 'Omar Fassi',      'commercial',        'commercial@suprav3.com','+212600000006', 'OF', '#D4A574', 40, '2025-04-01'),
+  ('77777777-7777-7777-7777-777777777777', 'Salma Idrissi',   'finance',           'finance@suprav3.com',   '+212600000007', 'SI', '#5C8F8A', 40, '2025-05-01'),
+  ('88888888-8888-8888-8888-888888888888', 'Hicham Lahlou',   'developer',         'dev@suprav3.com',     '+212600000008', 'HL', '#7A9CC6', 40, '2025-07-01'),
+  ('99999999-9999-9999-9999-999999999999', 'Laila Mourad',    'seo',               'seo@suprav3.com',     '+212600000009', 'LM', '#C49A6C', 35, '2025-08-01')
 on conflict (id) do nothing;
+
+-- Pour tester chaque rôle : créer un utilisateur Auth (email ci-dessus), puis :
+--   update employees set user_id = '<uuid auth.users>' where email = 'finance@suprav3.com';
 
 -- ─── CLIENTS ────────────────────────────────────────────────────────────────
 

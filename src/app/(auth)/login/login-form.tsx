@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { APP_NAME, AGENCY } from '@/lib/constants';
+import { ThemeToggle } from '@/components/app/theme-toggle';
 
 const NETWORK_HELP_CLIENT =
   'Impossible de joindre le serveur d’application. Vérifiez que le serveur de dev tourne (npm run dev), ' +
@@ -139,6 +140,9 @@ export function LoginForm() {
 
   return (
     <div className="relative z-10 flex min-h-screen w-full flex-col items-center justify-center px-4 py-12 sm:px-6">
+      <div className="absolute right-4 top-4">
+        <ThemeToggle />
+      </div>
       <div className="w-full max-w-[400px]">
         <div className="mb-10 text-center">
           <p className="font-serif text-2xl font-normal tracking-tight text-supra-gradient sm:text-[1.65rem]">

@@ -54,6 +54,9 @@
     --border: 13 45% 24%; /* #6B2416 adouci pour UI */
     --input: 12 58% 10%;
     --ring: 14 95% 56%;
+    --surface: 30 6% 6.5%;
+    --surface-secondary: 15 10% 9%;
+    --orange-glow: 20 100% 58%;
 
     --radius: 0.625rem;
 
@@ -64,27 +67,30 @@
 
   /* Light mode — rare ; aligné orange Supra */
   .light {
-    --background: 40 20% 98%;
-    --foreground: 20 25% 8%;
-    --card: 40 15% 100%;
-    --card-foreground: 20 25% 8%;
-    --popover: 40 15% 100%;
-    --popover-foreground: 20 25% 8%;
-    --primary: 14 100% 50%;
-    --primary-foreground: 37 33% 98%;
-    --secondary: 15 12% 92%;
-    --secondary-foreground: 20 25% 12%;
-    --muted: 30 10% 94%;
-    --muted-foreground: 30 8% 40%;
-    --accent: 14 40% 94%;
-    --accent-foreground: 20 25% 12%;
+    --background: 40 12% 95%; /* #F4F3F1 */
+    --foreground: 20 18% 2.5%; /* #080706 */
+    --card: 0 0% 100%; /* #FFFFFF */
+    --card-foreground: 20 18% 2.5%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 20 18% 2.5%;
+    --primary: 14 100% 51%; /* #FF3D0A */
+    --primary-foreground: 38 22% 97%;
+    --secondary: 33 19% 91%; /* #EEEAE5 */
+    --secondary-foreground: 20 65% 7%; /* #1A0703 */
+    --muted: 33 23% 90%; /* #EAE6E0 */
+    --muted-foreground: 30 5% 52%; /* #8A8580 */
+    --accent: 14 100% 96%; /* rgba orange soft equivalent */
+    --accent-foreground: 14 100% 51%;
     --destructive: 12 55% 42%;
     --destructive-foreground: 0 0% 100%;
-    --border: 25 12% 88%;
-    --input: 25 12% 88%;
-    --ring: 14 100% 48%;
+    --border: 26 16% 80%; /* subtle warm border on light */
+    --input: 26 16% 78%;
+    --ring: 14 100% 51%;
     --success: 154 48% 38%;
     --success-foreground: 0 0% 100%;
+    --surface: 0 0% 100%;
+    --surface-secondary: 32 36% 97%; /* #FAF8F5 */
+    --orange-glow: 20 100% 58%;
   }
 }
 
@@ -98,7 +104,7 @@
     -moz-osx-font-smoothing: grayscale;
   }
   body {
-    @apply bg-background text-foreground font-sans;
+    @apply bg-background text-foreground font-sans transition-colors duration-200;
     font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   }
 
@@ -110,12 +116,12 @@
     @apply bg-transparent;
   }
   ::-webkit-scrollbar-thumb {
-    @apply rounded-full bg-[color:hsl(15_10%_14%)];
+    @apply rounded-full bg-[color:hsl(var(--border)/0.28)];
     border: 2px solid transparent;
     background-clip: padding-box;
   }
   ::-webkit-scrollbar-thumb:hover {
-    @apply bg-[color:hsl(13_35%_22%)];
+    @apply bg-[color:hsl(var(--border)/0.42)];
   }
 
   ::selection {
@@ -127,7 +133,7 @@
 /* CTA premium : pill, fond brun-noir, contour chaud, glow orange doux */
 @layer components {
   .btn-supra-cta {
-    @apply relative inline-flex h-12 w-full items-center justify-center gap-2 rounded-full px-6 text-sm font-semibold tracking-tight text-[#F8F4EF] transition-all duration-200;
+    @apply relative inline-flex h-12 w-full items-center justify-center gap-2 rounded-full px-6 text-sm font-semibold tracking-tight text-foreground transition-all duration-200;
     background: linear-gradient(180deg, #221008 0%, #1a0703 100%);
     border: 1px solid color-mix(in srgb, var(--supra-border-warm) 75%, transparent);
     box-shadow:
@@ -179,7 +185,7 @@
   }
 
   .border-hairline {
-    border: 1px solid rgba(248, 244, 239, 0.06);
+    border: 1px solid hsl(var(--border) / 0.72);
   }
 
   /* Glow discret sous cartes / CTA */

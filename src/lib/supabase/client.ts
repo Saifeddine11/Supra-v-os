@@ -13,7 +13,6 @@
  */
 
 import { createBrowserClient } from '@supabase/ssr';
-import type { Database } from '@/types/database';
 import { normalizeSupabaseProjectUrl } from '@/lib/supabase/normalize-url';
 
 function readPublicSupabaseEnv(): { url: string; anonKey: string } {
@@ -67,5 +66,5 @@ export function logSupabaseBrowserEnvDev(): void {
 
 export function createClient() {
   const { url, anonKey } = readPublicSupabaseEnv();
-  return createBrowserClient<Database>(url, anonKey);
+  return createBrowserClient(url, anonKey);
 }

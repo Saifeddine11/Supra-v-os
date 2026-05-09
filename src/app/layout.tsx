@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { DM_Sans, DM_Serif_Display } from 'next/font/google';
 import { APP_NAME } from '@/lib/constants';
+import { ThemeProvider } from '@/components/providers/theme-provider';
 import './globals.css';
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -53,7 +54,7 @@ export default function RootLayout({
         suppressHydrationWarning
         className="min-h-screen bg-background text-foreground font-sans antialiased"
       >
-        {children}
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   );
