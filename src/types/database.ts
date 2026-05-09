@@ -1,0 +1,758 @@
+/**
+ * ============================================================================
+ * DATABASE TYPES — Auto-generatable from Supabase
+ * ============================================================================
+ * In production, run:
+ *   npx supabase gen types typescript --project-id <id> > src/types/database.ts
+ *
+ * This file is the hand-written reference — it MUST stay in sync with
+ * supabase/schema.sql. Use it for type safety in server actions, API routes,
+ * and React components.
+ * ============================================================================
+ */
+
+// ─── ENUMS ──────────────────────────────────────────────────────────────────
+
+export type UserRole =
+  | 'admin'
+  | 'project_manager'
+  | 'editor'
+  | 'cameraman'
+  | 'developer'
+  | 'designer'
+  | 'seo'
+  | 'commercial'
+  | 'community_manager'
+  | 'client';
+
+export type ClientStatus = 'prospect' | 'active' | 'pause' | 'terminated';
+
+export type ContractType = 'monthly' | 'one_shot' | 'retainer';
+
+export type ProjectStatus =
+  | 'todo'
+  | 'in_progress'
+  | 'waiting_client'
+  | 'waiting_content'
+  | 'review'
+  | 'validated'
+  | 'delivered'
+  | 'archived';
+
+export type TaskStatus =
+  | 'todo'
+  | 'in_progress'
+  | 'waiting_client'
+  | 'waiting_team'
+  | 'review'
+  | 'blocked'
+  | 'done'
+  | 'archived';
+
+export type TaskPriority = 'low' | 'normal' | 'high' | 'urgent';
+
+export type VideoStatus =
+  | 'idea'
+  | 'brief_pending'
+  | 'brief_validated'
+  | 'shooting_planned'
+  | 'shooting_done'
+  | 'rushes_received'
+  | 'editing'
+  | 'internal_review'
+  | 'sent_to_client'
+  | 'client_revision'
+  | 'validated'
+  | 'published'
+  | 'archived'
+  | 'cancelled';
+
+export type VideoPublicStatus =
+  | 'topic_proposed'
+  | 'brief_validated'
+  | 'shooting_planned'
+  | 'in_production'
+  | 'in_editing'
+  | 'in_validation'
+  | 'revision_requested'
+  | 'validated'
+  | 'published';
+
+export type VideoFormat =
+  | 'reel'
+  | 'story'
+  | 'tiktok'
+  | 'short'
+  | 'long_form'
+  | 'ad'
+  | 'showcase';
+
+export type VideoPlatform =
+  | 'instagram'
+  | 'tiktok'
+  | 'youtube'
+  | 'youtube_shorts'
+  | 'linkedin'
+  | 'facebook'
+  | 'ads_meta'
+  | 'ads_google'
+  | 'website';
+
+export type InvoiceStatus =
+  | 'draft'
+  | 'sent'
+  | 'pending'
+  | 'paid'
+  | 'overdue'
+  | 'cancelled';
+
+export type QuoteStatus =
+  | 'draft'
+  | 'sent'
+  | 'accepted'
+  | 'refused'
+  | 'expired'
+  | 'converted';
+
+export type PaymentMethod =
+  | 'bank_transfer'
+  | 'cash'
+  | 'card'
+  | 'check'
+  | 'other';
+
+export type NotificationType =
+  | 'task_assigned'
+  | 'task_overdue'
+  | 'task_deadline_approaching'
+  | 'client_validated'
+  | 'client_revision_requested'
+  | 'invoice_overdue'
+  | 'invoice_paid'
+  | 'quote_accepted'
+  | 'quota_incomplete'
+  | 'employee_overloaded'
+  | 'report_due'
+  | 'comment_added'
+  | 'document_uploaded'
+  | 'morning_summary'
+  | 'evening_summary'
+  | 'system';
+
+export type NotificationPriority = 'low' | 'normal' | 'high' | 'urgent';
+
+export type DocumentType =
+  | 'video_final'
+  | 'video_preview'
+  | 'mockup'
+  | 'logo'
+  | 'brand_guide'
+  | 'seo_report'
+  | 'invoice_pdf'
+  | 'quote_pdf'
+  | 'contract'
+  | 'brief'
+  | 'rushes'
+  | 'other';
+
+export type InternalPriority = 'low' | 'normal' | 'high' | 'critical';
+
+export type ReportType =
+  | 'weekly'
+  | 'monthly'
+  | 'project'
+  | 'video_production'
+  | 'seo'
+  | 'social_media';
+
+// ─── TABLE ROW TYPES ────────────────────────────────────────────────────────
+
+export interface Employee {
+  id: string;
+  user_id: string | null;
+  full_name: string;
+  role: UserRole;
+  email: string;
+  phone: string | null;
+  avatar_url: string | null;
+  avatar_initials: string | null;
+  avatar_color: string | null;
+  is_active: boolean;
+  weekly_capacity: number;
+  hire_date: string | null;
+  notes_internal: string | null;
+  manager_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Client {
+  id: string;
+  name: string;
+  legal_name: string | null;
+  sector: string;
+  status: ClientStatus;
+  contract_type: ContractType;
+  primary_contact: string | null;
+  email: string | null;
+  phone: string | null;
+  whatsapp: string | null;
+  address: string | null;
+  city: string | null;
+  country: string;
+  logo_url: string | null;
+  avatar_initials: string | null;
+  avatar_color: string | null;
+  services: string[];
+  monthly_video_quota: number;
+  monthly_fee: number;
+  currency: string;
+  start_date: string | null;
+  end_date: string | null;
+  notes_internal: string | null;
+  account_manager_id: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+}
+
+export interface ClientPortal {
+  id: string;
+  client_id: string;
+  token: string;
+  is_active: boolean;
+  expires_at: string | null;
+  last_accessed_at: string | null;
+  access_count: number;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+}
+
+export interface Project {
+  id: string;
+  client_id: string;
+  title: string;
+  description: string | null;
+  type: string;
+  status: ProjectStatus;
+  progress: number;
+  lead_id: string | null;
+  team_ids: string[];
+  start_date: string | null;
+  deadline: string | null;
+  delivered_at: string | null;
+  budget: number | null;
+  invoice_id: string | null;
+  notes_internal: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+}
+
+export interface InternalProject {
+  id: string;
+  title: string;
+  description: string | null;
+  category: string | null;
+  status: ProjectStatus;
+  priority: InternalPriority;
+  progress: number;
+  owner_id: string | null;
+  team_ids: string[];
+  start_date: string | null;
+  deadline: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+}
+
+export interface ChecklistItem {
+  id: string;
+  text: string;
+  done: boolean;
+}
+
+export interface Task {
+  id: string;
+  title: string;
+  description: string | null;
+  project_id: string | null;
+  internal_project_id: string | null;
+  client_id: string | null;
+  video_id: string | null;
+  parent_task_id: string | null;
+  assignee_id: string | null;
+  watcher_ids: string[];
+  status: TaskStatus;
+  priority: TaskPriority;
+  progress: number;
+  start_date: string | null;
+  deadline: string | null;
+  completed_at: string | null;
+  is_recurring: boolean;
+  recurrence_pattern: string | null;
+  estimated_hours: number | null;
+  actual_hours: number;
+  checklist: ChecklistItem[];
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+}
+
+export interface Video {
+  id: string;
+  client_id: string;
+  editorial_calendar_id: string | null;
+  title: string;
+  topic: string | null;
+  brief: string | null;
+  type: string | null;
+  format: VideoFormat | null;
+  platform: VideoPlatform | null;
+  duration_seconds: number | null;
+  status: VideoStatus;
+  public_status: VideoPublicStatus;
+  priority: TaskPriority;
+  cameraman_id: string | null;
+  editor_id: string | null;
+  shooting_date: string | null;
+  delivery_deadline: string | null;
+  publication_date: string | null;
+  preview_url: string | null;
+  final_url: string | null;
+  rushes_storage_path: string | null;
+  client_feedback: string | null;
+  revision_count: number;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+}
+
+export interface EditorialCalendar {
+  id: string;
+  client_id: string;
+  month: string; // ISO date — first of month
+  quota: number;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface VideoTemplate {
+  id: string;
+  sector: string;
+  title: string;
+  description: string | null;
+  format: VideoFormat | null;
+  duration_seconds: number | null;
+  brief_template: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ContentIdea {
+  id: string;
+  client_id: string | null;
+  sector: string | null;
+  title: string;
+  description: string | null;
+  format: VideoFormat | null;
+  platform: VideoPlatform | null;
+  estimated_duration: number | null;
+  is_used: boolean;
+  used_video_id: string | null;
+  created_at: string;
+  created_by: string | null;
+}
+
+export interface Invoice {
+  id: string;
+  client_id: string;
+  ref: string;
+  issue_date: string;
+  due_date: string;
+  sent_at: string | null;
+  paid_at: string | null;
+  status: InvoiceStatus;
+  subtotal: number;
+  tax_rate: number;
+  tax_amount: number;
+  discount: number;
+  total: number;
+  currency: string;
+  notes: string | null;
+  payment_terms: string | null;
+  template: string;
+  pdf_url: string | null;
+  pdf_storage_path: string | null;
+  visible_to_client: boolean;
+  project_id: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+}
+
+export interface InvoiceItem {
+  id: string;
+  invoice_id: string;
+  position: number;
+  description: string;
+  quantity: number;
+  unit: string | null;
+  unit_price: number;
+  total: number;
+  created_at: string;
+}
+
+export interface Quote {
+  id: string;
+  client_id: string;
+  ref: string;
+  issue_date: string;
+  valid_until: string;
+  sent_at: string | null;
+  decided_at: string | null;
+  status: QuoteStatus;
+  subtotal: number;
+  tax_rate: number;
+  tax_amount: number;
+  discount: number;
+  total: number;
+  currency: string;
+  notes: string | null;
+  conditions: string | null;
+  template: string;
+  pdf_url: string | null;
+  pdf_storage_path: string | null;
+  converted_invoice_id: string | null;
+  visible_to_client: boolean;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+}
+
+export interface QuoteItem {
+  id: string;
+  quote_id: string;
+  position: number;
+  description: string;
+  quantity: number;
+  unit: string | null;
+  unit_price: number;
+  total: number;
+  created_at: string;
+}
+
+export interface Payment {
+  id: string;
+  invoice_id: string;
+  client_id: string;
+  amount: number;
+  currency: string;
+  method: PaymentMethod;
+  payment_date: string;
+  reference: string | null;
+  notes: string | null;
+  created_at: string;
+  created_by: string | null;
+}
+
+export interface ReportHighlight {
+  title: string;
+  description: string;
+}
+
+export interface Report {
+  id: string;
+  client_id: string;
+  type: ReportType;
+  title: string;
+  period_start: string | null;
+  period_end: string | null;
+  summary: string | null;
+  highlights: ReportHighlight[];
+  metrics: Record<string, number>;
+  next_actions: string | null;
+  recommendations: string | null;
+  pdf_url: string | null;
+  pdf_storage_path: string | null;
+  whatsapp_text: string | null;
+  visible_to_client: boolean;
+  sent_at: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+}
+
+export interface DocumentRecord {
+  id: string;
+  client_id: string | null;
+  project_id: string | null;
+  video_id: string | null;
+  name: string;
+  type: DocumentType;
+  description: string | null;
+  file_url: string | null;
+  file_storage_path: string | null;
+  file_size: number | null;
+  mime_type: string | null;
+  external_link: string | null;
+  visible_to_client: boolean;
+  uploaded_at: string;
+  uploaded_by: string | null;
+}
+
+export interface Notification {
+  id: string;
+  recipient_user_id: string;
+  type: NotificationType;
+  priority: NotificationPriority;
+  title: string;
+  message: string | null;
+  related_entity_type: string | null;
+  related_entity_id: string | null;
+  link_url: string | null;
+  is_read: boolean;
+  read_at: string | null;
+  created_at: string;
+}
+
+export interface Comment {
+  id: string;
+  entity_type: string;
+  entity_id: string;
+  author_id: string | null;
+  body: string;
+  is_internal: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ActivityLog {
+  id: string;
+  actor_user_id: string | null;
+  actor_label: string | null;
+  action: string;
+  entity_type: string;
+  entity_id: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+// ─── DATABASE TYPE (Supabase shape) ─────────────────────────────────────────
+
+export type Database = {
+  __InternalSupabase: {
+    PostgrestVersion: '12';
+  };
+  public: {
+    Tables: {
+      employees: {
+        Row: Employee;
+        Insert: Partial<Employee>;
+        Update: Partial<Employee>;
+        Relationships: [];
+      };
+      clients: { Row: Client; Insert: Partial<Client>; Update: Partial<Client>; Relationships: [] };
+      client_portals: {
+        Row: ClientPortal;
+        Insert: Partial<ClientPortal>;
+        Update: Partial<ClientPortal>;
+        Relationships: [];
+      };
+      projects: { Row: Project; Insert: Partial<Project>; Update: Partial<Project>; Relationships: [] };
+      internal_projects: {
+        Row: InternalProject;
+        Insert: Partial<InternalProject>;
+        Update: Partial<InternalProject>;
+        Relationships: [];
+      };
+      tasks: { Row: Task; Insert: Partial<Task>; Update: Partial<Task>; Relationships: [] };
+      videos: { Row: Video; Insert: Partial<Video>; Update: Partial<Video>; Relationships: [] };
+      editorial_calendars: {
+        Row: EditorialCalendar;
+        Insert: Partial<EditorialCalendar>;
+        Update: Partial<EditorialCalendar>;
+        Relationships: [];
+      };
+      video_templates: {
+        Row: VideoTemplate;
+        Insert: Partial<VideoTemplate>;
+        Update: Partial<VideoTemplate>;
+        Relationships: [];
+      };
+      content_ideas: {
+        Row: ContentIdea;
+        Insert: Partial<ContentIdea>;
+        Update: Partial<ContentIdea>;
+        Relationships: [];
+      };
+      invoices: { Row: Invoice; Insert: Partial<Invoice>; Update: Partial<Invoice>; Relationships: [] };
+      invoice_items: {
+        Row: InvoiceItem;
+        Insert: Partial<InvoiceItem>;
+        Update: Partial<InvoiceItem>;
+        Relationships: [];
+      };
+      quotes: { Row: Quote; Insert: Partial<Quote>; Update: Partial<Quote>; Relationships: [] };
+      quote_items: {
+        Row: QuoteItem;
+        Insert: Partial<QuoteItem>;
+        Update: Partial<QuoteItem>;
+        Relationships: [];
+      };
+      payments: { Row: Payment; Insert: Partial<Payment>; Update: Partial<Payment>; Relationships: [] };
+      reports: { Row: Report; Insert: Partial<Report>; Update: Partial<Report>; Relationships: [] };
+      documents: {
+        Row: DocumentRecord;
+        Insert: Partial<DocumentRecord>;
+        Update: Partial<DocumentRecord>;
+        Relationships: [];
+      };
+      notifications: {
+        Row: Notification;
+        Insert: Partial<Notification>;
+        Update: Partial<Notification>;
+        Relationships: [];
+      };
+      comments: { Row: Comment; Insert: Partial<Comment>; Update: Partial<Comment>; Relationships: [] };
+      activity_logs: {
+        Row: ActivityLog;
+        Insert: Partial<ActivityLog>;
+        Update: Partial<ActivityLog>;
+        Relationships: [];
+      };
+    };
+    Views: {
+      v_employee_workload: {
+        Row: {
+          id: string;
+          full_name: string;
+          role: UserRole;
+          weekly_capacity: number;
+          active_tasks: number;
+          urgent_tasks: number;
+          overdue_tasks: number;
+          estimated_hours: number;
+          load_percent: number;
+        };
+        Relationships: [];
+      };
+      v_client_editorial_status: {
+        Row: {
+          client_id: string;
+          client_name: string;
+          quota: number;
+          delivered: number;
+          in_progress: number;
+          ideas: number;
+        };
+        Relationships: [];
+      };
+      v_revenue_summary: {
+        Row: {
+          month: string;
+          paid_count: number;
+          pending_count: number;
+          overdue_count: number;
+          paid_amount: number;
+          pending_amount: number;
+          overdue_amount: number;
+        };
+        Relationships: [];
+      };
+    };
+    Functions: {
+      next_invoice_ref: { Args: Record<string, never>; Returns: string };
+      next_quote_ref: { Args: Record<string, never>; Returns: string };
+      mark_overdue_invoices: { Args: Record<string, never>; Returns: void };
+    };
+    Enums: {
+      user_role: UserRole;
+      client_status: ClientStatus;
+      contract_type: ContractType;
+      project_status: ProjectStatus;
+      task_status: TaskStatus;
+      task_priority: TaskPriority;
+      video_status: VideoStatus;
+      video_public_status: VideoPublicStatus;
+      video_format: VideoFormat;
+      video_platform: VideoPlatform;
+      invoice_status: InvoiceStatus;
+      quote_status: QuoteStatus;
+      payment_method: PaymentMethod;
+      notification_type: NotificationType;
+      notification_priority: NotificationPriority;
+      document_type: DocumentType;
+      internal_priority: InternalPriority;
+      report_type: ReportType;
+    };
+  };
+};
+
+// ─── CONVENIENCE COMPOSITE TYPES ────────────────────────────────────────────
+
+/** Invoice with its line items (commonly fetched together) */
+export interface InvoiceWithItems extends Invoice {
+  items: InvoiceItem[];
+  client?: Client;
+  payments?: Payment[];
+}
+
+/** Quote with its line items */
+export interface QuoteWithItems extends Quote {
+  items: QuoteItem[];
+  client?: Client;
+}
+
+/** Client with aggregated stats */
+export interface ClientWithStats extends Client {
+  active_projects: number;
+  videos_this_month: number;
+  videos_delivered: number;
+  total_revenue: number;
+  outstanding_amount: number;
+}
+
+/** Task enriched with related entities for UI rendering */
+export interface TaskWithRelations extends Task {
+  assignee?: Employee;
+  client?: Client;
+  project?: Project;
+}
+
+/** Video enriched with related entities */
+export interface VideoWithRelations extends Video {
+  client?: Client;
+  editor?: Employee;
+  cameraman?: Employee;
+}
+
+/** Sanitized video for client portal — strips internal fields */
+export interface PortalVideo {
+  id: string;
+  title: string;
+  type: string | null;
+  format: VideoFormat | null;
+  platform: VideoPlatform | null;
+  public_status: VideoPublicStatus;
+  delivery_deadline: string | null;
+  publication_date: string | null;
+  preview_url: string | null;
+  final_url: string | null;
+}
+
+/** Sanitized invoice for client portal */
+export interface PortalInvoice {
+  id: string;
+  ref: string;
+  issue_date: string;
+  due_date: string;
+  status: InvoiceStatus;
+  total: number;
+  currency: string;
+  pdf_url: string | null;
+}

@@ -1,0 +1,191 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================================
+   SUPRA V. AGENCY OS — DESIGN SYSTEM (noir profond + orange Supra)
+   ============================================================================
+   Dark-first. Tokens en HSL pour shadcn/ui. Orange #FF450F / #FF3D0A en accent
+   premium (dosé) — pas d’or / doré.
+   ============================================================================ */
+
+@layer base {
+  :root {
+    /* Palette marque (référence hex → HSL pour variables shadcn) */
+    --supra-orange: #ff450f;
+    --supra-orange-alt: #ff3d0a;
+    --supra-orange-soft: #ff6a2a;
+    --supra-deep: #080706;
+    --supra-button: #1a0703;
+    --supra-brown-dark: #3a120a;
+    --supra-border-warm: #6b2416;
+    --supra-cream: #f8f4ef;
+    --supra-muted-text: #a8a19a;
+    --supra-card: #11100f;
+    --supra-surface-2: #181513;
+
+    /* ─── Dark theme (DEFAULT) ──────────────────────────────────────────── */
+    --background: 20 18% 2.5%; /* #080706 */
+    --foreground: 37 33% 95%; /* #F8F4EF */
+
+    --card: 30 6% 6.5%; /* #11100F */
+    --card-foreground: 37 33% 95%;
+
+    --popover: 15 10% 9%; /* #181513 */
+    --popover-foreground: 37 33% 95%;
+
+    /* Accent principal = orange Supra (texte primary, ring, liens forts) */
+    --primary: 14 100% 53%; /* #FF450F */
+    --primary-foreground: 37 33% 95%; /* crème sur orange si besoin */
+
+    --secondary: 12 78% 6%; /* #1A0703 — surfaces type bouton sombre */
+    --secondary-foreground: 37 33% 95%;
+
+    --muted: 15 10% 9%;
+    --muted-foreground: 30 8% 64%; /* #A8A19A */
+
+    --accent: 12 58% 13%; /* #3A120A — hover surface chaude */
+    --accent-foreground: 37 33% 95%;
+
+    /* Alertes : rouge-orangé discret (pas le vert réservé au succès) */
+    --destructive: 12 62% 48%;
+    --destructive-foreground: 37 33% 97%;
+
+    --border: 13 45% 24%; /* #6B2416 adouci pour UI */
+    --input: 12 58% 10%;
+    --ring: 14 95% 56%;
+
+    --radius: 0.625rem;
+
+    /* Succès / paiement validé uniquement */
+    --success: 154 52% 45%;
+    --success-foreground: 37 33% 98%;
+  }
+
+  /* Light mode — rare ; aligné orange Supra */
+  .light {
+    --background: 40 20% 98%;
+    --foreground: 20 25% 8%;
+    --card: 40 15% 100%;
+    --card-foreground: 20 25% 8%;
+    --popover: 40 15% 100%;
+    --popover-foreground: 20 25% 8%;
+    --primary: 14 100% 50%;
+    --primary-foreground: 37 33% 98%;
+    --secondary: 15 12% 92%;
+    --secondary-foreground: 20 25% 12%;
+    --muted: 30 10% 94%;
+    --muted-foreground: 30 8% 40%;
+    --accent: 14 40% 94%;
+    --accent-foreground: 20 25% 12%;
+    --destructive: 12 55% 42%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 25 12% 88%;
+    --input: 25 12% 88%;
+    --ring: 14 100% 48%;
+    --success: 154 48% 38%;
+    --success-foreground: 0 0% 100%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    @apply antialiased;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-[color:hsl(15_10%_14%)];
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-[color:hsl(13_35%_22%)];
+  }
+
+  ::selection {
+    background-color: color-mix(in srgb, var(--supra-orange) 32%, transparent);
+    color: var(--supra-cream);
+  }
+}
+
+/* CTA premium : pill, fond brun-noir, contour chaud, glow orange doux */
+@layer components {
+  .btn-supra-cta {
+    @apply relative inline-flex h-12 w-full items-center justify-center gap-2 rounded-full px-6 text-sm font-semibold tracking-tight text-[#F8F4EF] transition-all duration-200;
+    background: linear-gradient(180deg, #221008 0%, #1a0703 100%);
+    border: 1px solid color-mix(in srgb, var(--supra-border-warm) 75%, transparent);
+    box-shadow:
+      0 1px 0 color-mix(in srgb, var(--supra-orange-soft) 18%, transparent) inset,
+      0 14px 36px -10px color-mix(in srgb, var(--supra-orange) 35%, transparent);
+  }
+  .btn-supra-cta:hover:not(:disabled) {
+    border-color: color-mix(in srgb, var(--supra-orange-soft) 55%, var(--supra-border-warm));
+    box-shadow:
+      0 1px 0 color-mix(in srgb, var(--supra-orange-soft) 22%, transparent) inset,
+      0 18px 44px -10px color-mix(in srgb, var(--supra-orange) 42%, transparent);
+  }
+  .btn-supra-cta:focus-visible {
+    @apply outline-none ring-2 ring-primary/45 ring-offset-2 ring-offset-background;
+  }
+  .btn-supra-cta:disabled {
+    @apply cursor-not-allowed opacity-55;
+    box-shadow: none;
+  }
+
+  .btn-supra-cta-icon {
+    @apply inline-block h-4 w-4 shrink-0 transition-transform duration-200;
+  }
+  .btn-supra-cta:hover:not(:disabled) .btn-supra-cta-icon {
+    transform: translateX(2px);
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* Gradient accent orange (remplace l’ancien text-gold-gradient) */
+  .text-supra-gradient {
+    background: linear-gradient(
+      135deg,
+      #ff8a5c 0%,
+      var(--supra-orange) 45%,
+      #c42a0a 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .text-gold-gradient {
+    @apply text-supra-gradient;
+  }
+
+  .border-hairline {
+    border: 1px solid rgba(248, 244, 239, 0.06);
+  }
+
+  /* Glow discret sous cartes / CTA */
+  .shadow-supra-glow {
+    box-shadow:
+      0 24px 48px -12px rgba(0, 0, 0, 0.55),
+      0 18px 40px -16px color-mix(in srgb, var(--supra-orange) 22%, transparent);
+  }
+}
