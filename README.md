@@ -242,3 +242,4 @@ monday.com (gestion tâches), Apple/Framer (fluidité).
 ## 🛡️ License
 
 Propriétaire — Supra v. — Marrakech, Maroc.
+# Supra-v-os
