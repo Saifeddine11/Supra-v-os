@@ -9,6 +9,14 @@ function urgentItemTone(severity: UrgentItem['severity']): StatusBlockTone {
 }
 
 export function UrgentToday({ items }: { items: UrgentItem[] }) {
+  if (items.length === 0) {
+    return (
+      <p className="rounded-lg border border-dashed border-border/80 bg-muted/15 px-4 py-8 text-center text-sm text-muted-foreground">
+        Aucune urgence aujourd’hui.
+      </p>
+    );
+  }
+
   return (
     <ul className="space-y-2">
       {items.map((item) => {

@@ -4,12 +4,19 @@ import type { WorkloadMember } from '@/data/dashboard-mock';
 
 export function TeamLoadSection({ members }: { members: WorkloadMember[] }) {
   return (
-    <SectionCard title="Charge équipe" description="Pourcentages indicatifs de capacité utilisée.">
-      <div className="grid gap-5 sm:grid-cols-2">
-        {members.map((m) => (
-          <WorkloadIndicator key={m.name} member={m} />
-        ))}
-      </div>
+    <SectionCard
+      title="Charge équipe"
+      description="Estimation à partir des heures estimées sur tâches ouvertes vs capacité hebdomadaire déclarée."
+    >
+      {members.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Aucune charge équipe disponible.</p>
+      ) : (
+        <div className="grid gap-5 sm:grid-cols-2">
+          {members.map((m) => (
+            <WorkloadIndicator key={m.name} member={m} />
+          ))}
+        </div>
+      )}
     </SectionCard>
   );
 }

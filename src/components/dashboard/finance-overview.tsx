@@ -1,38 +1,20 @@
 import { SectionCard } from '@/components/shared/section-card';
-import { RevenueChart } from '@/components/dashboard/revenue-chart';
 import type { FinanceSnapshot } from '@/data/dashboard-mock';
-import { MOCK_INVOICES_PREVIEW, REVENUE_CHART } from '@/data/dashboard-mock';
-import { formatAgencyMoneyCompact } from '@/lib/money/format-money';
 import { cn } from '@/lib/utils/cn';
-import { dashboardInvoicePreviewLabelToTone, getStatusBlockSurface } from '@/lib/ui/status-block-tone';
+import { getStatusBlockSurface } from '@/lib/ui/status-block-tone';
 
-export function FinanceOverview({
-  snapshot,
-  liveFinance,
-  chartCurrency,
-}: {
-  snapshot: FinanceSnapshot;
-  /** Quand défini, remplace les champs correspondants (données Supabase). */
-  liveFinance?: Partial<FinanceSnapshot> | null;
-  /** Devise agence pour le graphique et l’extrait facture fictif. */
-  chartCurrency: string;
-}) {
-  const s: FinanceSnapshot = { ...snapshot, ...(liveFinance ?? {}) };
-  const isLive = liveFinance != null && Object.keys(liveFinance).length > 0;
+export function FinanceOverview({ snapshot }: { snapshot: FinanceSnapshot }) {
+  const s = snapshot;
 
   return (
     <SectionCard
       title="Finance"
-      description={
-        isLive
-          ? 'Encaissements, impayés et devis : données réelles (montants du mois = factures payées ce mois).'
-          : 'Vue condensée — connectez un rôle finance pour les agrégats réels.'
-      }
+      description="CA prévu (contrats), encaissements réels (paiements), reliquats factures ouvertes et objectif mensuel."
     >
       <div className="grid gap-6 lg:grid-cols-2">
         <dl className="grid grid-cols-2 gap-3 text-sm">
           <div className={cn('p-3', getStatusBlockSurface('neutral'))}>
-            <dt className="text-xs text-muted-foreground">CA du mois</dt>
+            <dt className="text-xs text-muted-foreground">CA prévu du mois</dt>
             <dd className="mt-1 font-semibold text-foreground">{s.monthlyRevenue}</dd>
           </div>
           <div className={cn('p-3', getStatusBlockSurface('neutral'))}>
@@ -83,38 +65,12 @@ export function FinanceOverview({
             </dd>
           </div>
         </dl>
-        <div className="space-y-4">
-          <div>
-            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              CA vs objectif (6 mois)
-            </p>
-            <p className="mb-2 text-[11px] text-muted-foreground">
-              Données d’illustration — l’objectif du mois courant provient des paramètres agence.
-            </p>
-            <RevenueChart data={REVENUE_CHART} currency={chartCurrency} />
-          </div>
-          <div>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Factures (extrait)
-            </p>
-            <ul className="space-y-1.5 text-sm">
-              {MOCK_INVOICES_PREVIEW.map((inv) => (
-                <li
-                  key={inv.client}
-                  className={cn(
-                    'grid grid-cols-[1fr_auto_auto] items-center gap-2 px-2.5 py-1.5',
-                    getStatusBlockSurface(dashboardInvoicePreviewLabelToTone(inv.status)),
-                  )}
-                >
-                  <span className="min-w-0 truncate text-foreground">{inv.client}</span>
-                  <span className="shrink-0 tabular-nums text-muted-foreground">
-                    {formatAgencyMoneyCompact(inv.amountValue, chartCurrency)}
-                  </span>
-                  <span className="shrink-0 text-right text-xs text-primary/90">{inv.status}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
+        <div className="rounded-lg border border-dashed border-border/80 bg-muted/20 p-4 text-sm text-muted-foreground">
+          <p className="font-medium text-foreground">Historique CA vs objectif</p>
+          <p className="mt-2 leading-relaxed">
+            Aucune série agrégée multi-mois n’est encore exposée ici. L’objectif du mois courant provient des paramètres
+            agence ; les montants affichés à gauche sont calculés à partir des clients, paiements et factures en base.
+          </p>
         </div>
       </div>
     </SectionCard>

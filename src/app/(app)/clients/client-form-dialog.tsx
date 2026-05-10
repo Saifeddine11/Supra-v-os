@@ -182,7 +182,7 @@ export function ClientFormDialog({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="monthly_fee">Forfait mensuel</Label>
+              <Label htmlFor="monthly_fee">Montant forfaitaire</Label>
               <Input
                 id="monthly_fee"
                 name="monthly_fee"
@@ -191,6 +191,24 @@ export function ClientFormDialog({
                 step="0.01"
                 defaultValue={client?.monthly_fee ?? 0}
               />
+              <p className="text-[11px] text-muted-foreground">
+                Mensuel / retainer : montant par mois. One-shot : montant unique (compté le mois de la date de début).
+              </p>
+            </div>
+            <div className="space-y-2 sm:col-span-2 grid gap-2 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="start_date">Date de début contrat</Label>
+                <Input
+                  id="start_date"
+                  name="start_date"
+                  type="date"
+                  defaultValue={client?.start_date ?? ''}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="end_date">Date de fin (optionnel)</Label>
+                <Input id="end_date" name="end_date" type="date" defaultValue={client?.end_date ?? ''} />
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="currency">Devise</Label>

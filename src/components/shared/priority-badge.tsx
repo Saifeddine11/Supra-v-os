@@ -4,6 +4,7 @@ const map = {
   urgent: 'border-destructive/40 bg-destructive/12 text-destructive',
   high: 'border-orange-500/35 bg-orange-500/10 text-orange-200',
   normal: 'border-border bg-muted text-muted-foreground',
+  low: 'border-border bg-muted/80 text-muted-foreground',
 } as const;
 
 export function PriorityBadge({
@@ -17,6 +18,7 @@ export function PriorityBadge({
     urgent: 'Urgent',
     high: 'Haute',
     normal: 'Normale',
+    low: 'Basse',
   };
   return (
     <span

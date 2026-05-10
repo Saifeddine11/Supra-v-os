@@ -1,23 +1,47 @@
 import { createClient } from '@/lib/supabase/server';
 import { canViewInvoices } from '@/lib/auth/capabilities';
 import type { AuthContext } from '@/lib/auth/permissions';
+import { resolveVisibleClientIds } from '@/lib/auth/data-scope';
 import type { FinanceSnapshot } from '@/data/dashboard-mock';
 import type { AgencyMonthlyGoalRow, InvoiceStatus, UserRole } from '@/types/database';
 import { currentDashboardYearMonth } from '@/lib/data/agency-monthly-goals';
 import { formatAgencyMoneyCompact, type AgencyCurrencyIso } from '@/lib/money/format-money';
 import { getAgencyDisplayCurrency } from '@/lib/data/agency-settings-db';
+import {
+  calendarMonthRange,
+  expectedMonthlyRevenueFromClients,
+  type ClientContractRow,
+} from '@/lib/data/expected-monthly-revenue';
 
 export interface DashboardFinanceAgg {
-  currency: string;
-  monthlyRevenue: number;
-  pendingAmount: number;
+  currency: AgencyCurrencyIso;
+  /** CA prévu (contrats clients actifs, mois courant). */
+  expectedMonthlyRevenue: number;
+  /** Encaissé : somme des paiements enregistrés sur le mois. */
+  collectedFromPayments: number;
+  /** Reste à encaisser sur factures ouvertes (TTC − paiements). */
+  outstandingAmount: number;
   unpaidCount: number;
   overdueCount: number;
   pendingCount: number;
   paidCount: number;
-  unpaidAmount: number;
   acceptedQuotes: number;
   pendingQuotes: number;
+}
+
+export function zeroDashboardFinanceAgg(currency: AgencyCurrencyIso): DashboardFinanceAgg {
+  return {
+    currency,
+    expectedMonthlyRevenue: 0,
+    collectedFromPayments: 0,
+    outstandingAmount: 0,
+    unpaidCount: 0,
+    overdueCount: 0,
+    pendingCount: 0,
+    paidCount: 0,
+    acceptedQuotes: 0,
+    pendingQuotes: 0,
+  };
 }
 
 export type DashboardScope = 'full' | 'finance' | 'commercial' | 'individual';
@@ -103,92 +127,14 @@ function todayBoundsIso(): { start: string; end: string; day: string } {
   return { start: start.toISOString(), end: end.toISOString(), day: start.toISOString().slice(0, 10) };
 }
 
-/** Agrège les factures côté serveur pour limiter le nombre de requêtes. */
-function reduceInvoiceStats(
-  rows: {
-    status: InvoiceStatus;
-    total: number;
-    due_date: string;
-    paid_at: string | null;
-    currency: string;
-  }[],
-  today: string,
-  monthStart: string,
-  agencyDisplayCurrency: AgencyCurrencyIso
-): DashboardFinanceAgg | null {
-  if (!rows.length) {
-    return {
-      currency: agencyDisplayCurrency,
-      monthlyRevenue: 0,
-      pendingAmount: 0,
-      unpaidCount: 0,
-      overdueCount: 0,
-      pendingCount: 0,
-      paidCount: 0,
-      unpaidAmount: 0,
-      acceptedQuotes: 0,
-      pendingQuotes: 0,
-    };
-  }
-
-  const currency = agencyDisplayCurrency;
-  let monthlyRevenue = 0;
-  let pendingAmount = 0;
-  let unpaidCount = 0;
-  let overdueCount = 0;
-  let pendingCount = 0;
-  let paidCount = 0;
-  let unpaidAmount = 0;
-
-  for (const inv of rows) {
-    if (inv.status === 'paid') {
-      paidCount += 1;
-      if (inv.paid_at && inv.paid_at >= monthStart) {
-        monthlyRevenue += Number(inv.total);
-      }
-      continue;
-    }
-    if (inv.status === 'cancelled' || inv.status === 'draft') continue;
-
-    const isPendingLike = inv.status === 'sent' || inv.status === 'pending';
-    const isOverdueStatus = inv.status === 'overdue';
-    const dueOverdue = inv.due_date < today && isPendingLike;
-
-    if (isPendingLike) {
-      pendingCount += 1;
-      pendingAmount += Number(inv.total);
-    }
-    if (isPendingLike || isOverdueStatus) {
-      unpaidCount += 1;
-      unpaidAmount += Number(inv.total);
-    }
-    if (isOverdueStatus || dueOverdue) {
-      overdueCount += 1;
-    }
-  }
-
-  return {
-    currency,
-    monthlyRevenue,
-    pendingAmount,
-    unpaidCount,
-    overdueCount,
-    pendingCount,
-    paidCount,
-    unpaidAmount,
-    acceptedQuotes: 0,
-    pendingQuotes: 0,
-  };
-}
-
-/** Données finance pour la section « Finance » du dashboard (fusion avec maquette). */
+/** Données finance pour la section « Finance » — uniquement chiffres réels. */
 export function financeSnapshotFromAgg(
   agg: DashboardFinanceAgg | null,
-  goal: AgencyMonthlyGoalRow | null
-): Partial<FinanceSnapshot> | null {
-  if (!agg) return null;
-  const c = agg.currency;
-  const collected = formatAgencyMoneyCompact(agg.monthlyRevenue, c);
+  goal: AgencyMonthlyGoalRow | null,
+  currencyFallback: AgencyCurrencyIso
+): FinanceSnapshot {
+  const a = agg ?? zeroDashboardFinanceAgg(currencyFallback);
+  const c = a.currency;
 
   let monthlyTarget: string;
   let targetDetail: string | null = null;
@@ -202,22 +148,22 @@ export function financeSnapshotFromAgg(
     targetDetail = 'Objectif chiffre d’affaires à renseigner (montant > 0).';
   } else {
     monthlyTarget = formatAgencyMoneyCompact(goal.revenue_goal, c);
-    const pct = Math.round((agg.monthlyRevenue / goal.revenue_goal) * 100);
+    const pct = Math.round((a.collectedFromPayments / goal.revenue_goal) * 100);
     targetProgressPercent = Math.min(100, Math.max(0, pct));
-    targetDetail = `${targetProgressPercent} % de l’objectif (CA encaissé ce mois / objectif)`;
+    targetDetail = `${targetProgressPercent} % de l’objectif (encaissé / objectif)`;
   }
 
   return {
-    monthlyRevenue: formatAgencyMoneyCompact(agg.monthlyRevenue, c),
+    monthlyRevenue: formatAgencyMoneyCompact(a.expectedMonthlyRevenue, c),
     monthlyTarget,
-    collected,
-    pending: formatAgencyMoneyCompact(agg.pendingAmount, c),
-    unpaidInvoicesCount: agg.unpaidCount,
-    paidInvoicesCount: agg.paidCount,
-    pendingInvoicesCount: agg.pendingCount,
-    overdueInvoicesCount: agg.overdueCount,
-    acceptedQuotes: agg.acceptedQuotes,
-    pendingQuotes: agg.pendingQuotes,
+    collected: formatAgencyMoneyCompact(a.collectedFromPayments, c),
+    pending: formatAgencyMoneyCompact(a.outstandingAmount, c),
+    unpaidInvoicesCount: a.unpaidCount,
+    paidInvoicesCount: a.paidCount,
+    pendingInvoicesCount: a.pendingCount,
+    overdueInvoicesCount: a.overdueCount,
+    acceptedQuotes: a.acceptedQuotes,
+    pendingQuotes: a.pendingQuotes,
     targetDetail,
     targetProgressPercent,
   };
@@ -225,37 +171,137 @@ export function financeSnapshotFromAgg(
 
 async function fetchFinanceBlock(
   supabase: Awaited<ReturnType<typeof createClient>>,
-  role: UserRole | null,
+  ctx: AuthContext,
   today: string,
-  monthStart: string,
   agencyDisplayCurrency: AgencyCurrencyIso
 ): Promise<{ pendingInvoices: number | null; finance: DashboardFinanceAgg | null }> {
-  let pendingInvoices: number | null = null;
-  let finance: DashboardFinanceAgg | null = null;
+  const role = ctx.role;
+  if (!role || !canViewInvoices(role) || !ctx.employee) {
+    return { pendingInvoices: null, finance: null };
+  }
 
-  if (role && canViewInvoices(role)) {
-    const [invR, quotesAccR, quotesPendR] = await Promise.all([
-      supabase.from('invoices').select('status,total,due_date,paid_at,currency'),
-      supabase.from('quotes').select('id', { count: 'exact', head: true }).eq('status', 'accepted'),
-      supabase
-        .from('quotes')
-        .select('id', { count: 'exact', head: true })
-        .in('status', ['draft', 'sent']),
-    ]);
+  const scope = await resolveVisibleClientIds(supabase, ctx);
+  if (scope !== 'all' && scope.length === 0) {
+    return { pendingInvoices: 0, finance: zeroDashboardFinanceAgg(agencyDisplayCurrency) };
+  }
 
-    if (!invR.error && invR.data) {
-      const base = reduceInvoiceStats(invR.data, today, monthStart, agencyDisplayCurrency);
-      if (base) {
-        base.acceptedQuotes = quotesAccR.count ?? 0;
-        base.pendingQuotes = quotesPendR.count ?? 0;
-        finance = base;
-      }
-      const pendOnly = invR.data.filter((i) => i.status === 'sent' || i.status === 'pending').length;
-      pendingInvoices = pendOnly;
+  const clientFilter = scope === 'all' ? null : scope;
+  const { year, month } = currentDashboardYearMonth();
+  const { start: monthStart, end: monthEnd } = calendarMonthRange(year, month);
+
+  let clientsQ = supabase
+    .from('clients')
+    .select('status, contract_type, monthly_fee, start_date, end_date');
+  if (clientFilter) clientsQ = clientsQ.in('id', clientFilter);
+
+  let paymentsMonthQ = supabase
+    .from('payments')
+    .select('amount, payment_date, invoice_id, client_id')
+    .gte('payment_date', monthStart)
+    .lte('payment_date', monthEnd);
+  if (clientFilter) paymentsMonthQ = paymentsMonthQ.in('client_id', clientFilter);
+
+  let invQ = supabase.from('invoices').select('id,status,total,due_date,client_id');
+  if (clientFilter) invQ = invQ.in('client_id', clientFilter);
+
+  let quotesAccQ = supabase.from('quotes').select('id', { count: 'exact', head: true }).eq('status', 'accepted');
+  if (clientFilter) quotesAccQ = quotesAccQ.in('client_id', clientFilter);
+
+  let quotesPendQ = supabase
+    .from('quotes')
+    .select('id', { count: 'exact', head: true })
+    .in('status', ['draft', 'sent']);
+  if (clientFilter) quotesPendQ = quotesPendQ.in('client_id', clientFilter);
+
+  const [clientsR, paymentsR, invR, quotesAccR, quotesPendR] = await Promise.all([
+    clientsQ,
+    paymentsMonthQ,
+    invQ,
+    quotesAccQ,
+    quotesPendQ,
+  ]);
+
+  const expected = expectedMonthlyRevenueFromClients(
+    (clientsR.data ?? []) as ClientContractRow[],
+    year,
+    month
+  );
+
+  const collectedFromPayments = (paymentsR.data ?? []).reduce(
+    (s, p) => s + Number((p as { amount: number }).amount),
+    0
+  );
+
+  const invRows = (invR.data ?? []) as {
+    id: string;
+    status: InvoiceStatus;
+    total: number;
+    due_date: string;
+    client_id: string;
+  }[];
+
+  const openInvIds = invRows
+    .filter((i) => i.status === 'sent' || i.status === 'pending' || i.status === 'overdue')
+    .map((i) => i.id);
+
+  const paidByInvoice = new Map<string, number>();
+  if (openInvIds.length > 0) {
+    let payAllocQ = supabase.from('payments').select('invoice_id, amount').in('invoice_id', openInvIds);
+    if (clientFilter) payAllocQ = payAllocQ.in('client_id', clientFilter);
+    const { data: payAlloc } = await payAllocQ;
+    for (const row of payAlloc ?? []) {
+      const id = (row as { invoice_id: string }).invoice_id;
+      paidByInvoice.set(id, (paidByInvoice.get(id) ?? 0) + Number((row as { amount: number }).amount));
     }
   }
 
-  return { pendingInvoices, finance };
+  let outstandingAmount = 0;
+  let unpaidCount = 0;
+  let overdueCount = 0;
+  let pendingCount = 0;
+  let paidCount = 0;
+
+  for (const inv of invRows) {
+    if (inv.status === 'paid') {
+      paidCount += 1;
+      continue;
+    }
+    if (inv.status === 'cancelled' || inv.status === 'draft') continue;
+
+    const total = Number(inv.total);
+    const paid = paidByInvoice.get(inv.id) ?? 0;
+    const residual = Math.max(0, Math.round((total - paid) * 100) / 100);
+
+    const isPendingLike = inv.status === 'sent' || inv.status === 'pending';
+    const isOverdueStatus = inv.status === 'overdue';
+    const dueOverdue = inv.due_date < today && isPendingLike;
+
+    if (isPendingLike) pendingCount += 1;
+    if (isPendingLike || isOverdueStatus) {
+      unpaidCount += 1;
+      outstandingAmount += residual;
+    }
+    if (isOverdueStatus || dueOverdue) overdueCount += 1;
+  }
+
+  outstandingAmount = Math.round(outstandingAmount * 100) / 100;
+
+  const pendOnly = invRows.filter((i) => i.status === 'sent' || i.status === 'pending').length;
+
+  const finance: DashboardFinanceAgg = {
+    currency: agencyDisplayCurrency,
+    expectedMonthlyRevenue: expected,
+    collectedFromPayments: Math.round(collectedFromPayments * 100) / 100,
+    outstandingAmount,
+    unpaidCount,
+    overdueCount,
+    pendingCount,
+    paidCount,
+    acceptedQuotes: quotesAccR.count ?? 0,
+    pendingQuotes: quotesPendR.count ?? 0,
+  };
+
+  return { pendingInvoices: pendOnly, finance };
 }
 
 async function fetchAgencyAggregates(
@@ -599,7 +645,7 @@ export async function getDashboardSummary(ctx: AuthContext): Promise<DashboardSu
   if (role === 'admin' || role === 'project_manager') {
     const [agency, fin, _p, goalRes] = await Promise.all([
       fetchAgencyAggregates(supabase, now, monthStart),
-      fetchFinanceBlock(supabase, role, today, monthStart, agencyDisplayCurrency),
+      fetchFinanceBlock(supabase, ctx, today, agencyDisplayCurrency),
       Promise.resolve(personal),
       goalPromise,
     ]);
@@ -618,7 +664,7 @@ export async function getDashboardSummary(ctx: AuthContext): Promise<DashboardSu
 
   if (role === 'finance') {
     const [fin, goalRes] = await Promise.all([
-      fetchFinanceBlock(supabase, role, today, monthStart, agencyDisplayCurrency),
+      fetchFinanceBlock(supabase, ctx, today, agencyDisplayCurrency),
       goalPromise,
     ]);
     const agencyMonthlyGoal = (goalRes.data as AgencyMonthlyGoalRow | null) ?? null;
@@ -644,7 +690,7 @@ export async function getDashboardSummary(ctx: AuthContext): Promise<DashboardSu
   if (role === 'commercial') {
     const [commercial, fin, goalRes] = await Promise.all([
       fetchCommercialKpis(supabase, empId, today),
-      fetchFinanceBlock(supabase, role, today, monthStart, agencyDisplayCurrency),
+      fetchFinanceBlock(supabase, ctx, today, agencyDisplayCurrency),
       goalPromise,
     ]);
     const agencyMonthlyGoal = (goalRes.data as AgencyMonthlyGoalRow | null) ?? null;
@@ -676,7 +722,7 @@ export async function getDashboardSummary(ctx: AuthContext): Promise<DashboardSu
   ) {
     const [fin, goalRes] = await Promise.all([
       canViewInvoices(role)
-        ? fetchFinanceBlock(supabase, role, today, monthStart, agencyDisplayCurrency)
+        ? fetchFinanceBlock(supabase, ctx, today, agencyDisplayCurrency)
         : Promise.resolve({ pendingInvoices: null, finance: null }),
       goalPromise,
     ]);

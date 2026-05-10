@@ -18,6 +18,11 @@ function parseServices(raw: string): string[] {
     .filter(Boolean);
 }
 
+function parseOptionalDate(formData: FormData, key: string): string | null {
+  const v = String(formData.get(key) ?? '').trim();
+  return v || null;
+}
+
 export async function createClientAction(formData: FormData): Promise<ActionResult<{ id: string }>> {
   const ctx = await getAuthContext();
   if (!ctx || !canModifyClients(ctx.role)) {
@@ -59,6 +64,8 @@ export async function createClientAction(formData: FormData): Promise<ActionResu
     services: services.length ? services : [],
     monthly_video_quota: Number(formData.get('monthly_video_quota') ?? 0) || 0,
     monthly_fee: Number(formData.get('monthly_fee') ?? 0) || 0,
+    start_date: parseOptionalDate(formData, 'start_date'),
+    end_date: parseOptionalDate(formData, 'end_date'),
     currency: normalizeAgencyCurrency(String(formData.get('currency') ?? '').trim() || agencyCurrency),
     notes_internal: String(formData.get('notes_internal') ?? '').trim() || null,
     account_manager_id: accountManager || null,
@@ -120,6 +127,8 @@ export async function updateClientAction(id: string, formData: FormData): Promis
     services: services.length ? services : [],
     monthly_video_quota: Number(formData.get('monthly_video_quota') ?? 0) || 0,
     monthly_fee: Number(formData.get('monthly_fee') ?? 0) || 0,
+    start_date: parseOptionalDate(formData, 'start_date'),
+    end_date: parseOptionalDate(formData, 'end_date'),
     currency: normalizeAgencyCurrency(String(formData.get('currency') ?? '').trim() || agencyCurrency),
     notes_internal: String(formData.get('notes_internal') ?? '').trim() || null,
     account_manager_id: accountManager || null,

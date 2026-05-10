@@ -36,19 +36,12 @@ import { FinanceOverview } from '@/components/dashboard/finance-overview';
 import { ClientOverview } from '@/components/dashboard/client-overview';
 import { ProjectOverview } from '@/components/dashboard/project-overview';
 import { NotificationsPreview } from '@/components/dashboard/notifications-preview';
+import { DASHBOARD_STATS, dashboardStatsWithIllustrativeMoney, type StatCardData } from '@/data/dashboard-mock';
 import {
-  CLIENTS_FOLLOW,
-  DASHBOARD_STATS,
-  PROJECTS_ONGOING,
-  TASKS_OVERDUE,
-  TASKS_TODAY,
-  TEAM_WORKLOAD,
-  VIDEOS_BY_FOCUS,
-  dashboardStatsWithIllustrativeMoney,
-  illustrativeFinanceSnapshot,
-  illustrativeUrgentItems,
-  type StatCardData,
-} from '@/data/dashboard-mock';
+  emptyDashboardOperational,
+  fetchCommercialClientsFollow,
+  fetchDashboardOperational,
+} from '@/lib/data/dashboard-operational';
 import { financeSnapshotFromAgg, getDashboardSummary } from '@/lib/data/dashboard-stats';
 import { formatAgencyMoneyCompact } from '@/lib/money/format-money';
 import { listRecentNotifications } from '@/lib/data/notifications-user';
@@ -323,8 +316,28 @@ export default async function DashboardPage() {
     getDashboardSummary(ctx),
     listRecentNotifications(6, ctx),
   ]);
-  const liveFinancePartial = financeSnapshotFromAgg(summary.finance, summary.agencyMonthlyGoal);
-  const illustrativeStats = dashboardStatsWithIllustrativeMoney(DASHBOARD_STATS, summary.agencyDisplayCurrency);
+
+  let operational = emptyDashboardOperational();
+  if (summary.scope === 'full') {
+    try {
+      operational = await fetchDashboardOperational(ctx);
+    } catch {
+      operational = emptyDashboardOperational();
+    }
+  } else if (summary.scope === 'commercial') {
+    try {
+      const clientsFollow = await fetchCommercialClientsFollow(ctx);
+      operational = { ...emptyDashboardOperational(), clientsFollow };
+    } catch {
+      operational = emptyDashboardOperational();
+    }
+  }
+  const financeSnapshot = financeSnapshotFromAgg(
+    summary.finance,
+    summary.agencyMonthlyGoal,
+    summary.agencyDisplayCurrency
+  );
+  const baseStatCards = dashboardStatsWithIllustrativeMoney(DASHBOARD_STATS, summary.agencyDisplayCurrency);
 
   const liveOverrides: Partial<Record<string, Partial<StatCardData>>> = {
     clients: {
@@ -396,16 +409,22 @@ export default async function DashboardPage() {
     const f = summary.finance;
     const c = f.currency;
     liveOverrides.rev = {
-      value: formatAgencyMoneyCompact(f.monthlyRevenue, c),
-      subtitle: 'factures payées — encaissements du mois',
+      value: formatAgencyMoneyCompact(f.expectedMonthlyRevenue, c),
+      subtitle: 'Contrats clients actifs (prévisionnel)',
       trend: undefined,
-      tone: 'positive',
+      tone: f.expectedMonthlyRevenue > 0 ? 'positive' : 'default',
+    };
+    liveOverrides.collected = {
+      value: formatAgencyMoneyCompact(f.collectedFromPayments, c),
+      subtitle: 'Paiements enregistrés sur le mois',
+      trend: undefined,
+      tone: f.collectedFromPayments > 0 ? 'positive' : 'default',
     };
     liveOverrides.pending = {
-      value: formatAgencyMoneyCompact(f.pendingAmount, c),
-      subtitle: `${f.pendingCount} facture(s) envoyée(s) ou en attente`,
+      value: formatAgencyMoneyCompact(f.outstandingAmount, c),
+      subtitle: 'Reste à encaisser (factures non soldées)',
       trend: undefined,
-      tone: 'warning',
+      tone: f.outstandingAmount > 0 ? 'warning' : 'default',
     };
     liveOverrides.unpaid = {
       value: String(f.unpaidCount),
@@ -424,7 +443,7 @@ export default async function DashboardPage() {
     const g = summary.agencyMonthlyGoal;
     const fin = summary.finance;
     const c = fin?.currency ?? summary.agencyDisplayCurrency;
-    const collected = fin?.monthlyRevenue ?? 0;
+    const collected = fin?.collectedFromPayments ?? 0;
     if (!g) {
       liveOverrides.target = {
         title: 'Objectif mensuel (CA)',
@@ -452,7 +471,7 @@ export default async function DashboardPage() {
       liveOverrides.target = {
         title: 'Objectif mensuel (CA)',
         value: formatAgencyMoneyCompact(g.revenue_goal, c),
-        subtitle: `${clamped} % de l’objectif (CA encaissé ce mois)`,
+        subtitle: `${clamped} % de l’objectif (encaissé / objectif)`,
         trend: undefined,
         tone: clamped >= 100 ? 'positive' : 'default',
       };
@@ -464,12 +483,12 @@ export default async function DashboardPage() {
   if (summary.scope === 'individual') {
     mergedStats = individualStatCards(ctx.employee.role, summary.personal);
   } else if (summary.scope === 'finance') {
-    mergedStats = illustrativeStats.filter((s) => FINANCE_STAT_IDS.has(s.id)).map((s) => ({
+    mergedStats = baseStatCards.filter((s) => FINANCE_STAT_IDS.has(s.id)).map((s) => ({
       ...s,
       ...(liveOverrides[s.id] ?? {}),
     }));
   } else if (summary.scope === 'commercial' && summary.commercial) {
-    const baseCommercial = illustrativeStats.filter((s) => s.id === 'clients').map((s) => ({
+    const baseCommercial = baseStatCards.filter((s) => s.id === 'clients').map((s) => ({
       ...s,
       ...(liveOverrides[s.id] ?? {}),
     }));
@@ -477,14 +496,14 @@ export default async function DashboardPage() {
     if (summary.finance) {
       mergedStats = [
         ...mergedStats,
-        ...illustrativeStats.filter((s) => FINANCE_STAT_IDS.has(s.id)).map((s) => ({
+        ...baseStatCards.filter((s) => FINANCE_STAT_IDS.has(s.id)).map((s) => ({
           ...s,
           ...(liveOverrides[s.id] ?? {}),
         })),
       ];
     }
   } else {
-    mergedStats = illustrativeStats.map((s) => ({
+    mergedStats = baseStatCards.map((s) => ({
       ...s,
       ...(liveOverrides[s.id] ?? {}),
     }));
@@ -492,7 +511,7 @@ export default async function DashboardPage() {
 
   const showFullProduction =
     summary.scope === 'full' && (variant === 'admin' || variant === 'manager');
-  const showUrgentTodayMock = variant === 'admin';
+  const showUrgentToday = summary.scope === 'full' && (variant === 'admin' || variant === 'manager');
   const showTeamBlocks = summary.scope === 'full';
   const showFinanceBlock = summary.scope === 'full' || summary.scope === 'finance' || summary.scope === 'commercial';
   const showClientBlock = summary.scope === 'full' || summary.scope === 'commercial';
@@ -574,17 +593,17 @@ export default async function DashboardPage() {
 
       <div className="grid gap-6 xl:grid-cols-3">
         <div className="space-y-6 xl:col-span-2">
-          {showUrgentTodayMock ? (
+          {showUrgentToday ? (
             <SectionCard
               title="Urgent aujourd’hui"
-              description="Points nécessitant une action rapide de l’équipe."
+              description="Factures échues, tâches urgentes, validations vidéo et rapports non envoyés."
               action={
                 <Link href="/notifications" className="text-xs font-semibold text-primary hover:underline">
                   Voir tout
                 </Link>
               }
             >
-              <UrgentToday items={illustrativeUrgentItems(summary.agencyDisplayCurrency)} />
+              <UrgentToday items={operational.urgentItems} />
             </SectionCard>
           ) : null}
           {showPersonalWorkColumn && personalWork ? (
@@ -594,15 +613,16 @@ export default async function DashboardPage() {
               videos={personalWork.videos}
             />
           ) : null}
-          {showFullProduction ? <ProductionOverview videos={VIDEOS_BY_FOCUS} /> : null}
-          {showTeamBlocks ? <TeamTasksSection today={TASKS_TODAY} overdue={TASKS_OVERDUE} /> : null}
-          {showFinanceBlock ? (
-            <FinanceOverview
-              snapshot={illustrativeFinanceSnapshot(summary.agencyDisplayCurrency)}
-              liveFinance={liveFinancePartial}
-              chartCurrency={summary.agencyDisplayCurrency}
+          {showFullProduction ? (
+            <ProductionOverview
+              videoStatusCounts={operational.videoStatusCounts}
+              videos={operational.productionVideos}
             />
           ) : null}
+          {showTeamBlocks ? (
+            <TeamTasksSection today={operational.teamTasksToday} overdue={operational.teamTasksOverdue} />
+          ) : null}
+          {showFinanceBlock ? <FinanceOverview snapshot={financeSnapshot} /> : null}
           {summary.scope === 'finance' &&
           summary.finance &&
           summary.finance.paidCount === 0 &&
@@ -625,13 +645,17 @@ export default async function DashboardPage() {
           ) : null}
         </div>
         <div className="space-y-6">
-          {showTeamBlocks ? <TeamLoadSection members={TEAM_WORKLOAD} /> : null}
-          {showClientBlock ? <ClientOverview clients={CLIENTS_FOLLOW} /> : null}
-          {showProjectBlock ? <ProjectOverview projects={PROJECTS_ONGOING} /> : null}
+          {showTeamBlocks ? <TeamLoadSection members={operational.teamWorkload} /> : null}
+          {showClientBlock ? <ClientOverview clients={operational.clientsFollow} /> : null}
+          {showProjectBlock ? <ProjectOverview projects={operational.projectsOngoing} /> : null}
           <NotificationsPreview items={dashboardNotifications} />
-          {dashboardActivity.length > 0 && (variant === 'admin' || variant === 'manager') ? (
+          {summary.scope === 'full' && (variant === 'admin' || variant === 'manager') ? (
             <SectionCard title={activitySectionTitle} description={activitySectionDescription}>
-              <RecentActivityPreview logs={dashboardActivity} variant={variant} />
+              {dashboardActivity.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Aucune activité récente.</p>
+              ) : (
+                <RecentActivityPreview logs={dashboardActivity} variant={variant} />
+              )}
             </SectionCard>
           ) : null}
         </div>
