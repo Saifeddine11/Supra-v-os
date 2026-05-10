@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" role="img" aria-label="Supra v3">
+  <style>
+    .tile {
+      fill: #111111;
+    }
+    .mark {
+      stroke: #ff4b00;
+    }
+    /* Onglets / UI navigateur en thème sombre : tuile plus profonde + trait orange un peu plus lumineux */
+    @media (prefers-color-scheme: dark) {
+      .tile {
+        fill: #080706;
+      }
+      .mark {
+        stroke: #ff6a2e;
+      }
+    }
+  </style>
+  <rect class="tile" width="500" height="500" rx="96" />
+  <g class="mark" fill="none" stroke-width="34" stroke-linecap="butt">
+    <circle cx="250" cy="250" r="180" />
+    <path d="M70 250h360M250 70c72 84 72 276 0 360M250 70c-72 84-72 276 0 360" />
+    <path d="M104 140c88 51 204 51 292 0M104 360c88-51 204-51 292 0" />
+  </g>
+</svg>

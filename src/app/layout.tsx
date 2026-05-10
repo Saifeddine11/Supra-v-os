@@ -31,7 +31,7 @@ export const metadata: Metadata = {
   },
   description: "Système d'exploitation interne de l'agence Supra v.",
   robots: { index: false, follow: false }, // Internal app — never index
-  // Favicon + Apple Touch : `src/app/icon.png` et `src/app/apple-icon.png` (même visuel que apple-touch-icon.png)
+  // Favicon adaptatif : `src/app/icon.svg` (clair / sombre via prefers-color-scheme). Apple : `src/app/apple-icon.png`.
 };
 
 export const viewport: Viewport = {
