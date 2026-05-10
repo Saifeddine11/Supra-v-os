@@ -31,7 +31,19 @@ export const metadata: Metadata = {
   },
   description: "Système d'exploitation interne de l'agence Supra v.",
   robots: { index: false, follow: false }, // Internal app — never index
-  // Favicon adaptatif : `src/app/icon.svg` (clair / sombre via prefers-color-scheme). Apple : `src/app/apple-icon.png`.
+  // Favicon clair/sombre : attribut `media` sur les <link> (les navigateurs ignorent souvent le @media *dans* le SVG).
+  icons: {
+    icon: [
+      {
+        url: '/favicon-dark.svg',
+        type: 'image/svg+xml',
+        media: '(prefers-color-scheme: dark)',
+      },
+      // Fallback clair (thème clair ou navigateur qui n’applique pas `media` sur la première entrée)
+      { url: '/favicon-light.svg', type: 'image/svg+xml' },
+    ],
+    apple: '/apple-icon.png',
+  },
 };
 
 export const viewport: Viewport = {

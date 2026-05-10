@@ -1,4 +1,3 @@
-<!-- Référence locale : favicons servis depuis /public (voir layout.tsx : favicon-light.svg + favicon-dark.svg + media prefers-color-scheme). -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" role="img" aria-label="Supra v3">
   <rect width="500" height="500" rx="96" fill="#111111" />
   <g fill="none" stroke="#ff4b00" stroke-width="34" stroke-linecap="butt">
