@@ -233,6 +233,7 @@ create table employees (
   manager_id      uuid references employees(id) on delete set null,
   operational_skills user_role[] not null default '{}',
   archived_at     timestamptz,
+  must_change_password boolean not null default false,
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now()
 );
@@ -950,7 +951,13 @@ set search_path = public
 as $$
 declare
   actor_role user_role;
+  jwt_role text;
 begin
+  jwt_role := coalesce(auth.jwt() ->> 'role', '');
+  if jwt_role = 'service_role' then
+    return new;
+  end if;
+
   select e.role into actor_role
   from employees e
   where e.user_id = auth.uid()

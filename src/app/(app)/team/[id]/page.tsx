@@ -120,7 +120,12 @@ export default async function TeamMemberPage({ params }: { params: Promise<{ id:
           title="Accès Supabase Auth"
           description="Invitation par e-mail, création avec mot de passe temporaire (affichage unique) ou lien de réinitialisation."
         >
-          <EmployeeAuthPanel employeeId={member.id} email={member.email} userId={member.user_id} />
+          <EmployeeAuthPanel
+            employeeId={member.id}
+            fullName={member.full_name}
+            email={member.email}
+            userId={member.user_id}
+          />
         </SectionCard>
       ) : null}
 

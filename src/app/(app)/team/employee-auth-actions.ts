@@ -8,6 +8,7 @@ import { actionError, actionOk, type ActionResult } from '@/lib/actions/types';
 import { logStaffActivity } from '@/lib/activity/log-activity';
 import {
   createEmployeeAuthWithTempPassword,
+  getPublicLoginPageUrl,
   inviteEmployeeAuth,
   sendAuthPasswordResetEmail,
 } from '@/lib/employees/auth-provision';
@@ -82,6 +83,8 @@ export type CreateAuthUserResult =
       temporaryPassword: string;
       email: string;
       userId: string;
+      mustChangePassword: true;
+      loginUrl: string;
     }
   | {
       mode: 'linked_existing';
@@ -161,6 +164,8 @@ export async function createAuthUserForEmployeeAction(
       temporaryPassword: r.temporaryPassword,
       email,
       userId: r.userId,
+      mustChangePassword: true,
+      loginUrl: getPublicLoginPageUrl(),
     });
   } catch (e) {
     console.error('[createAuthUserForEmployeeAction]', e);

@@ -15,6 +15,9 @@ export interface TaskListFilters {
   status?: TaskStatus | 'all';
   deadlineFrom?: string;
   deadlineTo?: string;
+  clientId?: string | 'all';
+  /** Tâches liées à un client vs projet interne Supra. */
+  projectScope?: 'all' | 'client' | 'internal';
 }
 
 async function enrichTasks(tasks: Task[]): Promise<TaskEnriched[]> {
@@ -69,6 +72,9 @@ export async function listTasks(
   if (filters.status && filters.status !== 'all') {
     q = q.eq('status', filters.status);
   }
+  if (filters.clientId && filters.clientId !== 'all') {
+    q = q.eq('client_id', filters.clientId);
+  }
   if (filters.deadlineFrom) {
     q = q.gte('deadline', filters.deadlineFrom);
   }
@@ -86,6 +92,12 @@ export async function listTasks(
       (t) =>
         t.title.toLowerCase().includes(s) || (t.description?.toLowerCase().includes(s) ?? false)
     );
+  }
+
+  if (filters.projectScope === 'client') {
+    rows = rows.filter((t) => Boolean(t.client_id));
+  } else if (filters.projectScope === 'internal') {
+    rows = rows.filter((t) => Boolean(t.internal_project_id));
   }
 
   return rows;

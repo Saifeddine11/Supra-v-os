@@ -1,36 +1,35 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
+import { Suspense } from 'react';
 import {
+  addDays,
   addMonths,
   addWeeks,
   eachDayOfInterval,
+  endOfDay,
   endOfMonth,
   endOfWeek,
   format,
-  isSameDay,
   parseISO,
   startOfDay,
   startOfMonth,
   startOfWeek,
+  subDays,
   subMonths,
   subWeeks,
 } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { getAuthContext } from '@/lib/auth/permissions';
 import { listTasksEnriched, type TaskListFilters } from '@/lib/data/tasks';
+import { listClients } from '@/lib/data/clients';
 import { listEmployeesForSelect } from '@/lib/data/employees';
 import type { TaskPriority, TaskStatus } from '@/types/database';
-import { PRIORITY_MAP } from '@/types/domain';
+import type { CalendarColorBy } from '@/lib/tasks/calendar-visual';
 import { SectionCard } from '@/components/shared/section-card';
-import { cn } from '@/lib/utils/cn';
 import { CalendarToolbar, type CalendarNav } from './calendar-toolbar';
+import { TasksCalendarExperience } from './tasks-calendar-experience';
+import { CalendarMobileDefaultRedirect } from './calendar-mobile-default';
 
 export const metadata: Metadata = { title: 'Calendrier des tâches' };
-
-function overdue(deadline: string | null, status: string): boolean {
-  if (!deadline || status === 'done') return false;
-  return new Date(deadline).getTime() < Date.now();
-}
 
 export default async function TasksCalendarPage({
   searchParams,
@@ -43,10 +42,15 @@ export default async function TasksCalendarPage({
     assignee?: string;
     priority?: string;
     status?: string;
+    client?: string;
+    projectScope?: string;
+    colorBy?: string;
   }>;
 }) {
   const sp = await searchParams;
-  const view = sp?.view === 'week' ? 'week' : 'month';
+  const rawView = sp?.view;
+  const view: CalendarNav['view'] =
+    rawView === 'week' ? 'week' : rawView === 'day' ? 'day' : 'month';
   const today = new Date();
 
   let filterStart: Date;
@@ -71,7 +75,7 @@ export default async function TasksCalendarPage({
       next: format(addMonths(anchorMonth, 1), 'yyyy-MM'),
     };
     title = format(anchorMonth, 'MMMM yyyy', { locale: fr });
-  } else {
+  } else if (view === 'week') {
     const dayStr = sp?.day ?? format(today, 'yyyy-MM-dd');
     const anchorDay = parseISO(dayStr);
     const weekStart = startOfWeek(anchorDay, { weekStartsOn: 1 });
@@ -87,12 +91,31 @@ export default async function TasksCalendarPage({
       next: format(addWeeks(anchorDay, 1), 'yyyy-MM-dd'),
     };
     title = `Semaine du ${format(weekStart, 'd MMM', { locale: fr })} au ${format(weekEnd, 'd MMM yyyy', { locale: fr })}`;
+  } else {
+    const dayStr = sp?.day ?? format(today, 'yyyy-MM-dd');
+    const anchorDay = parseISO(dayStr);
+    filterStart = startOfDay(anchorDay);
+    filterEnd = endOfDay(anchorDay);
+    displayDays = [anchorDay];
+    nav = {
+      view: 'day',
+      current: dayStr,
+      prev: format(subDays(anchorDay, 1), 'yyyy-MM-dd'),
+      next: format(addDays(anchorDay, 1), 'yyyy-MM-dd'),
+    };
+    title = format(anchorDay, 'EEEE d MMMM yyyy', { locale: fr });
   }
 
   const from = startOfDay(filterStart).toISOString();
-  const toD = startOfDay(filterEnd);
-  toD.setHours(23, 59, 59, 999);
-  const toIso = toD.toISOString();
+  const toIso = endOfDay(filterEnd).toISOString();
+
+  const projectScope: TaskListFilters['projectScope'] =
+    sp?.projectScope === 'client' || sp?.projectScope === 'internal' ? sp.projectScope : 'all';
+
+  const colorBy: CalendarColorBy =
+    sp?.colorBy === 'priority' || sp?.colorBy === 'assignee' || sp?.colorBy === 'client'
+      ? sp.colorBy
+      : 'status';
 
   const filters: TaskListFilters = {
     search: sp?.q,
@@ -102,12 +125,15 @@ export default async function TasksCalendarPage({
     status: sp?.status === 'all' || !sp?.status ? 'all' : (sp.status as TaskStatus),
     deadlineFrom: from,
     deadlineTo: toIso,
+    clientId: sp?.client === 'all' || !sp?.client ? 'all' : sp.client,
+    projectScope,
   };
 
   const calCtx = await getAuthContext();
-  const [tasks, employees] = await Promise.all([
+  const [tasks, employees, clients] = await Promise.all([
     listTasksEnriched(filters, calCtx),
     listEmployeesForSelect(calCtx),
+    listClients({}, calCtx),
   ]);
 
   const filterBag = {
@@ -115,85 +141,47 @@ export default async function TasksCalendarPage({
     assignee: sp?.assignee,
     priority: sp?.priority,
     status: sp?.status,
+    client: sp?.client,
+    projectScope: sp?.projectScope,
+    colorBy: sp?.colorBy,
   };
+
+  const sectionTitle =
+    view === 'month' ? 'Mois' : view === 'week' ? 'Semaine' : 'Jour';
 
   return (
     <div className="space-y-6">
+      <Suspense fallback={null}>
+        <CalendarMobileDefaultRedirect />
+      </Suspense>
+
       <div>
         <h1 className="font-sans text-2xl font-semibold tracking-tight text-foreground">Calendrier</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Vue type monday.com — filtres par équipe, priorité et statut. Glisser-déposer : à venir.
+          Planification par échéance : vues mois, semaine et jour, codes couleur et filtres pour prioriser
+          comme sur un outil type monday.com.
         </p>
+        {/* Glisser-déposer pour reprogrammer : non implémenté pour l’instant (TASK_CALENDAR_DND_TODO). */}
       </div>
 
-      <CalendarToolbar nav={nav} title={title} employees={employees} filters={filterBag} />
+      <CalendarToolbar nav={nav} title={title} employees={employees} clients={clients} filters={filterBag} />
 
       <SectionCard
-        title={view === 'month' ? 'Mois' : 'Semaine'}
-        description={`${tasks.length} tâche(s) avec échéance dans la période.`}
+        title={sectionTitle}
+        description={`${tasks.length} tâche(s) avec échéance sur la période · couleur selon le critère choisi.`}
       >
-        <div className="grid grid-cols-7 gap-px rounded-xl border border-border/80 bg-border/10">
-          {['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'].map((d) => (
-            <div
-              key={d}
-              className="bg-card px-2 py-2 text-center text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
-            >
-              {d}
-            </div>
-          ))}
-          {displayDays.map((day) => {
-            const dayTasks = tasks.filter(
-              (t) => t.deadline && isSameDay(new Date(t.deadline), day)
-            );
-            const isToday = isSameDay(day, new Date());
-            const mutedOutsideMonth =
-              view === 'month' &&
-              (day < filterStart || day > filterEnd);
-            return (
-              <div
-                key={day.toISOString()}
-                className={cn(
-                  'flex min-h-[120px] flex-col gap-1 bg-card/95 p-2 sm:min-h-[140px]',
-                  isToday && 'ring-1 ring-inset ring-primary/35',
-                  mutedOutsideMonth && 'opacity-40'
-                )}
-              >
-                <p className="text-[11px] font-medium text-muted-foreground">
-                  <span className={cn(isToday && 'text-primary')}>{format(day, 'd', { locale: fr })}</span>
-                  <span className="ml-1 hidden text-[10px] sm:inline">
-                    {format(day, 'MMM', { locale: fr })}
-                  </span>
-                </p>
-                <div className="flex flex-1 flex-col gap-1 overflow-y-auto">
-                  {dayTasks.map((t) => {
-                    const od = overdue(t.deadline, t.status);
-                    return (
-                      <Link
-                        key={t.id}
-                        href="/tasks"
-                        className={cn(
-                          'block rounded-lg border px-2 py-1.5 text-[11px] leading-tight transition-colors hover:border-primary/30 hover:bg-primary/[0.04]',
-                          od
-                            ? 'border-destructive/40 bg-destructive/[0.07] text-destructive'
-                            : 'border-border/80 bg-muted/50 text-foreground'
-                        )}
-                      >
-                        <span className="line-clamp-2 font-medium">{t.title}</span>
-                        <span className="mt-0.5 flex flex-wrap gap-1 text-[10px] text-muted-foreground">
-                          <span>{PRIORITY_MAP[t.priority].label}</span>
-                          {t.assignee_name ? <span>· {t.assignee_name}</span> : null}
-                        </span>
-                      </Link>
-                    );
-                  })}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        <TasksCalendarExperience
+          view={view}
+          filterStartISO={filterStart.toISOString()}
+          filterEndISO={filterEnd.toISOString()}
+          displayDayISOs={displayDays.map((d) => d.toISOString())}
+          tasks={tasks}
+          clients={clients.map((c) => ({ id: c.id, name: c.name }))}
+          employees={employees}
+          colorBy={colorBy}
+        />
         <p className="mt-4 text-xs text-muted-foreground">
-          Astuce : les tâches sans échéance n&apos;apparaissent pas sur cette grille — utilisez le board
-          complet.
+          Les tâches sans échéance n&apos;apparaissent pas ici — utilisez le board pour la liste complète.
         </p>
       </SectionCard>
     </div>

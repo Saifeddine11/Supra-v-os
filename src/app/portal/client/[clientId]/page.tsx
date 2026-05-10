@@ -75,6 +75,8 @@ export default async function ClientPortalPage({
       v.status === 'internal_review'
   );
 
+  const calendarEvents = buildPortalCalendarEvents(bundle);
+
   const safeToken = token!;
 
   return (
@@ -94,6 +96,8 @@ export default async function ClientPortalPage({
           <p className="mt-1 text-xs text-muted-foreground">Livrées validées ou publiées sur la période.</p>
         </section>
       ) : null}
+
+      <PortalClientCalendar events={calendarEvents} clientId={clientId} token={safeToken} />
 
       {pendingVideos.length > 0 ? (
         <section>

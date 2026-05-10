@@ -1,6 +1,13 @@
 import { AppSidebar } from '@/components/app/app-sidebar';
 import { AppTopbar } from '@/components/app/app-topbar';
+import { AppShellToaster } from '@/components/app/app-shell-toaster';
+import { ThemeToggle } from '@/components/app/theme-toggle';
+import { Button } from '@/components/ui/button';
+import { signOutAction } from '@/app/(app)/actions';
+import { AGENCY } from '@/lib/constants';
 import type { Employee, Notification } from '@/types/database';
+
+export type AppShellMode = 'full' | 'password_gate';
 
 export interface AppShellProps {
   employee: Employee;
@@ -8,9 +15,46 @@ export interface AppShellProps {
   initialUnread: number;
   initialBellPreview: Notification[];
   children: React.ReactNode;
+  /** Sans navigation : changement de mot de passe obligatoire. */
+  mode?: AppShellMode;
 }
 
-export function AppShell({ employee, email, initialUnread, initialBellPreview, children }: AppShellProps) {
+export function AppShell({
+  employee,
+  email,
+  initialUnread,
+  initialBellPreview,
+  children,
+  mode = 'full',
+}: AppShellProps) {
+  if (mode === 'password_gate') {
+    return (
+      <div className="relative min-h-screen bg-background">
+        <div
+          className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,color-mix(in_srgb,hsl(var(--orange-glow))_16%,transparent),transparent_55%)]"
+          aria-hidden
+        />
+        <header className="relative z-20 flex items-center justify-between gap-3 border-b border-border/60 bg-card/60 px-4 py-3 backdrop-blur-md sm:px-6">
+          <span className="min-w-0 truncate font-serif text-base font-medium text-supra-gradient sm:text-lg">
+            {AGENCY.name}
+          </span>
+          <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+            <ThemeToggle />
+            <form action={signOutAction}>
+              <Button type="submit" variant="ghost" size="sm" className="rounded-full text-muted-foreground">
+                Déconnexion
+              </Button>
+            </form>
+          </div>
+        </header>
+        <main className="relative z-10 mx-auto flex min-h-[calc(100dvh-52px)] max-w-lg flex-col justify-center px-4 py-10 sm:min-h-[calc(100vh-52px)] sm:px-6">
+          {children}
+        </main>
+        <AppShellToaster />
+      </div>
+    );
+  }
+
   return (
     <div className="relative min-h-screen bg-background">
       <div
@@ -28,6 +72,7 @@ export function AppShell({ employee, email, initialUnread, initialBellPreview, c
         <main className="relative z-10 mx-auto max-w-[1600px] px-4 py-6 pb-24 sm:px-6 lg:px-8 lg:py-8 lg:pb-8">
           {children}
         </main>
+        <AppShellToaster />
       </div>
     </div>
   );

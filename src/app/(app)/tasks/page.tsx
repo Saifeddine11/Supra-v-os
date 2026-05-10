@@ -3,6 +3,7 @@ import { listTasksEnriched, type TaskListFilters } from '@/lib/data/tasks';
 import { listClients } from '@/lib/data/clients';
 import { listEmployeesForSelect } from '@/lib/data/employees';
 import { getAuthContext } from '@/lib/auth/permissions';
+import { taskListingDenied } from '@/lib/auth/data-scope';
 import { canDeleteTask } from '@/lib/auth/capabilities';
 import type { TaskPriority } from '@/types/database';
 import { SectionCard } from '@/components/shared/section-card';
@@ -36,6 +37,7 @@ export default async function TasksPage({
 
   const clientOptions = clients.map((c) => ({ id: c.id, name: c.name }));
   const canDelete = canDeleteTask(ctx?.role ?? null);
+  const allowKanbanDrag = Boolean(ctx && !taskListingDenied(ctx));
 
   return (
     <div className="space-y-6">
@@ -54,19 +56,28 @@ export default async function TasksPage({
         defaultPriority={sp?.priority}
       />
 
-      <SectionCard title="Board" description="Glisser-déposer : prochaine itération.">
+      <SectionCard
+        title="Board"
+        description="Glissez une tâche vers une autre colonne pour changer son statut. Vous pouvez aussi utiliser le menu déroulant sur chaque carte."
+      >
         {tasks.length === 0 ? (
           <EmptyState
             title="Aucune tâche"
             description="Créez une tâche ou élargissez les filtres pour voir les cartes ici."
           />
         ) : (
-          <TasksKanban
-            tasks={tasks}
-            clients={clientOptions}
-            employees={employees}
-            canDelete={canDelete}
-          />
+          <>
+            <p className="mb-3 text-xs text-muted-foreground md:hidden">
+              Sur mobile, utilisez le menu de statut sur chaque carte.
+            </p>
+            <TasksKanban
+              tasks={tasks}
+              clients={clientOptions}
+              employees={employees}
+              canDelete={canDelete}
+              allowKanbanDrag={allowKanbanDrag}
+            />
+          </>
         )}
       </SectionCard>
     </div>

@@ -93,7 +93,7 @@ export function LoginForm() {
 
         const { data: employee, error: empError } = await supabase
           .from('employees')
-          .select('id')
+          .select('id, must_change_password')
           .eq('user_id', session.user.id)
           .maybeSingle();
 
@@ -103,7 +103,13 @@ export function LoginForm() {
           return;
         }
 
-        router.replace(next.startsWith('/') ? next : '/dashboard');
+        const dest =
+          employee.must_change_password === true
+            ? '/change-password'
+            : next.startsWith('/')
+              ? next
+              : '/dashboard';
+        router.replace(dest);
         router.refresh();
       } catch (e) {
         console.error('[login-form] session depuis URL / invitation', e);
@@ -131,13 +137,20 @@ export function LoginForm() {
         }),
       });
 
-      let data: { error?: string; ok?: boolean; success?: boolean; code?: string; missing?: string[] } =
-        {};
+      let data: {
+        error?: string;
+        ok?: boolean;
+        success?: boolean;
+        mustChangePassword?: boolean;
+        code?: string;
+        missing?: string[];
+      } = {};
       try {
         data = (await res.json()) as {
           error?: string;
           ok?: boolean;
           success?: boolean;
+          mustChangePassword?: boolean;
           code?: string;
           missing?: string[];
         };
@@ -163,7 +176,13 @@ export function LoginForm() {
         return;
       }
 
-      router.push(next.startsWith('/') ? next : '/dashboard');
+      const dest =
+        data.mustChangePassword === true
+          ? '/change-password'
+          : next.startsWith('/')
+            ? next
+            : '/dashboard';
+      router.push(dest);
       router.refresh();
     } catch (err) {
       console.error('[login-form] fetch failed (full error):', err);

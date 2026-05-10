@@ -12,6 +12,11 @@ export function getAuthLoginRedirectUrl(): string {
   return `${base}/login`;
 }
 
+/** Page de connexion publique (même base que les redirections Auth). */
+export function getPublicLoginPageUrl(): string {
+  return getAuthLoginRedirectUrl();
+}
+
 function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();
 }
@@ -60,14 +65,20 @@ export async function linkEmployeeToAuthUser(
   admin: ServiceRoleClient,
   employeeId: string,
   authUserId: string,
+  options?: { mustChangePassword?: boolean },
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const guard = await assertEmployeeUserIdAvailable(admin, employeeId, authUserId);
   if (!guard.ok) return guard;
 
-  const { error } = await admin
-    .from('employees')
-    .update({ user_id: authUserId, updated_at: new Date().toISOString() })
-    .eq('id', employeeId);
+  const patch: Record<string, unknown> = {
+    user_id: authUserId,
+    updated_at: new Date().toISOString(),
+  };
+  if (options?.mustChangePassword === true) {
+    patch.must_change_password = true;
+  }
+
+  const { error } = await admin.from('employees').update(patch).eq('id', employeeId);
 
   if (error) {
     return { ok: false, error: error.message };
@@ -120,7 +131,7 @@ export async function inviteEmployeeAuth(
   });
 
   if (!inviteErr && invited?.user?.id) {
-    const link = await linkEmployeeToAuthUser(admin, employeeId, invited.user.id);
+    const link = await linkEmployeeToAuthUser(admin, employeeId, invited.user.id, {});
     if (!link.ok) {
       await admin.auth.admin.deleteUser(invited.user.id).catch(() => {});
       return { ok: false, error: link.error };
@@ -134,7 +145,7 @@ export async function inviteEmployeeAuth(
   if (maybeExists || inviteErr) {
     const existingId = await findAuthUserIdByEmail(admin, em);
     if (existingId) {
-      const link = await linkEmployeeToAuthUser(admin, employeeId, existingId);
+      const link = await linkEmployeeToAuthUser(admin, employeeId, existingId, {});
       if (!link.ok) {
         if (!maybeExists) return { ok: false, error: mapAuthError(inviteMsg) };
         return { ok: false, error: link.error };
@@ -173,7 +184,7 @@ export async function createEmployeeAuthWithTempPassword(
 
   const existingId = await findAuthUserIdByEmail(admin, em);
   if (existingId) {
-    const link = await linkEmployeeToAuthUser(admin, employeeId, existingId);
+    const link = await linkEmployeeToAuthUser(admin, employeeId, existingId, {});
     if (!link.ok) {
       return {
         ok: false,
@@ -198,7 +209,7 @@ export async function createEmployeeAuthWithTempPassword(
     if (/already|exists|registered|duplicate/i.test(msg)) {
       const retryId = await findAuthUserIdByEmail(admin, em);
       if (retryId) {
-        const link = await linkEmployeeToAuthUser(admin, employeeId, retryId);
+        const link = await linkEmployeeToAuthUser(admin, employeeId, retryId, {});
         if (link.ok) return { ok: true, mode: 'linked_existing', userId: retryId };
       }
       return {
@@ -210,7 +221,9 @@ export async function createEmployeeAuthWithTempPassword(
     return { ok: false, error: mapAuthError(msg) || 'Création du compte impossible.' };
   }
 
-  const link = await linkEmployeeToAuthUser(admin, employeeId, created.user.id);
+  const link = await linkEmployeeToAuthUser(admin, employeeId, created.user.id, {
+    mustChangePassword: true,
+  });
   if (!link.ok) {
     await admin.auth.admin.deleteUser(created.user.id).catch(() => {});
     return { ok: false, error: link.error };

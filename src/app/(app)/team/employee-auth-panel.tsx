@@ -32,6 +32,7 @@ type TempAccountSuccess = {
   message: string;
   email: string;
   temporaryPassword: string;
+  loginUrl: string;
 };
 
 type LinkedExistingInfo = {
@@ -39,12 +40,18 @@ type LinkedExistingInfo = {
   email: string;
 };
 
+function collaboratorFirstName(fullName: string): string {
+  return fullName.trim().split(/\s+/)[0] || '—';
+}
+
 export function EmployeeAuthPanel({
   employeeId,
+  fullName,
   email,
   userId,
 }: {
   employeeId: string;
+  fullName: string;
   email: string;
   userId: string | null;
 }) {
@@ -56,6 +63,7 @@ export function EmployeeAuthPanel({
   const [tempSuccess, setTempSuccess] = useState<TempAccountSuccess | null>(null);
   const [linkedInfo, setLinkedInfo] = useState<LinkedExistingInfo | null>(null);
   const [passwordCopied, setPasswordCopied] = useState(false);
+  const [accessCopied, setAccessCopied] = useState(false);
 
   const hasEmail = Boolean(email?.trim());
 
@@ -121,6 +129,7 @@ export function EmployeeAuthPanel({
         message: data.message,
         email: data.email,
         temporaryPassword: data.temporaryPassword,
+        loginUrl: data.loginUrl,
       });
     } finally {
       setPending(null);
@@ -131,8 +140,31 @@ export function EmployeeAuthPanel({
     try {
       await navigator.clipboard.writeText(password);
       setPasswordCopied(true);
+      setAccessCopied(false);
     } catch {
       setPasswordCopied(false);
+    }
+  }
+
+  async function copyAllAccess(info: TempAccountSuccess) {
+    const prenom = collaboratorFirstName(fullName);
+    const text = [
+      `Bonjour ${prenom},`,
+      '',
+      'Votre accès à Supra v. Agency OS est prêt.',
+      '',
+      `Lien : ${info.loginUrl}`,
+      `E-mail : ${info.email}`,
+      `Mot de passe temporaire : ${info.temporaryPassword}`,
+      '',
+      'Merci de changer votre mot de passe dès la première connexion.',
+    ].join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      setAccessCopied(true);
+      setPasswordCopied(false);
+    } catch {
+      setAccessCopied(false);
     }
   }
 
@@ -140,6 +172,7 @@ export function EmployeeAuthPanel({
     if (!open) {
       setTempSuccess(null);
       setPasswordCopied(false);
+      setAccessCopied(false);
       router.refresh();
     }
   }
@@ -267,17 +300,32 @@ export function EmployeeAuthPanel({
                   onFocus={(e) => e.target.select()}
                 />
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full rounded-full sm:w-auto"
-                onClick={() => void copyTemporaryPassword(tempSuccess.temporaryPassword)}
-              >
-                {passwordCopied ? 'Copié' : 'Copier le mot de passe'}
-              </Button>
+              <div className="space-y-1.5">
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Lien de connexion</p>
+                <p className="break-all rounded-lg border border-border/80 bg-muted/30 px-3 py-2 text-sm font-medium text-primary underline-offset-4">
+                  {tempSuccess.loginUrl}
+                </p>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-full"
+                  onClick={() => void copyTemporaryPassword(tempSuccess.temporaryPassword)}
+                >
+                  {passwordCopied ? 'Copié' : 'Copier le mot de passe'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="primary"
+                  className="rounded-full"
+                  onClick={() => void copyAllAccess(tempSuccess)}
+                >
+                  {accessCopied ? 'Accès copiés' : 'Copier les accès'}
+                </Button>
+              </div>
               <p className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-sm text-amber-950 dark:text-amber-100">
-                Ce mot de passe est affiché une seule fois. Demandez au collaborateur de le changer après la première
-                connexion.
+                Ce mot de passe est affiché une seule fois. Le collaborateur devra le changer dès sa première connexion.
               </p>
             </div>
           ) : null}

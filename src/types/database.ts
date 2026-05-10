@@ -192,6 +192,8 @@ export interface Employee {
   /** Compétences terrain (assignation) — ne remplace pas role pour les permissions. */
   operational_skills: UserRole[];
   archived_at: string | null;
+  /** Compte créé avec mot de passe temporaire : redirection obligatoire vers /change-password. */
+  must_change_password: boolean;
   created_at: string;
   updated_at: string;
 }

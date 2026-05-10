@@ -1,10 +1,11 @@
 /**
  * Événements calendrier portail client — construits uniquement à partir des données
- * déjà exposées par `loadPortalPublicData` (aucune note interne, pas d’équipe).
+ * exposées par `loadPortalPublicData` (aucune note interne, pas d’équipe, pas d’autres clients).
  */
 import {
   addDays,
   endOfDay,
+  endOfWeek,
   isAfter,
   isBefore,
   isValid,
@@ -13,36 +14,42 @@ import {
 } from 'date-fns';
 import type { PortalBundle, PortalVideoRow } from '@/lib/portal/load-public-data';
 import { loadPortalPublicData } from '@/lib/portal/load-public-data';
-import { INVOICE_STATUS_MAP, QUOTE_STATUS_MAP, VIDEO_PUBLIC_STATUS_MAP } from '@/types/domain';
-import type { InvoiceStatus } from '@/types/database';
-import { cn } from '@/lib/utils/cn';
-import { getStatusBlockSurface } from '@/lib/ui/status-block-tone';
+import {
+  INVOICE_STATUS_MAP,
+  PROJECT_STATUS_MAP,
+  QUOTE_STATUS_MAP,
+  REPORT_TYPE_LABELS,
+  VIDEO_PUBLIC_STATUS_MAP,
+} from '@/types/domain';
 import type { StatusBlockTone } from '@/lib/ui/status-block-tone';
 
 export type PortalCalendarEventType =
-  | 'shooting'
+  | 'shoot'
+  | 'video_delivery'
   | 'video_validation'
-  | 'publication'
   | 'revision'
-  | 'invoice_due'
+  | 'publication'
+  | 'payment_due'
+  | 'invoice_overdue'
+  | 'invoice_paid'
   | 'quote_validity'
-  | 'report'
   | 'project_milestone'
-  | 'document';
+  | 'project_delivery'
+  | 'report';
 
-/** Nuance visuelle (couleurs sémantiques portail, distinctes du ton badge staff). */
 export type PortalEventVisualTone =
   | 'shooting'
+  | 'video_flow'
   | 'validation'
   | 'publication'
   | 'revision'
   | 'payment_overdue'
   | 'payment_soon'
   | 'payment_future'
+  | 'invoice_paid'
   | 'report'
   | 'milestone'
   | 'quote'
-  | 'document'
   | 'neutral';
 
 export interface PortalCalendarEvent {
@@ -50,12 +57,12 @@ export interface PortalCalendarEvent {
   type: PortalCalendarEventType;
   typeLabel: string;
   title: string;
-  /** ISO instant ou date (tri / affichage). */
   date: string;
   endDate: string | null;
   status: string;
   tone: PortalEventVisualTone;
   statusBlockTone: StatusBlockTone;
+  /** Ancre section portail uniquement (pas d’URL arbitraires). */
   href: string | null;
   description: string | null;
   sortKey: number;
@@ -72,14 +79,6 @@ function toSortKey(d: Date): number {
   return d.getTime();
 }
 
-/** Surface carte événement (portail) — réutilise les blocs sémantiques + accent projet. */
-export function portalCalendarEventSurface(e: PortalCalendarEvent): string {
-  return cn(
-    getStatusBlockSurface(e.statusBlockTone, { urgentGlow: e.tone === 'payment_overdue' }),
-    e.tone === 'milestone' && 'ring-1 ring-primary/18 dark:ring-primary/22',
-  );
-}
-
 export function getPortalEventStatusBlockTone(tone: PortalEventVisualTone): StatusBlockTone {
   switch (tone) {
     case 'shooting':
@@ -89,6 +88,8 @@ export function getPortalEventStatusBlockTone(tone: PortalEventVisualTone): Stat
       return 'warning';
     case 'publication':
       return 'review';
+    case 'video_flow':
+      return 'info';
     case 'revision':
     case 'payment_overdue':
       return 'danger';
@@ -96,18 +97,23 @@ export function getPortalEventStatusBlockTone(tone: PortalEventVisualTone): Stat
       return 'warning';
     case 'payment_future':
       return 'muted';
+    case 'invoice_paid':
+      return 'success';
     case 'report':
       return 'success';
     case 'milestone':
       return 'neutral';
-    case 'document':
-      return 'muted';
+    case 'neutral':
     default:
       return 'neutral';
   }
 }
 
-/** Expose uniquement les champs publics (sérialisation client). */
+function safeHref(href: string | null): string | null {
+  if (!href || !href.startsWith('#portal-')) return null;
+  return href.length <= 200 ? href : null;
+}
+
 export function sanitizePortalCalendarEvent(e: PortalCalendarEvent): PortalCalendarEvent {
   return {
     id: e.id.slice(0, 128),
@@ -119,7 +125,7 @@ export function sanitizePortalCalendarEvent(e: PortalCalendarEvent): PortalCalen
     status: e.status.slice(0, 160),
     tone: e.tone,
     statusBlockTone: e.statusBlockTone,
-    href: e.href && e.href.startsWith('#') ? e.href.slice(0, 120) : e.href ? e.href.slice(0, 512) : null,
+    href: safeHref(e.href),
     description: e.description ? e.description.slice(0, 400) : null,
     sortKey: e.sortKey,
   };
@@ -129,8 +135,7 @@ function inCalendarWindow(d: Date, windowStart: Date, windowEnd: Date): boolean 
   return !isBefore(d, windowStart) && !isAfter(d, windowEnd);
 }
 
-function invoicePaymentTone(due: Date, today: Date, status: InvoiceStatus): PortalEventVisualTone {
-  if (status === 'paid') return 'neutral';
+function invoiceVisualTone(due: Date, today: Date): PortalEventVisualTone {
   const day = startOfDay(today);
   if (isBefore(startOfDay(due), day)) return 'payment_overdue';
   if (inCalendarWindow(due, day, endOfDay(addDays(day, PAYMENT_SOON_DAYS)))) return 'payment_soon';
@@ -142,9 +147,13 @@ function needsClientValidationVideo(v: PortalVideoRow): boolean {
   return v.public_status === 'in_validation' || v.status === 'sent_to_client';
 }
 
+function isWebsiteProject(type: string | null | undefined): boolean {
+  const t = (type ?? '').toLowerCase();
+  return t.includes('site') || t.includes('web') || t.includes('seo');
+}
+
 /**
- * Construit la liste d’événements à partir du bundle déjà chargé pour le client
- * (même filtre RLS / visibilité que le portail).
+ * Construit la liste d’événements à partir du bundle déjà chargé pour le client.
  */
 export function buildPortalCalendarEvents(bundle: PortalBundle, now: Date = new Date()): PortalCalendarEvent[] {
   const today = startOfDay(now);
@@ -158,8 +167,7 @@ export function buildPortalCalendarEvents(bundle: PortalBundle, now: Date = new 
     const d = parseEventDate(e.date);
     if (!d || !inCalendarWindow(d, windowStart, windowEnd)) return;
     seen.add(e.id);
-    const statusBlockTone = getPortalEventStatusBlockTone(e.tone);
-    out.push({ ...e, statusBlockTone });
+    out.push({ ...e, statusBlockTone: getPortalEventStatusBlockTone(e.tone) });
   };
 
   for (const v of bundle.videos) {
@@ -167,9 +175,9 @@ export function buildPortalCalendarEvents(bundle: PortalBundle, now: Date = new 
       const d = parseEventDate(v.shooting_date);
       if (d) {
         push({
-          id: `shooting__${v.id}`,
-          type: 'shooting',
-          typeLabel: 'Tournage',
+          id: `shoot__${v.id}`,
+          type: 'shoot',
+          typeLabel: 'Tournage prévu',
           title: `Tournage — ${v.title}`,
           date: d.toISOString(),
           endDate: null,
@@ -188,7 +196,7 @@ export function buildPortalCalendarEvents(bundle: PortalBundle, now: Date = new 
         push({
           id: `revision__${v.id}`,
           type: 'revision',
-          typeLabel: 'Révision',
+          typeLabel: 'Révision vidéo',
           title: `Révision demandée — ${v.title}`,
           date: d.toISOString(),
           endDate: null,
@@ -205,12 +213,35 @@ export function buildPortalCalendarEvents(bundle: PortalBundle, now: Date = new 
         push({
           id: `validation__${v.id}`,
           type: 'video_validation',
-          typeLabel: 'Validation vidéo',
-          title: `Échéance validation — ${v.title}`,
+          typeLabel: 'Vidéo à valider',
+          title: `Validation — ${v.title}`,
           date: d.toISOString(),
           endDate: null,
           status: VIDEO_PUBLIC_STATUS_MAP[v.public_status].label,
           tone: 'validation',
+          href: `#portal-video-${v.id}`,
+          description: null,
+          sortKey: toSortKey(d),
+        });
+      }
+    } else if (
+      v.delivery_deadline &&
+      v.public_status !== 'published' &&
+      v.public_status !== 'validated' &&
+      v.status !== 'published' &&
+      v.status !== 'validated'
+    ) {
+      const d = parseEventDate(v.delivery_deadline);
+      if (d) {
+        push({
+          id: `delivery__${v.id}`,
+          type: 'video_delivery',
+          typeLabel: 'Livraison vidéo',
+          title: `Livraison prévue — ${v.title}`,
+          date: d.toISOString(),
+          endDate: null,
+          status: VIDEO_PUBLIC_STATUS_MAP[v.public_status].label,
+          tone: 'video_flow',
           href: `#portal-video-${v.id}`,
           description: null,
           sortKey: toSortKey(d),
@@ -221,14 +252,12 @@ export function buildPortalCalendarEvents(bundle: PortalBundle, now: Date = new 
     if (v.publication_date) {
       const d = parseEventDate(v.publication_date);
       if (d) {
+        const published = v.public_status === 'published';
         push({
           id: `publication__${v.id}`,
           type: 'publication',
-          typeLabel: 'Publication',
-          title:
-            v.public_status === 'published'
-              ? `Publication — ${v.title}`
-              : `Publication prévue — ${v.title}`,
+          typeLabel: published ? 'Publication' : 'Publication prévue',
+          title: published ? `Publication — ${v.title}` : `Publication prévue — ${v.title}`,
           date: d.toISOString(),
           endDate: null,
           status: VIDEO_PUBLIC_STATUS_MAP[v.public_status].label,
@@ -242,19 +271,41 @@ export function buildPortalCalendarEvents(bundle: PortalBundle, now: Date = new 
   }
 
   for (const inv of bundle.invoices) {
-    if (inv.status === 'paid' || inv.status === 'cancelled' || inv.status === 'draft') continue;
+    if (inv.status === 'cancelled' || inv.status === 'draft') continue;
+
+    if (inv.status === 'paid') {
+      const raw = inv.paid_at ?? inv.issue_date;
+      const d = parseEventDate(raw);
+      if (!d) continue;
+      push({
+        id: `invoice_paid__${inv.id}`,
+        type: 'invoice_paid',
+        typeLabel: 'Facture payée',
+        title: `Facture réglée — ${inv.ref}`,
+        date: d.toISOString(),
+        endDate: null,
+        status: INVOICE_STATUS_MAP[inv.status].label,
+        tone: 'invoice_paid',
+        href: `#portal-invoice-${inv.id}`,
+        description: null,
+        sortKey: toSortKey(d),
+      });
+      continue;
+    }
+
     const d = parseEventDate(inv.due_date);
     if (!d) continue;
-    const tone = invoicePaymentTone(d, today, inv.status);
+    const vis = invoiceVisualTone(d, today);
+    const overdue = vis === 'payment_overdue';
     push({
       id: `invoice__${inv.id}`,
-      type: 'invoice_due',
-      typeLabel: 'Facture',
-      title: `Échéance facture ${inv.ref}`,
+      type: overdue ? 'invoice_overdue' : 'payment_due',
+      typeLabel: overdue ? 'Facture en retard' : 'Paiement à prévoir',
+      title: overdue ? `Facture en retard — ${inv.ref}` : `Échéance facture — ${inv.ref}`,
       date: d.toISOString(),
       endDate: null,
       status: INVOICE_STATUS_MAP[inv.status].label,
-      tone,
+      tone: vis,
       href: `#portal-invoice-${inv.id}`,
       description: null,
       sortKey: toSortKey(d),
@@ -268,7 +319,7 @@ export function buildPortalCalendarEvents(bundle: PortalBundle, now: Date = new 
     push({
       id: `quote__${q.id}`,
       type: 'quote_validity',
-      typeLabel: 'Proposition',
+      typeLabel: 'Proposition commerciale',
       title: `Fin de validité — ${(q.proposal_title ?? '').trim() || q.ref}`,
       date: d.toISOString(),
       endDate: null,
@@ -282,19 +333,21 @@ export function buildPortalCalendarEvents(bundle: PortalBundle, now: Date = new 
 
   for (const r of bundle.reports) {
     const d =
+      (r.sent_at ? parseEventDate(r.sent_at) : null) ??
       (r.period_end ? parseEventDate(r.period_end) : null) ??
       (r.period_start ? parseEventDate(r.period_start) : null) ??
       parseEventDate(r.created_at);
     if (!d) continue;
     const desc = r.summary ? r.summary.replace(/\s+/g, ' ').trim() : null;
+    const isMonthly = r.type === 'monthly';
     push({
       id: `report__${r.id}`,
       type: 'report',
-      typeLabel: 'Rapport',
+      typeLabel: isMonthly ? 'Rapport mensuel' : 'Rapport disponible',
       title: r.title,
       date: d.toISOString(),
       endDate: null,
-      status: r.type,
+      status: REPORT_TYPE_LABELS[r.type],
       tone: 'report',
       href: `#portal-report-${r.id}`,
       description: desc,
@@ -303,57 +356,52 @@ export function buildPortalCalendarEvents(bundle: PortalBundle, now: Date = new 
   }
 
   for (const p of bundle.projects) {
-    if (!p.deadline) continue;
-    const d = parseEventDate(p.deadline);
-    if (!d) continue;
-    push({
-      id: `project__${p.id}`,
-      type: 'project_milestone',
-      typeLabel: 'Projet',
-      title: `Échéance projet — ${p.title}`,
-      date: d.toISOString(),
-      endDate: null,
-      status: p.status,
-      tone: 'milestone',
-      href: `#portal-project-${p.id}`,
-      description: p.progress != null ? `Avancement indiqué : ${p.progress} %` : null,
-      sortKey: toSortKey(d),
-    });
-  }
+    if (p.delivered_at) {
+      const d = parseEventDate(p.delivered_at);
+      if (d) {
+        const web = isWebsiteProject(p.type);
+        push({
+          id: `project_delivery__${p.id}`,
+          type: 'project_delivery',
+          typeLabel: web ? 'Livraison site web' : 'Livraison projet',
+          title: web ? `Livraison site web — ${p.title}` : `Livraison projet — ${p.title}`,
+          date: d.toISOString(),
+          endDate: null,
+          status: PROJECT_STATUS_MAP[p.status].label,
+          tone: 'milestone',
+          href: `#portal-project-${p.id}`,
+          description: null,
+          sortKey: toSortKey(d),
+        });
+      }
+    }
 
-  const docRecentCutoff = startOfDay(addDays(today, -14));
-  for (const doc of bundle.documents) {
-    const raw = doc.uploaded_at;
-    const d = parseEventDate(raw);
-    if (!d) continue;
-    if (isBefore(startOfDay(d), docRecentCutoff)) continue;
-    push({
-      id: `document__${doc.id}`,
-      type: 'document',
-      typeLabel: 'Document',
-      title: doc.name,
-      date: d.toISOString(),
-      endDate: null,
-      status: doc.type ?? 'Document',
-      tone: 'document',
-      href: `#portal-document-${doc.id}`,
-      description: 'Disponible dans votre espace documents.',
-      sortKey: toSortKey(d),
-    });
+    if (p.deadline) {
+      const d = parseEventDate(p.deadline);
+      if (d) {
+        const web = isWebsiteProject(p.type);
+        push({
+          id: `project__${p.id}`,
+          type: 'project_milestone',
+          typeLabel: web ? 'Échéance site web' : 'Jalon projet',
+          title: web ? `Échéance site web — ${p.title}` : `Échéance projet — ${p.title}`,
+          date: d.toISOString(),
+          endDate: null,
+          status: PROJECT_STATUS_MAP[p.status].label,
+          tone: 'milestone',
+          href: `#portal-project-${p.id}`,
+          description: p.progress != null ? `Avancement : ${p.progress} %` : null,
+          sortKey: toSortKey(d),
+        });
+      }
+    }
   }
 
   out.sort((a, b) => a.sortKey - b.sortKey);
   return out.map(sanitizePortalCalendarEvent);
 }
 
-/**
- * Recharge le bundle côté serveur — à n’appeler qu’après validation du token,
- * avec le même `clientId` que le portail.
- */
-export async function loadPortalCalendarEvents(
-  clientId: string,
-  now?: Date,
-): Promise<PortalCalendarEvent[] | null> {
+export async function loadPortalCalendarEvents(clientId: string, now?: Date): Promise<PortalCalendarEvent[] | null> {
   const bundle = await loadPortalPublicData(clientId);
   if (!bundle) return null;
   return buildPortalCalendarEvents(bundle, now);
@@ -362,17 +410,20 @@ export async function loadPortalCalendarEvents(
 export type PortalCalendarFilterId =
   | 'all'
   | 'shooting'
-  | 'validation'
+  | 'video'
+  | 'publication'
   | 'payment'
-  | 'report'
-  | 'publication';
+  | 'project'
+  | 'report';
 
 export function portalEventMatchesFilter(e: PortalCalendarEvent, filter: PortalCalendarFilterId): boolean {
   if (filter === 'all') return true;
-  if (filter === 'shooting') return e.type === 'shooting';
-  if (filter === 'validation') return e.type === 'video_validation' || e.type === 'revision';
-  if (filter === 'payment') return e.type === 'invoice_due' || e.type === 'quote_validity';
-  if (filter === 'report') return e.type === 'report';
+  if (filter === 'shooting') return e.type === 'shoot';
+  if (filter === 'video') return e.type === 'video_delivery' || e.type === 'video_validation' || e.type === 'revision';
   if (filter === 'publication') return e.type === 'publication';
+  if (filter === 'payment')
+    return e.type === 'payment_due' || e.type === 'invoice_overdue' || e.type === 'invoice_paid' || e.type === 'quote_validity';
+  if (filter === 'project') return e.type === 'project_milestone' || e.type === 'project_delivery';
+  if (filter === 'report') return e.type === 'report';
   return true;
 }

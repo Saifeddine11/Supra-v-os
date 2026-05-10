@@ -1,0 +1,13 @@
+Invitation à rejoindre Supra v. Agency OS
+
+Bonjour,
+
+Vous avez été invité à créer votre compte sur Supra v. Agency OS, la plateforme interne de gestion de l’agence.
+
+Pour accepter l’invitation et configurer votre accès, ouvrez ce lien :
+
+{{ .ConfirmationURL }}
+
+Si vous ne reconnaissez pas cette invitation, vous pouvez ignorer cet email.
+
+© Supra v. — usage interne.

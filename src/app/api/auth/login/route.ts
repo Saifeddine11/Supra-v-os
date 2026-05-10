@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import type { CookieOptions } from '@supabase/ssr';
-import type { Database } from '@/types/database';
+import type { Database, Employee } from '@/types/database';
 import { normalizeSupabaseProjectUrl } from '@/lib/supabase/normalize-url';
 
 const NO_EMPLOYEE_MSG =
@@ -186,7 +186,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const successResponse = NextResponse.json({ ok: true as const, success: true as const });
+  const sessionCookies: { name: string; value: string; options: CookieOptions }[] = [];
 
   const supabase = createServerClient<Database>(url, anonKey, {
     cookies: {
@@ -194,9 +194,7 @@ export async function POST(request: NextRequest) {
         return request.cookies.getAll();
       },
       setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
-        cookiesToSet.forEach(({ name, value, options }) => {
-          successResponse.cookies.set(name, value, options);
-        });
+        sessionCookies.push(...cookiesToSet);
       },
     },
   });
@@ -228,26 +226,37 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { data: employee, error: empError } = await supabase
+    const empLookup = await supabase
       .from('employees')
-      .select('id')
+      .select('*')
       .eq('user_id', user.id)
       .maybeSingle();
 
-    if (empError) {
-      console.error('[auth/login] employees lookup:', empError.message);
+    if (empLookup.error) {
+      console.error('[auth/login] employees lookup:', empLookup.error.message);
       return NextResponse.json(
         { error: 'Impossible de vérifier le profil employé. Réessayez plus tard.' },
         { status: 500 }
       );
     }
 
+    const employee = empLookup.data as Employee | null;
+
     if (!employee) {
       console.warn('[auth/login] no employee row for auth user');
       return NextResponse.json({ error: NO_EMPLOYEE_MSG }, { status: 403 });
     }
 
-    return successResponse;
+    const mustChangePassword = employee.must_change_password === true;
+    const res = NextResponse.json({
+      ok: true as const,
+      success: true as const,
+      mustChangePassword,
+    });
+    sessionCookies.forEach(({ name, value, options }) => {
+      res.cookies.set(name, value, options);
+    });
+    return res;
   } catch (err) {
     console.error('[auth/login] unexpected error', err);
     const { message, code } = describeSupabaseFetchFailure(err);

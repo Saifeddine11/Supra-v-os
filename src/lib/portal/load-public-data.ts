@@ -20,16 +20,28 @@ export interface PortalVideoRow {
 
 export interface PortalBundle {
   client: Pick<Client, 'id' | 'name' | 'monthly_video_quota' | 'currency'>;
-  projects: Pick<Project, 'id' | 'title' | 'status' | 'progress' | 'deadline'>[];
+  projects: Pick<Project, 'id' | 'title' | 'status' | 'progress' | 'deadline' | 'type' | 'delivered_at'>[];
   videos: PortalVideoRow[];
-  invoices: Pick<Invoice, 'id' | 'ref' | 'status' | 'total' | 'currency' | 'due_date' | 'issue_date'>[];
+  invoices: Pick<
+    Invoice,
+    'id' | 'ref' | 'status' | 'total' | 'currency' | 'due_date' | 'issue_date' | 'paid_at'
+  >[];
   documents: Pick<
     DocumentRecord,
     'id' | 'name' | 'type' | 'file_url' | 'external_link' | 'file_storage_path' | 'uploaded_at'
   >[];
   reports: Pick<
     Report,
-    'id' | 'title' | 'type' | 'summary' | 'period_start' | 'period_end' | 'next_actions' | 'recommendations' | 'created_at'
+    | 'id'
+    | 'title'
+    | 'type'
+    | 'summary'
+    | 'period_start'
+    | 'period_end'
+    | 'next_actions'
+    | 'recommendations'
+    | 'created_at'
+    | 'sent_at'
   >[];
   quotes: {
     id: string;
@@ -57,7 +69,7 @@ export async function loadPortalPublicData(clientId: string): Promise<PortalBund
   const [projRes, vidRes, invRes, docRes, repRes, quoteRes] = await Promise.all([
     admin
       .from('projects')
-      .select('id, title, status, progress, deadline')
+      .select('id, title, status, progress, deadline, type, delivered_at')
       .eq('client_id', clientId)
       .order('updated_at', { ascending: false }),
     admin
@@ -72,7 +84,7 @@ export async function loadPortalPublicData(clientId: string): Promise<PortalBund
       .order('updated_at', { ascending: false }),
     admin
       .from('invoices')
-      .select('id, ref, status, total, currency, due_date, issue_date')
+      .select('id, ref, status, total, currency, due_date, issue_date, paid_at')
       .eq('client_id', clientId)
       .eq('visible_to_client', true)
       .order('issue_date', { ascending: false }),
@@ -85,7 +97,7 @@ export async function loadPortalPublicData(clientId: string): Promise<PortalBund
     admin
       .from('reports')
       .select(
-        'id, title, type, summary, period_start, period_end, next_actions, recommendations, created_at'
+        'id, title, type, summary, period_start, period_end, next_actions, recommendations, created_at, sent_at'
       )
       .eq('client_id', clientId)
       .eq('visible_to_client', true)
