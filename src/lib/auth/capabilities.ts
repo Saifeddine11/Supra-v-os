@@ -56,3 +56,13 @@ export function canManagePayments(role: UserRole | null): boolean {
 export function canManageEmployees(role: UserRole | null): boolean {
   return role === 'admin';
 }
+
+/** Blocs intégrations / Supabase / cron / variables d’environnement sur /settings — admin uniquement. */
+export function canViewSettingsTechnicalSection(role: UserRole | null): boolean {
+  return role === 'admin';
+}
+
+/** Formulaire `agency_settings`, portail, facturation globale affichés sur /settings — admin uniquement. */
+export function canManageAgencySettingsInUi(role: UserRole | null): boolean {
+  return role === 'admin';
+}

@@ -99,6 +99,57 @@ export default async function ClientPortalPage({
 
       <PortalClientCalendar events={calendarEvents} clientId={clientId} token={safeToken} />
 
+      <section className="scroll-mt-6 space-y-4" id="portal-section-roadmaps">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-primary">Roadmaps</h2>
+        <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground">
+          Retrouvez ici les feuilles de route mensuelles partagées par l’équipe Supra v.
+        </p>
+        <ul className="mt-4 space-y-4">
+          {bundle.roadmaps.length === 0 ? (
+            <li className="text-sm text-muted-foreground">Aucune roadmap disponible pour le moment.</li>
+          ) : (
+            bundle.roadmaps.map((r) => {
+              const href = r.file_storage_path
+                ? `/api/portal/documents/${r.id}/download?clientId=${encodeURIComponent(clientId)}&token=${encodeURIComponent(safeToken)}`
+                : r.file_url || r.external_link;
+              const period =
+                r.period_start && r.period_end
+                  ? `${format(new Date(r.period_start), 'MMMM yyyy', { locale: fr })}`
+                  : null;
+              return (
+                <li
+                  key={r.id}
+                  id={`portal-roadmap-${r.id}`}
+                  className={cn(
+                    'scroll-mt-6 flex flex-col gap-3 rounded-xl border border-border/80 p-4 sm:flex-row sm:items-center sm:justify-between',
+                    getStatusBlockSurface('neutral'),
+                  )}
+                >
+                  <div className="min-w-0">
+                    <p className="font-medium text-foreground">{r.name}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {period ? `Période : ${period}` : 'Document partagé'}
+                      {' · '}
+                      Ajout {format(new Date(r.uploaded_at), 'd MMM yyyy', { locale: fr })}
+                    </p>
+                  </div>
+                  {href ? (
+                    <a
+                      href={href}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex min-h-[44px] shrink-0 items-center justify-center rounded-full bg-primary px-4 text-sm font-semibold text-primary-foreground hover:opacity-95 sm:text-xs"
+                    >
+                      {r.file_storage_path ? 'Télécharger le PDF' : 'Voir le document'}
+                    </a>
+                  ) : null}
+                </li>
+              );
+            })
+          )}
+        </ul>
+      </section>
+
       {pendingVideos.length > 0 ? (
         <section>
           <h2 className="text-sm font-semibold uppercase tracking-wide text-primary">Validations en attente</h2>

@@ -281,7 +281,7 @@ export default async function DashboardPage() {
     getDashboardSummary(ctx),
     listRecentNotifications(6, ctx),
   ]);
-  const liveFinancePartial = financeSnapshotFromAgg(summary.finance);
+  const liveFinancePartial = financeSnapshotFromAgg(summary.finance, summary.agencyMonthlyGoal);
 
   const liveOverrides: Partial<Record<string, Partial<StatCardData>>> = {
     clients: {
@@ -370,6 +370,50 @@ export default async function DashboardPage() {
       trend: undefined,
       tone: f.unpaidCount > 0 ? 'negative' : 'default',
     };
+  }
+
+  const showFinanceTargets =
+    summary.scope === 'full' ||
+    summary.scope === 'finance' ||
+    (summary.scope === 'commercial' && summary.finance != null);
+
+  if (showFinanceTargets) {
+    const g = summary.agencyMonthlyGoal;
+    const fin = summary.finance;
+    const c = fin?.currency ?? 'MAD';
+    const collected = fin?.monthlyRevenue ?? 0;
+    if (!g) {
+      liveOverrides.target = {
+        title: 'Objectif mensuel (CA)',
+        value: 'Non défini',
+        subtitle:
+          ctx.role === 'admin'
+            ? 'Aucune ligne pour ce mois dans les paramètres agence.'
+            : 'Non configuré pour le mois en cours.',
+        subtitleLink: ctx.role === 'admin' ? { href: '/settings#objectifs-mensuels', label: 'Définir l’objectif' } : undefined,
+        trend: undefined,
+        tone: 'warning',
+      };
+    } else if (g.revenue_goal <= 0) {
+      liveOverrides.target = {
+        title: 'Objectif mensuel (CA)',
+        value: 'À configurer',
+        subtitle: 'Objectif CA à 0 — mettez à jour la fiche mensuelle.',
+        subtitleLink: ctx.role === 'admin' ? { href: '/settings#objectifs-mensuels', label: 'Paramètres' } : undefined,
+        trend: undefined,
+        tone: 'warning',
+      };
+    } else {
+      const pct = Math.round((collected / g.revenue_goal) * 100);
+      const clamped = Math.min(100, Math.max(0, pct));
+      liveOverrides.target = {
+        title: 'Objectif mensuel (CA)',
+        value: `${g.revenue_goal.toLocaleString('fr-FR', { minimumFractionDigits: 0 })} ${c}`,
+        subtitle: `${clamped} % de l’objectif (CA encaissé ce mois)`,
+        trend: undefined,
+        tone: clamped >= 100 ? 'positive' : 'default',
+      };
+    }
   }
 
   let mergedStats: StatCardData[];

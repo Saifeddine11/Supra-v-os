@@ -32,8 +32,25 @@ export function FinanceOverview({
             <dd className="mt-1 font-semibold text-foreground">{s.monthlyRevenue}</dd>
           </div>
           <div className={cn('p-3', getStatusBlockSurface('neutral'))}>
-            <dt className="text-xs text-muted-foreground">Objectif</dt>
+            <dt className="text-xs text-muted-foreground">Objectif CA</dt>
             <dd className="mt-1 font-semibold text-foreground">{s.monthlyTarget}</dd>
+            {s.targetDetail ? (
+              <p className="mt-1 text-[11px] leading-snug text-muted-foreground">{s.targetDetail}</p>
+            ) : null}
+            {s.targetProgressPercent != null && s.targetProgressPercent >= 0 ? (
+              <div
+                className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted"
+                role="progressbar"
+                aria-valuenow={s.targetProgressPercent}
+                aria-valuemin={0}
+                aria-valuemax={100}
+              >
+                <div
+                  className="h-full rounded-full bg-primary transition-[width]"
+                  style={{ width: `${s.targetProgressPercent}%` }}
+                />
+              </div>
+            ) : null}
           </div>
           <div className={cn('p-3', getStatusBlockSurface('success'))}>
             <dt className="text-xs font-medium text-muted-foreground">Encaissé</dt>
@@ -66,6 +83,9 @@ export function FinanceOverview({
           <div>
             <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               CA vs objectif (6 mois)
+            </p>
+            <p className="mb-2 text-[11px] text-muted-foreground">
+              Données d’illustration — l’objectif du mois courant provient des paramètres agence.
             </p>
             <RevenueChart data={REVENUE_CHART} />
           </div>

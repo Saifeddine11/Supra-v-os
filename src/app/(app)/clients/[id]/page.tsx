@@ -19,6 +19,9 @@ import { PortalManagementSection } from '../portal-management';
 import { ProgressBar } from '@/components/shared/progress-bar';
 import { listActivityForEntity } from '@/lib/data/activity-logs';
 import { EntityActivityFeed } from '@/components/activity/entity-activity-feed';
+import { DocumentPortalVisibilityButton } from '@/components/documents/document-portal-visibility-button';
+import { format } from 'date-fns';
+import { fr } from 'date-fns/locale';
 
 export async function generateMetadata({
   params,
@@ -53,6 +56,15 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   const canDelete = canDeleteClient(ctx?.role ?? null);
   const canPortal = canManageClientPortal(ctx?.role ?? null);
   const st = CLIENT_STATUS_MAP[client.status];
+
+  const roadmaps = bundle.documents
+    .filter((d) => d.type === 'roadmap')
+    .sort((a, b) => {
+      const ad = a.period_start ?? a.uploaded_at;
+      const bd = b.period_start ?? b.uploaded_at;
+      return bd.localeCompare(ad);
+    });
+  const otherDocuments = bundle.documents.filter((d) => d.type !== 'roadmap');
 
   return (
     <div className="space-y-8">
@@ -198,6 +210,67 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         )}
       </SectionCard>
 
+      <SectionCard title="Roadmaps mensuelles" description={`${roadmaps.length} document(s) type roadmap`}>
+        {roadmaps.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Aucune roadmap enregistrée pour ce client.</p>
+        ) : (
+          <ul className="space-y-3 text-sm">
+            {roadmaps.map((d) => {
+              const href = d.file_storage_path
+                ? `/api/documents/${d.id}/download`
+                : d.file_url || d.external_link;
+              const periodLabel =
+                d.period_start && d.period_end
+                  ? format(new Date(d.period_start), 'MMMM yyyy', { locale: fr })
+                  : null;
+              return (
+                <li
+                  key={d.id}
+                  className="flex flex-col gap-2 rounded-lg border border-border/70 bg-muted/40 p-3 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div className="min-w-0">
+                    <p className="font-medium text-foreground">{d.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {periodLabel ? `Mois : ${periodLabel}` : 'Période non renseignée'}
+                      {' · '}
+                      Portail : {d.visible_to_client ? 'visible' : 'masqué'}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {href ? (
+                      <a
+                        href={href}
+                        className="text-xs font-semibold text-primary hover:underline"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Voir / télécharger
+                      </a>
+                    ) : null}
+                    {canEdit ? (
+                      <DocumentPortalVisibilityButton
+                        documentId={d.id}
+                        visible={d.visible_to_client}
+                        canModify={canEdit}
+                      />
+                    ) : null}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        {canEdit ? (
+          <p className="mt-3 text-xs text-muted-foreground">
+            Créez une roadmap depuis{' '}
+            <Link href="/documents" className="font-medium text-primary hover:underline">
+              Documents
+            </Link>{' '}
+            (type Roadmap, mois couvert, PDF ou lien https).
+          </p>
+        ) : null}
+      </SectionCard>
+
       <SectionCard title="Factures" description={`${bundle.invoices.length} facture(s)`}>
         {bundle.invoices.length === 0 ? (
           <p className="text-sm text-muted-foreground">Aucune facture.</p>
@@ -225,12 +298,12 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         )}
       </SectionCard>
 
-      <SectionCard title="Documents" description={`${bundle.documents.length} fichier(s)`}>
-        {bundle.documents.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Aucun document indexé.</p>
+      <SectionCard title="Documents" description={`${otherDocuments.length} fichier(s) (hors roadmaps)`}>
+        {otherDocuments.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Aucun autre document indexé.</p>
         ) : (
           <ul className="space-y-2 text-sm">
-            {bundle.documents.map((d) => {
+            {otherDocuments.map((d) => {
               const href = d.file_storage_path
                 ? `/api/documents/${d.id}/download`
                 : d.file_url || d.external_link;

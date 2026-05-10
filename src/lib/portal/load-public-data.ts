@@ -28,7 +28,28 @@ export interface PortalBundle {
   >[];
   documents: Pick<
     DocumentRecord,
-    'id' | 'name' | 'type' | 'file_url' | 'external_link' | 'file_storage_path' | 'uploaded_at'
+    | 'id'
+    | 'name'
+    | 'type'
+    | 'file_url'
+    | 'external_link'
+    | 'file_storage_path'
+    | 'uploaded_at'
+    | 'period_start'
+    | 'period_end'
+  >[];
+  /** Roadmaps visibles (sous-ensemble filtré, même source sécurisée). */
+  roadmaps: Pick<
+    DocumentRecord,
+    | 'id'
+    | 'name'
+    | 'type'
+    | 'file_url'
+    | 'external_link'
+    | 'file_storage_path'
+    | 'uploaded_at'
+    | 'period_start'
+    | 'period_end'
   >[];
   reports: Pick<
     Report,
@@ -90,7 +111,9 @@ export async function loadPortalPublicData(clientId: string): Promise<PortalBund
       .order('issue_date', { ascending: false }),
     admin
       .from('documents')
-      .select('id, name, type, file_url, external_link, file_storage_path, uploaded_at')
+      .select(
+        'id, name, type, file_url, external_link, file_storage_path, uploaded_at, period_start, period_end'
+      )
       .eq('client_id', clientId)
       .eq('visible_to_client', true)
       .order('uploaded_at', { ascending: false }),
@@ -115,12 +138,24 @@ export async function loadPortalPublicData(clientId: string): Promise<PortalBund
   const videoRaw = (vidRes.data ?? []) as PortalVideoRow[];
   const videos = videoRaw.filter(isPortalListedVideo).map(toPortalVideoRow);
 
+  const docRows =
+    (docRes.data ?? []) as PortalBundle['documents'];
+  const roadmaps = docRows
+    .filter((d) => d.type === 'roadmap')
+    .sort((a, b) => {
+      const ad = a.period_start ?? a.uploaded_at;
+      const bd = b.period_start ?? b.uploaded_at;
+      return bd.localeCompare(ad);
+    });
+  const documents = docRows.filter((d) => d.type !== 'roadmap');
+
   return {
     client,
     projects: projRes.data ?? [],
     videos,
     invoices: invRes.data ?? [],
-    documents: docRes.data ?? [],
+    documents,
+    roadmaps,
     reports: repRes.data ?? [],
     quotes: quoteRes.data ?? [],
   };

@@ -6,7 +6,7 @@ import {
   fetchManagedClientIds,
   hasFullOrgDataAccess,
 } from '@/lib/auth/data-scope';
-import type { DocumentRecord } from '@/types/database';
+import type { DocumentRecord, DocumentType } from '@/types/database';
 
 export type DocumentWithRelations = DocumentRecord & {
   clients: { name: string; id: string } | null;
@@ -75,7 +75,7 @@ async function buildDocumentsOrFilter(sb: SB, auth: AuthContext): Promise<string
 }
 
 export async function listDocumentsWithRelations(
-  opts?: { includeArchived?: boolean },
+  opts?: { includeArchived?: boolean; documentType?: DocumentType | null },
   ctx: AuthContext | null = null
 ): Promise<DocumentWithRelations[]> {
   const auth = ctx ?? (await getAuthContext());
@@ -94,6 +94,10 @@ export async function listDocumentsWithRelations(
 
   if (!opts?.includeArchived) {
     q = q.is('archived_at', null);
+  }
+
+  if (opts?.documentType) {
+    q = q.eq('type', opts.documentType);
   }
 
   const { data, error } = await q;

@@ -1,5 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
 import { ArrowDownRight, ArrowUpRight, Minus } from 'lucide-react';
+import Link from 'next/link';
 import { cn } from '@/lib/utils/cn';
 import type { StatCardData } from '@/data/dashboard-mock';
 import { getStatusBlockSurface, getStatusIconBox, statCardUiToneToBlockTone } from '@/lib/ui/status-block-tone';
@@ -34,6 +35,16 @@ export function StatCard({ data, icon: Icon, className }: StatCardProps) {
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{data.title}</p>
           <p className="mt-2 font-sans text-2xl font-semibold tracking-tight text-foreground">{data.value}</p>
           {data.subtitle ? <p className="mt-1 text-xs text-muted-foreground">{data.subtitle}</p> : null}
+          {data.subtitleLink ? (
+            <p className="mt-2">
+              <Link
+                href={data.subtitleLink.href}
+                className="text-xs font-semibold text-primary hover:underline"
+              >
+                {data.subtitleLink.label}
+              </Link>
+            </p>
+          ) : null}
           {data.trend ? (
             <p
               className={cn(

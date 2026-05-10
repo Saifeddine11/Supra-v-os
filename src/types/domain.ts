@@ -112,6 +112,7 @@ export const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
   brief: 'Brief',
   rushes: 'Rushes',
   other: 'Autre',
+  roadmap: 'Roadmap (mensuelle)',
 };
 
 export const REPORT_TYPE_LABELS: Record<ReportType, string> = {

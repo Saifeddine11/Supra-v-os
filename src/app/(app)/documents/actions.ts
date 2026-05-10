@@ -18,6 +18,23 @@ import {
   removeDocumentObject,
   uploadDocumentObject,
 } from '@/lib/storage/document-storage';
+import { endOfMonth, formatISO, parseISO, startOfMonth } from 'date-fns';
+
+function roadmapPeriodFromField(
+  raw: string | null,
+  docType: DocumentType
+): { period_start: string | null; period_end: string | null } {
+  if (docType !== 'roadmap') return { period_start: null, period_end: null };
+  const s = (raw ?? '').trim();
+  if (!/^\d{4}-\d{2}$/.test(s)) return { period_start: null, period_end: null };
+  const d = parseISO(`${s}-01`);
+  const a = startOfMonth(d);
+  const b = endOfMonth(d);
+  return {
+    period_start: formatISO(a, { representation: 'date' }),
+    period_end: formatISO(b, { representation: 'date' }),
+  };
+}
 
 export async function createDocumentAction(formData: FormData): Promise<ActionResult<{ id: string }>> {
   const ctx = await getAuthContext();
@@ -55,6 +72,12 @@ export async function createDocumentAction(formData: FormData): Promise<ActionRe
   let fileUrl = String(formData.get('file_url') ?? '').trim() || null;
   const externalLink = String(formData.get('external_link') ?? '').trim() || null;
   const visibleToClient = formData.getAll('visible_to_client').includes('true');
+  const periodMonth = String(formData.get('period_month') ?? '').trim() || null;
+  const { period_start, period_end } = roadmapPeriodFromField(periodMonth, docType);
+
+  if (docType === 'roadmap' && !period_start) {
+    return actionError('Indiquez le mois couvert pour une roadmap.');
+  }
 
   const fileField = formData.get('file');
   let fileStoragePath: string | null = null;
@@ -84,6 +107,10 @@ export async function createDocumentAction(formData: FormData): Promise<ActionRe
     return actionError('Ajoutez un fichier, une URL de fichier, ou un lien externe.');
   }
 
+  if (externalLink && !/^https:\/\//i.test(externalLink)) {
+    return actionError('Le lien externe doit commencer par https://');
+  }
+
   const { data: row, error } = await supabase
     .from('documents')
     .insert({
@@ -98,6 +125,8 @@ export async function createDocumentAction(formData: FormData): Promise<ActionRe
       mime_type: mimeType,
       external_link: externalLink,
       visible_to_client: visibleToClient,
+      period_start,
+      period_end,
       uploaded_by: user.id,
     })
     .select('id')
@@ -205,5 +234,45 @@ export async function deleteDocumentAction(id: string): Promise<ActionResult> {
   revalidatePath('/documents');
   revalidatePath('/dashboard');
   if (doc?.client_id) revalidatePath(`/clients/${doc.client_id}`);
+  return actionOk();
+}
+
+export async function setDocumentClientVisibilityAction(
+  id: string,
+  visible: boolean
+): Promise<ActionResult> {
+  const ctx = await getAuthContext();
+  if (!ctx || !canModifyClients(ctx.role)) return actionError('Droits insuffisants.');
+
+  const supabase = await createClient();
+  const { data: doc } = await supabase
+    .from('documents')
+    .select('client_id, project_id, video_id, name')
+    .eq('id', id)
+    .maybeSingle();
+  if (
+    !doc ||
+    !(await assertDocumentRecordVisible(supabase, ctx, {
+      client_id: doc.client_id,
+      project_id: doc.project_id,
+      video_id: doc.video_id,
+    }))
+  ) {
+    return actionError('Document inaccessible.');
+  }
+
+  const { error } = await supabase.from('documents').update({ visible_to_client: visible }).eq('id', id);
+  if (error) return actionError(getPostgrestError(error));
+
+  await logStaffActivity(ctx, {
+    action: 'updated',
+    entityType: 'document',
+    entityId: id,
+    metadata: { visible_to_client: visible, name: doc.name },
+  });
+
+  revalidatePath('/documents');
+  revalidatePath('/dashboard');
+  if (doc.client_id) revalidatePath(`/clients/${doc.client_id}`);
   return actionOk();
 }

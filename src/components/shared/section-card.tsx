@@ -1,6 +1,7 @@
 import { cn } from '@/lib/utils/cn';
 
 export interface SectionCardProps {
+  id?: string;
   title: string;
   description?: string;
   action?: React.ReactNode;
@@ -8,9 +9,10 @@ export interface SectionCardProps {
   className?: string;
 }
 
-export function SectionCard({ title, description, action, children, className }: SectionCardProps) {
+export function SectionCard({ id, title, description, action, children, className }: SectionCardProps) {
   return (
     <section
+      id={id}
       className={cn(
         'rounded-2xl border border-border/80 bg-card/92 shadow-[0_10px_28px_-18px_rgba(8,7,6,0.22)] backdrop-blur-sm dark:shadow-supra-glow',
         className

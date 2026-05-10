@@ -17,8 +17,17 @@ import { DocumentFormDialog } from './document-form-dialog';
 import { DocumentRowActions } from './document-row-actions';
 import type { DocumentWithRelations } from '@/lib/data/documents';
 import { isSupabaseStorageUploadConfigured } from '@/lib/storage/buckets';
+import type { DocumentType } from '@/types/database';
 
 export const metadata: Metadata = { title: 'Documents' };
+
+function documentsHref(opts: { archived?: boolean; roadmapOnly?: boolean }): string {
+  const p = new URLSearchParams();
+  if (opts.archived) p.set('archived', '1');
+  if (opts.roadmapOnly) p.set('type', 'roadmap');
+  const q = p.toString();
+  return q ? `/documents?${q}` : '/documents';
+}
 
 function fileTypeLabel(d: DocumentWithRelations): string {
   if (d.file_storage_path && d.mime_type) {
@@ -38,17 +47,19 @@ function fileTypeLabel(d: DocumentWithRelations): string {
 export default async function DocumentsPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ archived?: string }>;
+  searchParams?: Promise<{ archived?: string; type?: string }>;
 }) {
   const sp = await searchParams;
   const includeArchived = sp?.archived === '1';
+  const typeFilter =
+    sp?.type === 'roadmap' ? ('roadmap' satisfies DocumentType) : null;
 
   const ctx = await getAuthContext();
   const canModify = canModifyClients(ctx?.role ?? null);
   const storageConfigured = isSupabaseStorageUploadConfigured();
 
   const [documents, clients, projects] = await Promise.all([
-    listDocumentsWithRelations({ includeArchived }, ctx),
+    listDocumentsWithRelations({ includeArchived, documentType: typeFilter ?? undefined }, ctx),
     listClients({}, ctx),
     listProjectsForSelect(ctx),
   ]);
@@ -76,11 +87,27 @@ export default async function DocumentsPage({
           <h1 className="font-sans text-2xl font-semibold tracking-tight text-foreground">Documents</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Fichiers privés (Storage + signed URL) ou liens externes — la case « visible client » contrôle le portail.
+            Roadmaps mensuelles : type « Roadmap » + mois couvert.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" className="rounded-full" asChild>
-            <Link href={includeArchived ? '/documents' : '/documents?archived=1'}>
+            <Link
+              href={documentsHref({
+                archived: includeArchived,
+                roadmapOnly: !typeFilter,
+              })}
+            >
+              {typeFilter ? 'Tous les types' : 'Roadmaps uniquement'}
+            </Link>
+          </Button>
+          <Button variant="outline" size="sm" className="rounded-full" asChild>
+            <Link
+              href={documentsHref({
+                archived: !includeArchived,
+                roadmapOnly: Boolean(typeFilter),
+              })}
+            >
               {includeArchived ? 'Masquer archivés' : 'Inclure archivés'}
             </Link>
           </Button>

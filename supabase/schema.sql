@@ -195,7 +195,8 @@ create type document_type as enum (
   'contract',
   'brief',
   'rushes',
-  'other'
+  'other',
+  'roadmap'
 );
 
 -- Internal project priority
@@ -803,6 +804,10 @@ create table documents (
 
   archived_at       timestamptz,
 
+  -- Période couverte (ex. roadmap mensuelle)
+  period_start      date,
+  period_end        date,
+
   -- Audit
   uploaded_at       timestamptz not null default now(),
   uploaded_by       uuid references auth.users(id) on delete set null
@@ -813,6 +818,27 @@ create index idx_documents_project on documents(project_id);
 create index idx_documents_video on documents(video_id);
 create index idx_documents_visible on documents(visible_to_client);
 create index idx_documents_archived on documents(archived_at);
+create index idx_documents_client_type on documents(client_id, type) where client_id is not null;
+
+-- ============================================================================
+-- AGENCY MONTHLY GOALS (dashboard)
+-- ============================================================================
+
+create table agency_monthly_goals (
+  id              uuid primary key default gen_random_uuid(),
+  year            int not null check (year >= 2020 and year <= 2100),
+  month           int not null check (month >= 1 and month <= 12),
+  revenue_goal    numeric(14, 2) not null default 0,
+  client_goal     int,
+  video_goal      int,
+  task_goal       int,
+  notes           text,
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now(),
+  unique (year, month)
+);
+
+create index idx_agency_monthly_goals_year_month on agency_monthly_goals(year desc, month desc);
 
 -- ============================================================================
 -- AGENCY SETTINGS (singleton, id = 1)
@@ -933,7 +959,7 @@ begin
   for t in select unnest(array[
     'employees','clients','client_portals','projects','internal_projects',
     'tasks','videos','editorial_calendars','video_templates','invoices',
-    'quotes','reports','comments'
+    'quotes','reports','comments','agency_monthly_goals'
   ]) loop
     execute format('drop trigger if exists trg_%I_updated_at on %I', t, t);
     execute format(

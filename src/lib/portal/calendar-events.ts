@@ -35,7 +35,8 @@ export type PortalCalendarEventType =
   | 'quote_validity'
   | 'project_milestone'
   | 'project_delivery'
-  | 'report';
+  | 'report'
+  | 'roadmap';
 
 export type PortalEventVisualTone =
   | 'shooting'
@@ -397,6 +398,26 @@ export function buildPortalCalendarEvents(bundle: PortalBundle, now: Date = new 
     }
   }
 
+  for (const rm of bundle.roadmaps) {
+    const raw = rm.period_start ?? rm.uploaded_at?.slice(0, 10) ?? null;
+    const d = raw ? parseEventDate(raw) : null;
+    if (!d) continue;
+    const endRaw = rm.period_end ? parseEventDate(rm.period_end) : null;
+    push({
+      id: `roadmap__${rm.id}`,
+      type: 'roadmap',
+      typeLabel: 'Roadmap',
+      title: rm.name,
+      date: d.toISOString(),
+      endDate: endRaw ? endRaw.toISOString() : null,
+      status: 'Partagée',
+      tone: 'milestone',
+      href: `#portal-roadmap-${rm.id}`,
+      description: 'Feuille de route mensuelle',
+      sortKey: toSortKey(d),
+    });
+  }
+
   out.sort((a, b) => a.sortKey - b.sortKey);
   return out.map(sanitizePortalCalendarEvent);
 }
@@ -423,7 +444,8 @@ export function portalEventMatchesFilter(e: PortalCalendarEvent, filter: PortalC
   if (filter === 'publication') return e.type === 'publication';
   if (filter === 'payment')
     return e.type === 'payment_due' || e.type === 'invoice_overdue' || e.type === 'invoice_paid' || e.type === 'quote_validity';
-  if (filter === 'project') return e.type === 'project_milestone' || e.type === 'project_delivery';
+  if (filter === 'project')
+    return e.type === 'project_milestone' || e.type === 'project_delivery' || e.type === 'roadmap';
   if (filter === 'report') return e.type === 'report';
   return true;
 }

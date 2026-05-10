@@ -44,6 +44,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   if (!bundle) notFound();
 
   const { project, tasks, documents, invoices, activity } = bundle;
+  const roadmaps = documents.filter((d) => d.type === 'roadmap');
   const canEdit = canManageProjects(ctx?.role ?? null);
   const clientOpts = clients.map((c) => ({ id: c.id, name: c.name }));
   const st = PROJECT_STATUS_MAP[project.status];
@@ -137,6 +138,25 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           </ul>
         )}
       </SectionCard>
+
+      {roadmaps.length > 0 ? (
+        <SectionCard title={`Roadmaps (${roadmaps.length})`} description="Documents liés au client / projet">
+          <ul className="space-y-2 text-sm">
+            {roadmaps.map((d) => (
+              <li key={d.id} className="flex flex-wrap justify-between gap-2">
+                <span className="text-foreground">{d.name}</span>
+                <span className="text-xs text-muted-foreground">
+                  {d.period_start
+                    ? format(new Date(d.period_start), 'MMMM yyyy', { locale: fr })
+                    : '—'}
+                  {' · '}
+                  {d.visible_to_client ? 'Portail' : 'Interne'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </SectionCard>
+      ) : null}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <SectionCard title={`Documents (${documents.length})`}>

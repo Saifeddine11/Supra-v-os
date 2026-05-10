@@ -10,6 +10,8 @@ export interface StatCardData {
   title: string;
   value: string;
   subtitle?: string;
+  /** Lien sous le sous-titre (ex. admin → paramètres objectif). */
+  subtitleLink?: { href: string; label: string };
   trend?: { direction: TrendDirection; label: string };
   tone?: 'default' | 'positive' | 'negative' | 'warning';
 }
@@ -56,6 +58,10 @@ export interface FinanceSnapshot {
   overdueInvoicesCount: number;
   acceptedQuotes: number;
   pendingQuotes: number;
+  /** Sous-titre objectif : progression réelle ou « non défini » — pas de pourcentage fantaisiste. */
+  targetDetail?: string | null;
+  /** 0–100 si objectif CA > 0 et défini, sinon null. */
+  targetProgressPercent?: number | null;
 }
 
 export interface RevenueChartPoint {
@@ -97,10 +103,10 @@ export const DASHBOARD_STATS: StatCardData[] = [
   },
   {
     id: 'target',
-    title: 'Objectif mensuel',
-    value: '220 000 MAD',
-    subtitle: '85 % atteint',
-    trend: { direction: 'flat', label: 'On track' },
+    title: 'Objectif mensuel (CA)',
+    value: '—',
+    subtitle: 'Chargement depuis les paramètres agence',
+    trend: undefined,
   },
   {
     id: 'collected',
@@ -319,7 +325,7 @@ export const TEAM_WORKLOAD: WorkloadMember[] = [
 
 export const FINANCE_SNAPSHOT: FinanceSnapshot = {
   monthlyRevenue: '186 400 MAD',
-  monthlyTarget: '220 000 MAD',
+  monthlyTarget: 'Non défini',
   collected: '142 200 MAD',
   pending: '44 200 MAD',
   unpaidInvoicesCount: 6,
@@ -328,6 +334,8 @@ export const FINANCE_SNAPSHOT: FinanceSnapshot = {
   overdueInvoicesCount: 2,
   acceptedQuotes: 3,
   pendingQuotes: 2,
+  targetDetail: null,
+  targetProgressPercent: null,
 };
 
 export const REVENUE_CHART: RevenueChartPoint[] = [

@@ -38,6 +38,7 @@ alter table notifications        enable row level security;
 alter table comments             enable row level security;
 alter table activity_logs        enable row level security;
 alter table agency_settings      enable row level security;
+alter table agency_monthly_goals  enable row level security;
 alter table user_notification_preferences enable row level security;
 
 -- ============================================================================
@@ -478,6 +479,35 @@ create policy "agency_settings_update_admin"
   with check (auth_user_role() = 'admin');
 
 -- ============================================================================
+-- AGENCY MONTHLY GOALS (dashboard targets)
+-- ============================================================================
+
+drop policy if exists "agency_monthly_goals_select_staff" on agency_monthly_goals;
+create policy "agency_monthly_goals_select_staff"
+  on agency_monthly_goals for select
+  to authenticated
+  using (auth_user_role() is not null);
+
+drop policy if exists "agency_monthly_goals_admin_write" on agency_monthly_goals;
+create policy "agency_monthly_goals_admin_write"
+  on agency_monthly_goals for insert
+  to authenticated
+  with check (auth_user_role() = 'admin');
+
+drop policy if exists "agency_monthly_goals_admin_update" on agency_monthly_goals;
+create policy "agency_monthly_goals_admin_update"
+  on agency_monthly_goals for update
+  to authenticated
+  using (auth_user_role() = 'admin')
+  with check (auth_user_role() = 'admin');
+
+drop policy if exists "agency_monthly_goals_admin_delete" on agency_monthly_goals;
+create policy "agency_monthly_goals_admin_delete"
+  on agency_monthly_goals for delete
+  to authenticated
+  using (auth_user_role() = 'admin');
+
+-- ============================================================================
 -- USER NOTIFICATION PREFERENCES
 -- ============================================================================
 
@@ -514,7 +544,7 @@ revoke all on employees, clients, client_portals, projects, internal_projects,
               tasks, videos, editorial_calendars, video_templates, content_ideas,
               invoices, invoice_items, quotes, quote_items, payments, reports,
               documents, notifications, comments, activity_logs,
-              agency_settings, user_notification_preferences
+              agency_settings, agency_monthly_goals, user_notification_preferences
        from anon;
 
 -- ============================================================================

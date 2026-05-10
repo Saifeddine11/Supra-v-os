@@ -39,11 +39,14 @@ export function DocumentFormDialog({
   const [ok, setOk] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [clientId, setClientId] = useState('');
+  const [docType, setDocType] = useState<DocumentType>('other');
 
   useEffect(() => {
     if (!open) {
       setErr(null);
       setOk(null);
+    } else {
+      setDocType('other');
     }
   }, [open]);
 
@@ -134,6 +137,8 @@ export function DocumentFormDialog({
               id="doc-type"
               name="type"
               required
+              value={docType}
+              onChange={(e) => setDocType(e.target.value as DocumentType)}
               className="h-10 rounded-lg border border-border bg-muted px-3 text-sm"
             >
               {DOC_TYPES.map((t) => (
@@ -143,6 +148,15 @@ export function DocumentFormDialog({
               ))}
             </select>
           </div>
+          {docType === 'roadmap' ? (
+            <div className="grid gap-2">
+              <Label htmlFor="doc-period-month">Mois couvert (roadmap)</Label>
+              <Input id="doc-period-month" name="period_month" type="month" required className="text-sm" />
+              <p className="text-xs text-muted-foreground">
+                La période est enregistrée du 1er au dernier jour du mois choisi (portail + filtres).
+              </p>
+            </div>
+          ) : null}
           <div className="grid gap-2">
             <Label htmlFor="doc-file">Fichier (Storage privé)</Label>
             <Input

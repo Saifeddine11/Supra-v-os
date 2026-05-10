@@ -1,54 +1,104 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
+import { addMonths, format } from 'date-fns';
+import { fr } from 'date-fns/locale';
 import { ThemeToggle } from '@/components/app/theme-toggle';
 import { SectionCard } from '@/components/shared/section-card';
 import { AgencySettingsDbForm } from '@/components/settings/agency-settings-db-form';
+import { MonthlyGoalsSection } from '@/components/settings/monthly-goals-section';
 import { NotificationPreferencesForm } from '@/components/settings/notification-preferences-form';
+import { PersonalAccountSettingsSection } from '@/components/settings/personal-account-settings-section';
+import { SettingsAdminTechnicalSection } from '@/components/settings/settings-admin-technical-section';
+import { SettingsRoleHints } from '@/components/settings/settings-role-hints';
 import { ROLE_LABELS } from '@/types/domain';
-import { getAuthContext } from '@/lib/auth/permissions';
+import { requireAuth } from '@/lib/auth/permissions';
+import {
+  canManageAgencySettingsInUi,
+  canViewSettingsTechnicalSection,
+} from '@/lib/auth/capabilities';
 import { Button } from '@/components/ui/button';
 import { signOutAction } from '@/app/(app)/actions';
 import { getAgencySettingsRow } from '@/lib/data/agency-settings-db';
+import {
+  currentDashboardYearMonth,
+  getAgencyMonthlyGoalForMonth,
+} from '@/lib/data/agency-monthly-goals';
 import { getMyNotificationPreferences } from '@/lib/data/notification-preferences';
 
 export const metadata: Metadata = { title: 'Paramètres' };
 
-export default async function SettingsPage() {
-  const ctx = await getAuthContext();
-  const roleLabel = ctx?.role ? ROLE_LABELS[ctx.role] : '—';
-  const canEditAgency = ctx?.role === 'admin';
+function parseYm(raw: string | undefined): { year: number; month: number } | null {
+  if (!raw || !/^\d{4}-\d{2}$/.test(raw)) return null;
+  const [y, m] = raw.split('-').map(Number);
+  if (y < 2020 || y > 2100 || m < 1 || m > 12) return null;
+  return { year: y, month: m };
+}
 
-  const [agencyRow, notifPrefs] = await Promise.all([
-    getAgencySettingsRow(),
-    ctx?.userId ? getMyNotificationPreferences(ctx.userId) : Promise.resolve(null),
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ ym?: string }>;
+}) {
+  const sp = await searchParams;
+  const ctx = await requireAuth();
+  const role = ctx.role;
+  const roleLabel = role ? ROLE_LABELS[role] : '—';
+
+  const showAgencyAndPortal = canManageAgencySettingsInUi(role);
+  const showTechnical = canViewSettingsTechnicalSection(role);
+
+  const ymParam = typeof sp?.ym === 'string' ? sp.ym : undefined;
+  const ymSel = parseYm(ymParam) ?? currentDashboardYearMonth();
+  const goalAnchor = new Date(ymSel.year, ymSel.month - 1, 1);
+  const prevD = addMonths(goalAnchor, -1);
+  const nextD = addMonths(goalAnchor, 1);
+  const prevYm = `${prevD.getFullYear()}-${String(prevD.getMonth() + 1).padStart(2, '0')}`;
+  const nextYm = `${nextD.getFullYear()}-${String(nextD.getMonth() + 1).padStart(2, '0')}`;
+  const monthLabel = format(goalAnchor, 'MMMM yyyy', { locale: fr });
+
+  const [agencyRow, notifPrefs, monthlyGoalRow] = await Promise.all([
+    showAgencyAndPortal ? getAgencySettingsRow() : Promise.resolve(null),
+    ctx.userId ? getMyNotificationPreferences(ctx.userId) : Promise.resolve(null),
+    showAgencyAndPortal ? getAgencyMonthlyGoalForMonth(ymSel.year, ymSel.month) : Promise.resolve(null),
   ]);
 
-  const integrations = {
-    supabase: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
-    supabaseService: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
-    resend: Boolean(process.env.RESEND_API_KEY),
-    cron: Boolean(process.env.CRON_SECRET),
-    appUrl: process.env.NEXT_PUBLIC_APP_URL ?? '',
-  };
-
-  const cronLabels = [
-    {
-      path: '/api/cron/daily',
-      label: 'Job quotidien Vercel Hobby (lun–ven 7h30 UTC) : factures → échéances → rappels matin',
-    },
-    { path: '/api/cron/morning-reminders', label: 'Unitaire (tests / Pro)' },
-    { path: '/api/cron/overdue-invoices', label: 'Unitaire (tests / Pro)' },
-    { path: '/api/cron/deadline-alerts', label: 'Unitaire — fréquent recommandé sur Pro' },
-    { path: '/api/cron/evening-summary', label: 'Unitaire — 2ᵉ cron typique sur Pro' },
-  ];
+  const employee = ctx.employee;
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="font-sans text-2xl font-semibold tracking-tight text-foreground">Paramètres</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Apparence, profil agence (Supabase), facturation, notifications et intégrations.
+          {showTechnical
+            ? 'Agence, intégrations, notifications, apparence et sécurité.'
+            : 'Votre compte, apparence, notifications et sécurité.'}
         </p>
       </div>
+
+      {employee ? (
+        <SectionCard
+          title="Mon compte"
+          description="Informations de votre fiche employé (visibles par l’équipe selon les règles d’accès)."
+        >
+          <PersonalAccountSettingsSection employee={employee} email={ctx.email} role={employee.role} />
+        </SectionCard>
+      ) : (
+        <SectionCard title="Mon compte" description="Profil incomplet">
+          <p className="text-sm text-muted-foreground">
+            Aucune fiche employé liée à ce compte. Contactez un administrateur.
+          </p>
+          <dl className="mt-3 grid gap-2 text-sm">
+            <div>
+              <dt className="text-xs text-muted-foreground">E-mail</dt>
+              <dd className="text-foreground">{ctx.email ?? '—'}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">Rôle applicatif</dt>
+              <dd className="text-foreground">{roleLabel}</dd>
+            </div>
+          </dl>
+        </SectionCard>
+      )}
 
       <SectionCard
         title="Apparence"
@@ -60,31 +110,20 @@ export default async function SettingsPage() {
         </p>
       </SectionCard>
 
-      <SectionCard
-        title="Profil agence & portail"
-        description="Données partagées par l’équipe — stockées dans agency_settings (migration P1)."
-      >
-        <AgencySettingsDbForm
-          row={agencyRow}
-          canEdit={canEditAgency}
-          key={agencyRow ? `agency-${agencyRow.updated_at}` : 'agency-missing'}
-        />
-      </SectionCard>
-
-      <SectionCard
-        title="Facturation & devis (valeurs par défaut)"
-        description="Les préfixes complètent les séquences SQL (FAC-YYYY-###, etc.)."
-      >
-        <p className="text-sm text-muted-foreground">
-          Modifiables dans la section ci-dessus (admin) : préfixes, devise, TVA %, conditions de paiement type.
-        </p>
-      </SectionCard>
+      {role ? (
+        <SectionCard
+          title="Raccourcis métier"
+          description="Accès rapide aux modules utiles pour votre rôle — sans configuration technique."
+        >
+          <SettingsRoleHints role={role} />
+        </SectionCard>
+      ) : null}
 
       <SectionCard
         title="Notifications"
-        description="Emails cron (Resend) et alertes in-app — par utilisateur."
+        description="Rappels matin, alertes d’échéance, résumé du soir et e-mails (selon les crons configurés par l’administrateur)."
       >
-        {ctx?.userId ? (
+        {ctx.userId ? (
           <NotificationPreferencesForm
             prefs={notifPrefs}
             key={notifPrefs ? `notif-${notifPrefs.updated_at}` : `notif-new-${ctx.userId}`}
@@ -94,83 +133,85 @@ export default async function SettingsPage() {
         )}
       </SectionCard>
 
-      <SectionCard title="Sécurité & session" description="Compte connecté">
-        <dl className="grid gap-3 text-sm">
+      <SectionCard title="Sécurité" description="Mot de passe, session et déconnexion">
+        <div className="space-y-4 text-sm">
           <div>
-            <dt className="text-xs text-muted-foreground">Utilisateur</dt>
-            <dd className="text-foreground">{ctx?.email ?? '—'}</dd>
+            <Link href="/change-password">
+              <Button type="button" variant="outline" className="rounded-full">
+                Changer mon mot de passe
+              </Button>
+            </Link>
+            <p className="mt-2 text-xs text-muted-foreground">
+              Vous serez invité à vous reconnecter si votre administrateur impose un nouveau mot de passe.
+            </p>
           </div>
-          <div>
-            <dt className="text-xs text-muted-foreground">Rôle</dt>
-            <dd className="text-foreground">{roleLabel}</dd>
-          </div>
-          {ctx?.userId ? (
-            <div>
+          {ctx.userId ? (
+            <dl className="border-t border-border/60 pt-4">
               <dt className="text-xs text-muted-foreground">Identifiant session (extrait)</dt>
-              <dd className="font-mono text-xs text-muted-foreground">
+              <dd className="mt-1 font-mono text-xs text-muted-foreground">
                 {ctx.userId.slice(0, 8)}…{ctx.userId.slice(-4)}
               </dd>
-            </div>
+            </dl>
           ) : null}
-        </dl>
-        <form action={signOutAction} className="mt-4">
-          <Button type="submit" variant="outline" className="rounded-full">
-            Se déconnecter
-          </Button>
-        </form>
-      </SectionCard>
-
-      <SectionCard title="Intégrations" description="État de configuration (variables d’environnement)">
-        <ul className="space-y-2 text-sm">
-          <li className="flex justify-between gap-2 border-b border-border/60 py-2">
-            <span className="text-muted-foreground">Supabase (URL + clé anon)</span>
-            <span className={integrations.supabase ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive'}>
-              {integrations.supabase ? 'Configuré' : 'Manquant'}
-            </span>
-          </li>
-          <li className="flex justify-between gap-2 border-b border-border/60 py-2">
-            <span className="text-muted-foreground">Supabase service role (Storage, portail, cron)</span>
-            <span
-              className={
-                integrations.supabaseService ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive'
-              }
-            >
-              {integrations.supabaseService ? 'Configuré' : 'Manquant'}
-            </span>
-          </li>
-          <li className="flex justify-between gap-2 border-b border-border/60 py-2">
-            <span className="text-muted-foreground">Resend (emails)</span>
-            <span className={integrations.resend ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}>
-              {integrations.resend ? 'Configuré' : 'Optionnel / absent'}
-            </span>
-          </li>
-          <li className="flex justify-between gap-2 border-b border-border/60 py-2">
-            <span className="text-muted-foreground">Cron (secret)</span>
-            <span className={integrations.cron ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}>
-              {integrations.cron ? 'Configuré' : 'Non défini'}
-            </span>
-          </li>
-          <li className="flex justify-between gap-2 py-2">
-            <span className="text-muted-foreground">URL app (NEXT_PUBLIC_APP_URL)</span>
-            <span className="max-w-[55%] truncate text-xs text-foreground">{integrations.appUrl || '—'}</span>
-          </li>
-        </ul>
-        <div className="mt-4 rounded-lg border border-border/60 bg-muted/20 p-3 text-xs text-muted-foreground">
-          <p className="font-medium text-foreground">Crons Vercel (aperçu)</p>
-          <ul className="mt-2 list-inside list-disc space-y-1">
-            {cronLabels.map((c) => (
-              <li key={c.path}>
-                {c.label} — <code className="text-[10px]">{c.path}</code>
-              </li>
-            ))}
-          </ul>
-          <p className="mt-2">
-            En production Hobby, seul <code className="text-[10px]">/api/cron/daily</code> est planifié dans{' '}
-            <code className="text-[10px]">vercel.json</code>. Les autres routes restent pour tests manuels ou Vercel
-            Pro.
-          </p>
+          <form action={signOutAction}>
+            <Button type="submit" variant="outline" className="rounded-full">
+              Se déconnecter
+            </Button>
+          </form>
         </div>
       </SectionCard>
+
+      {showAgencyAndPortal ? (
+        <>
+          <SectionCard
+            title="Profil agence & portail"
+            description="Données partagées par l’équipe — visibles en lecture selon les politiques d’accès ; modification réservée aux administrateurs."
+          >
+            <AgencySettingsDbForm
+              row={agencyRow}
+              canEdit
+              key={agencyRow ? `agency-${agencyRow.updated_at}` : 'agency-missing'}
+            />
+          </SectionCard>
+
+          <MonthlyGoalsSection
+            year={ymSel.year}
+            month={ymSel.month}
+            monthLabel={monthLabel}
+            prevHref={`/settings?ym=${prevYm}#objectifs-mensuels`}
+            nextHref={`/settings?ym=${nextYm}#objectifs-mensuels`}
+            initialGoal={monthlyGoalRow}
+            key={`goal-${ymSel.year}-${ymSel.month}-${monthlyGoalRow?.updated_at ?? 'new'}`}
+          />
+
+          <SectionCard
+            title="Facturation & devis (valeurs par défaut)"
+            description="Préfixes, devise, TVA % et conditions de paiement type — modifiables dans le formulaire agence ci-dessus."
+          >
+            <p className="text-sm text-muted-foreground">
+              Les numéros de facture et de devis suivent les séquences définies en base (FAC-YYYY-###, etc.).
+            </p>
+          </SectionCard>
+
+          <SectionCard
+            title="Équipe & accès"
+            description="Gestion des collaborateurs, rôles et liaison Supabase Auth."
+          >
+            <p className="text-sm text-muted-foreground">
+              Gérez les fiches, les rôles et les invitations depuis le module Équipe.
+            </p>
+            <Button asChild variant="outline" className="mt-3 rounded-full">
+              <Link href="/team">Ouvrir l’équipe</Link>
+            </Button>
+          </SectionCard>
+        </>
+      ) : null}
+
+      {showTechnical ? (
+        <SectionCard title="Intégrations & infrastructure" description="Réservé administrateur — ne pas partager.">
+          <SettingsAdminTechnicalSection />
+        </SectionCard>
+      ) : null}
     </div>
   );
 }

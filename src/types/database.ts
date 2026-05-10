@@ -160,7 +160,8 @@ export type DocumentType =
   | 'contract'
   | 'brief'
   | 'rushes'
-  | 'other';
+  | 'other'
+  | 'roadmap';
 
 export type InternalPriority = 'low' | 'normal' | 'high' | 'critical';
 
@@ -549,8 +550,24 @@ export interface DocumentRecord {
   external_link: string | null;
   visible_to_client: boolean;
   archived_at: string | null;
+  period_start: string | null;
+  period_end: string | null;
   uploaded_at: string;
   uploaded_by: string | null;
+}
+
+/** Objectif mensuel agence (table agency_monthly_goals). */
+export interface AgencyMonthlyGoalRow {
+  id: string;
+  year: number;
+  month: number;
+  revenue_goal: number;
+  client_goal: number | null;
+  video_goal: number | null;
+  task_goal: number | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Notification {
@@ -708,6 +725,12 @@ export type Database = {
         Row: AgencySettingsRow;
         Insert: Partial<AgencySettingsRow>;
         Update: Partial<AgencySettingsRow>;
+        Relationships: [];
+      };
+      agency_monthly_goals: {
+        Row: AgencyMonthlyGoalRow;
+        Insert: Partial<AgencyMonthlyGoalRow> & { year: number; month: number };
+        Update: Partial<AgencyMonthlyGoalRow>;
         Relationships: [];
       };
       user_notification_preferences: {

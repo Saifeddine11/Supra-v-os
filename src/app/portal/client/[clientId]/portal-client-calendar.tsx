@@ -83,6 +83,9 @@ function eventToAccent(e: PortalCalendarEvent, now: Date): { key: AccentKey; pri
   if (e.type === 'project_milestone') {
     return { key: 'orange', priority: 45 };
   }
+  if (e.type === 'roadmap') {
+    return { key: 'teal', priority: 32 };
+  }
   if (e.type === 'report') {
     return { key: 'teal', priority: 42 };
   }
