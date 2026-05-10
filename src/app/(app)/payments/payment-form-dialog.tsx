@@ -17,15 +17,18 @@ import { Textarea } from '@/components/ui/textarea';
 import { PAYMENT_METHOD_LABELS } from '@/types/domain';
 import type { PaymentMethod } from '@/types/database';
 import { createPaymentAction } from './actions';
+import { formatAgencyMoneyCompact } from '@/lib/money/format-money';
 
 const selectCls =
   'flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground';
 
 export function PaymentFormDialog({
   invoices,
+  agencyDisplayCurrency,
   trigger,
 }: {
   invoices: InvoiceWithClient[];
+  agencyDisplayCurrency: string;
   trigger: React.ReactNode;
 }) {
   const router = useRouter();
@@ -80,13 +83,13 @@ export function PaymentFormDialog({
               <option value="">—</option>
               {selectable.map((i) => (
                 <option key={i.id} value={i.id}>
-                  {i.ref} · {i.clients?.name} · {i.total.toLocaleString('fr-FR')} {i.currency}
+                  {i.ref} · {i.clients?.name} · {formatAgencyMoneyCompact(i.total, agencyDisplayCurrency)}
                 </option>
               ))}
             </select>
           </div>
           <input type="hidden" name="client_id" value={selected?.client_id ?? ''} readOnly />
-          <input type="hidden" name="currency" value={selected?.currency ?? 'MAD'} readOnly />
+          <input type="hidden" name="currency" value={selected?.currency ?? agencyDisplayCurrency} readOnly />
           <div className="grid gap-2 sm:grid-cols-2">
             <div className="grid gap-2">
               <Label htmlFor="pay-amt">Montant</Label>

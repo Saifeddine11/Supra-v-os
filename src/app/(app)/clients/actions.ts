@@ -8,6 +8,8 @@ import { actionError, actionOk, getPostgrestError, type ActionResult } from '@/l
 import { logStaffActivity } from '@/lib/activity/log-activity';
 import { assertClientRecordVisible } from '@/lib/auth/data-scope';
 import type { ClientStatus, ContractType } from '@/types/database';
+import { getAgencyDisplayCurrency } from '@/lib/data/agency-settings-db';
+import { normalizeAgencyCurrency } from '@/lib/money/format-money';
 
 function parseServices(raw: string): string[] {
   return raw
@@ -28,6 +30,7 @@ export async function createClientAction(formData: FormData): Promise<ActionResu
   } = await supabase.auth.getUser();
   if (!user) return actionError('Session expirée.');
 
+  const agencyCurrency = await getAgencyDisplayCurrency();
   const name = String(formData.get('name') ?? '').trim();
   if (!name) return actionError('Le nom est requis.');
 
@@ -56,7 +59,7 @@ export async function createClientAction(formData: FormData): Promise<ActionResu
     services: services.length ? services : [],
     monthly_video_quota: Number(formData.get('monthly_video_quota') ?? 0) || 0,
     monthly_fee: Number(formData.get('monthly_fee') ?? 0) || 0,
-    currency: String(formData.get('currency') ?? 'MAD').trim() || 'MAD',
+    currency: normalizeAgencyCurrency(String(formData.get('currency') ?? '').trim() || agencyCurrency),
     notes_internal: String(formData.get('notes_internal') ?? '').trim() || null,
     account_manager_id: accountManager || null,
     created_by: user.id,
@@ -89,6 +92,7 @@ export async function updateClientAction(id: string, formData: FormData): Promis
     return actionError('Client hors périmètre ou introuvable.');
   }
 
+  const agencyCurrency = await getAgencyDisplayCurrency();
   const name = String(formData.get('name') ?? '').trim();
   if (!name) return actionError('Le nom est requis.');
   const sector = String(formData.get('sector') ?? '').trim();
@@ -116,7 +120,7 @@ export async function updateClientAction(id: string, formData: FormData): Promis
     services: services.length ? services : [],
     monthly_video_quota: Number(formData.get('monthly_video_quota') ?? 0) || 0,
     monthly_fee: Number(formData.get('monthly_fee') ?? 0) || 0,
-    currency: String(formData.get('currency') ?? 'MAD').trim() || 'MAD',
+    currency: normalizeAgencyCurrency(String(formData.get('currency') ?? '').trim() || agencyCurrency),
     notes_internal: String(formData.get('notes_internal') ?? '').trim() || null,
     account_manager_id: accountManager || null,
     updated_at: new Date().toISOString(),

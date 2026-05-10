@@ -1,15 +1,13 @@
 import { format, formatDistanceToNow, isToday, isYesterday, differenceInDays } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { DEFAULT_AGENCY_SETTINGS } from '@/data/agency-settings';
+import { formatAgencyMoney } from '@/lib/money/format-money';
 
 /**
- * Format a number as currency (default MAD).
+ * Format a nombre avec suffixe devise agence (alias de {@link formatAgencyMoney}).
  */
-export function formatCurrency(amount: number, currency = 'MAD'): string {
-  const formatted = new Intl.NumberFormat('fr-FR', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  }).format(amount);
-  return `${formatted} ${currency}`;
+export function formatCurrency(amount: number, currency = DEFAULT_AGENCY_SETTINGS.defaultCurrency): string {
+  return formatAgencyMoney(amount, currency, { minFractionDigits: 0, maxFractionDigits: 2 });
 }
 
 /**

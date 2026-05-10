@@ -13,12 +13,14 @@ import { archiveClientAction, deleteClientAction } from './actions';
 export function ClientRowActions({
   client,
   employees,
+  defaultAgencyCurrency,
   canEdit,
   canDelete,
   onDeleted,
 }: {
   client: Client;
   employees: Pick<Employee, 'id' | 'full_name'>[];
+  defaultAgencyCurrency: string;
   canEdit: boolean;
   canDelete: boolean;
   /** Appelé après suppression réussie (ex. redirection depuis la fiche). */
@@ -36,6 +38,7 @@ export function ClientRowActions({
         <ClientFormDialog
           client={client}
           employees={employees}
+          defaultAgencyCurrency={defaultAgencyCurrency}
           trigger={
             <Button variant="ghost" size="icon" className="h-8 w-8" title="Modifier">
               <Pencil className="h-4 w-4" />

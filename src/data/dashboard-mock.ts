@@ -3,6 +3,8 @@
  * Centralisé et typé pour éviter le bruit dans les composants UI.
  */
 
+import { formatAgencyMoneyCompact } from '@/lib/money/format-money';
+
 export type TrendDirection = 'up' | 'down' | 'flat';
 
 export interface StatCardData {
@@ -14,6 +16,24 @@ export interface StatCardData {
   subtitleLink?: { href: string; label: string };
   trend?: { direction: TrendDirection; label: string };
   tone?: 'default' | 'positive' | 'negative' | 'warning';
+}
+
+/** Valeurs factices des cartes CA / encaissé / en attente — recalibrées sur la devise Paramètres. */
+const ILLUSTRATIVE_STAT_MONEY: Record<string, number> = {
+  rev: 186_400,
+  collected: 142_200,
+  pending: 44_200,
+};
+
+export function dashboardStatsWithIllustrativeMoney(
+  stats: StatCardData[],
+  agencyCurrency: string
+): StatCardData[] {
+  return stats.map((s) => {
+    const n = ILLUSTRATIVE_STAT_MONEY[s.id];
+    if (n == null) return s;
+    return { ...s, value: formatAgencyMoneyCompact(n, agencyCurrency) };
+  });
 }
 
 export interface UrgentItem {
@@ -177,57 +197,59 @@ export const DASHBOARD_STATS: StatCardData[] = [
   },
 ];
 
-export const URGENT_TODAY: UrgentItem[] = [
-  {
-    id: '1',
-    type: 'Facture',
-    title: 'Villa Luxe Marrakech — 22 000 MAD',
-    detail: 'Échéance dépassée de 6 jours',
-    severity: 'high',
-  },
-  {
-    id: '2',
-    type: 'Deadline',
-    title: 'Livraison teaser Emara Estates',
-    detail: 'J-2 — montage final',
-    severity: 'high',
-  },
-  {
-    id: '3',
-    type: 'Validation',
-    title: 'Room Tour Deluxe Suite — Riad Atlas',
-    detail: 'En attente de validation client',
-    severity: 'medium',
-  },
-  {
-    id: '4',
-    type: 'Tâche',
-    title: 'Script VO — Accrocar',
-    detail: 'Bloquée — contenu manquant',
-    severity: 'medium',
-  },
-  {
-    id: '5',
-    type: 'Client',
-    title: 'Africa Beauty — quota vidéo',
-    detail: '2 créations restantes ce trimestre',
-    severity: 'medium',
-  },
-  {
-    id: '6',
-    type: 'Équipe',
-    title: 'Yasmine — charge 85 %',
-    detail: 'Surcharge prévue cette semaine',
-    severity: 'high',
-  },
-  {
-    id: '7',
-    type: 'Rapport',
-    title: 'Rapport mensuel Restaurant Le Jardin',
-    detail: 'À envoyer avant vendredi',
-    severity: 'medium',
-  },
-];
+export function illustrativeUrgentItems(agencyCurrency: string): UrgentItem[] {
+  return [
+    {
+      id: '1',
+      type: 'Facture',
+      title: `Villa Luxe Marrakech — ${formatAgencyMoneyCompact(22_000, agencyCurrency)}`,
+      detail: 'Échéance dépassée de 6 jours',
+      severity: 'high',
+    },
+    {
+      id: '2',
+      type: 'Deadline',
+      title: 'Livraison teaser Emara Estates',
+      detail: 'J-2 — montage final',
+      severity: 'high',
+    },
+    {
+      id: '3',
+      type: 'Validation',
+      title: 'Room Tour Deluxe Suite — Riad Atlas',
+      detail: 'En attente de validation client',
+      severity: 'medium',
+    },
+    {
+      id: '4',
+      type: 'Tâche',
+      title: 'Script VO — Accrocar',
+      detail: 'Bloquée — contenu manquant',
+      severity: 'medium',
+    },
+    {
+      id: '5',
+      type: 'Client',
+      title: 'Africa Beauty — quota vidéo',
+      detail: '2 créations restantes ce trimestre',
+      severity: 'medium',
+    },
+    {
+      id: '6',
+      type: 'Équipe',
+      title: 'Yasmine — charge 85 %',
+      detail: 'Surcharge prévue cette semaine',
+      severity: 'high',
+    },
+    {
+      id: '7',
+      type: 'Rapport',
+      title: 'Rapport mensuel Restaurant Le Jardin',
+      detail: 'À envoyer avant vendredi',
+      severity: 'medium',
+    },
+  ];
+}
 
 export const VIDEOS_BY_FOCUS: VideoRowMock[] = [
   {
@@ -323,20 +345,23 @@ export const TEAM_WORKLOAD: WorkloadMember[] = [
   { name: 'Sif Eddine', role: 'Développeur', percent: 65 },
 ];
 
-export const FINANCE_SNAPSHOT: FinanceSnapshot = {
-  monthlyRevenue: '186 400 MAD',
-  monthlyTarget: 'Non défini',
-  collected: '142 200 MAD',
-  pending: '44 200 MAD',
-  unpaidInvoicesCount: 6,
-  paidInvoicesCount: 14,
-  pendingInvoicesCount: 5,
-  overdueInvoicesCount: 2,
-  acceptedQuotes: 3,
-  pendingQuotes: 2,
-  targetDetail: null,
-  targetProgressPercent: null,
-};
+/** Snapshot finance d’illustration — montants alignés sur la devise Paramètres agence. */
+export function illustrativeFinanceSnapshot(agencyCurrency: string): FinanceSnapshot {
+  return {
+    monthlyRevenue: formatAgencyMoneyCompact(186_400, agencyCurrency),
+    monthlyTarget: 'Non défini',
+    collected: formatAgencyMoneyCompact(142_200, agencyCurrency),
+    pending: formatAgencyMoneyCompact(44_200, agencyCurrency),
+    unpaidInvoicesCount: 6,
+    paidInvoicesCount: 14,
+    pendingInvoicesCount: 5,
+    overdueInvoicesCount: 2,
+    acceptedQuotes: 3,
+    pendingQuotes: 2,
+    targetDetail: null,
+    targetProgressPercent: null,
+  };
+}
 
 export const REVENUE_CHART: RevenueChartPoint[] = [
   { month: 'Juin', revenue: 142000, target: 180000 },
@@ -398,8 +423,8 @@ export const RECENT_NOTIFICATIONS: NotificationMock[] = [
 ];
 
 export const MOCK_INVOICES_PREVIEW = [
-  { client: 'Restaurant Le Jardin', amount: '8 000 MAD', status: 'En attente' },
-  { client: 'Villa Luxe Marrakech', amount: '22 000 MAD', status: 'En retard' },
-  { client: 'Africa Beauty', amount: '4 500 MAD', status: 'Payée' },
-  { client: 'Accrocar', amount: '15 000 MAD', status: 'Brouillon' },
+  { client: 'Restaurant Le Jardin', amountValue: 8000, status: 'En attente' },
+  { client: 'Villa Luxe Marrakech', amountValue: 22_000, status: 'En retard' },
+  { client: 'Africa Beauty', amountValue: 4500, status: 'Payée' },
+  { client: 'Accrocar', amountValue: 15_000, status: 'Brouillon' },
 ];

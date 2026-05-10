@@ -10,6 +10,8 @@ import { appBaseUrl } from '@/lib/cron/app-base-url';
 import { notifyFinanceTeam } from '@/lib/notifications/notify';
 import { logStaffActivity } from '@/lib/activity/log-activity';
 import { assertInvoiceRecordVisible } from '@/lib/auth/data-scope';
+import { getAgencyDisplayCurrency } from '@/lib/data/agency-settings-db';
+import { formatAgencyMoneyCompact, normalizeAgencyCurrency } from '@/lib/money/format-money';
 
 function computeTotals(
   lines: { quantity: number; unit_price: number }[],
@@ -34,6 +36,7 @@ export async function createInvoiceAction(formData: FormData): Promise<ActionRes
   } = await supabase.auth.getUser();
   if (!user) return actionError('Session expirée.');
 
+  const agencyCurrency = await getAgencyDisplayCurrency();
   const clientId = String(formData.get('client_id') ?? '').trim();
   if (!clientId) return actionError('Le client est requis.');
   if (!(await assertInvoiceRecordVisible(supabase, ctx, clientId))) {
@@ -70,7 +73,7 @@ export async function createInvoiceAction(formData: FormData): Promise<ActionRes
       tax_amount,
       discount,
       total,
-      currency: String(formData.get('currency') ?? 'MAD').trim() || 'MAD',
+      currency: normalizeAgencyCurrency(String(formData.get('currency') ?? '').trim() || agencyCurrency),
       notes: String(formData.get('notes') ?? '').trim() || null,
       created_by: user.id,
     })
@@ -191,11 +194,13 @@ export async function markInvoicePaidAction(id: string): Promise<ActionResult> {
   const { data: inv } = await supabase.from('invoices').select('ref,total,currency').eq('id', id).maybeSingle();
   if (inv) {
     const base = appBaseUrl();
+    const displayCurrency = await getAgencyDisplayCurrency();
+    const amountLabel = formatAgencyMoneyCompact(Number(inv.total), displayCurrency);
     await notifyFinanceTeam({
       type: 'invoice_paid',
       priority: 'normal',
       title: 'Facture payée',
-      message: `${inv.ref} — ${inv.total} ${inv.currency}`,
+      message: `${inv.ref} — ${amountLabel}`,
       relatedEntityType: 'invoice',
       relatedEntityId: id,
       linkUrl: `${base}/invoices`,

@@ -5,6 +5,7 @@ import { mapQuoteRow } from '@/lib/data/quotes';
 import { QuotePdfDocument } from '@/lib/pdf/quote-document';
 import type { QuoteItem } from '@/types/database';
 import { normalizeQuoteItemRow } from '@/lib/quotes/normalize';
+import { getAgencyDisplayCurrencyWithClient } from '@/lib/data/agency-settings-db';
 
 export const runtime = 'nodejs';
 
@@ -59,9 +60,16 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const quote = mapQuoteRow({ ...(quoteRow as Record<string, unknown>), notes: null, clients: null });
   const items = (itemsRaw ?? []).map((row) => normalizeQuoteItemRow(row as QuoteItem));
   const agencyName = process.env.NEXT_PUBLIC_AGENCY_NAME ?? 'Supra v.';
+  const displayCurrency = await getAgencyDisplayCurrencyWithClient(admin);
 
   const buffer = await renderToBuffer(
-    <QuotePdfDocument quote={quote} items={items} client={{ name: clientRow.name }} agencyName={agencyName} />
+    <QuotePdfDocument
+      quote={quote}
+      items={items}
+      client={{ name: clientRow.name }}
+      agencyName={agencyName}
+      displayCurrency={displayCurrency}
+    />
   );
 
   const filename = `${quote.ref.replace(/[^a-zA-Z0-9-_]/g, '_')}_proposition.pdf`;

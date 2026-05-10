@@ -16,12 +16,15 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { createQuoteAction } from './actions';
 import { QUOTE_PRESETS } from '@/data/quote-presets';
+import { AGENCY_CURRENCY_SELECT_OPTIONS, normalizeAgencyCurrency } from '@/lib/money/format-money';
 
 export function QuoteFormDialog({
   clients,
+  defaultCurrency,
   trigger,
 }: {
   clients: Pick<Client, 'id' | 'name'>[];
+  defaultCurrency: string;
   trigger: React.ReactNode;
 }) {
   const router = useRouter();
@@ -151,7 +154,18 @@ export function QuoteFormDialog({
             </div>
             <div className="grid gap-2">
               <Label htmlFor="qt-cur">Devise</Label>
-              <Input id="qt-cur" name="currency" defaultValue="MAD" />
+              <select
+                id="qt-cur"
+                name="currency"
+                className="h-10 rounded-lg border border-border bg-muted px-3 text-sm"
+                defaultValue={normalizeAgencyCurrency(defaultCurrency)}
+              >
+                {AGENCY_CURRENCY_SELECT_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
           <input type="hidden" name="template" value="supra_premium_black_orange" />

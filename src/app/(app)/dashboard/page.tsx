@@ -39,19 +39,24 @@ import { NotificationsPreview } from '@/components/dashboard/notifications-previ
 import {
   CLIENTS_FOLLOW,
   DASHBOARD_STATS,
-  FINANCE_SNAPSHOT,
   PROJECTS_ONGOING,
   TASKS_OVERDUE,
   TASKS_TODAY,
   TEAM_WORKLOAD,
-  URGENT_TODAY,
   VIDEOS_BY_FOCUS,
+  dashboardStatsWithIllustrativeMoney,
+  illustrativeFinanceSnapshot,
+  illustrativeUrgentItems,
   type StatCardData,
 } from '@/data/dashboard-mock';
 import { financeSnapshotFromAgg, getDashboardSummary } from '@/lib/data/dashboard-stats';
+import { formatAgencyMoneyCompact } from '@/lib/money/format-money';
 import { listRecentNotifications } from '@/lib/data/notifications-user';
-import { listRecentActivity } from '@/lib/data/activity-logs';
+import { listDashboardActivityForVariant } from '@/lib/data/activity-logs';
 import { RecentActivityPreview } from '@/components/dashboard/recent-activity-preview';
+import { PersonalWorkOverview } from '@/components/dashboard/personal-work-overview';
+import { getDashboardVariant, shouldLoadGlobalActivityFeed } from '@/lib/dashboard/dashboard-variant';
+import { getPersonalDashboardWork } from '@/lib/data/dashboard-personal-work';
 import type { UserRole } from '@/types/database';
 
 export const metadata: Metadata = {
@@ -100,16 +105,40 @@ function roleLabel(role: UserRole | undefined) {
   return role?.replace(/_/g, ' ') ?? '—';
 }
 
-function introForScope(scope: string, role: UserRole | undefined): string {
+function introForDashboard(
+  variant: ReturnType<typeof getDashboardVariant>,
+  scope: string,
+  role: UserRole | undefined
+): string {
+  if (variant === 'individual' && role) {
+    const rk = role === 'designer' ? 'developer' : role;
+    if (rk === 'editor') {
+      return 'Voici vos tâches, vidéos et échéances à suivre.';
+    }
+    if (rk === 'cameraman') {
+      return 'Vos tournages, tâches et livrables assignés — priorité au terrain.';
+    }
+    if (rk === 'community_manager') {
+      return 'Contenus, calendrier éditorial et rapports sur votre périmètre.';
+    }
+    if (rk === 'seo') {
+      return 'Projets SEO, rapports et tâches qui vous sont confiés.';
+    }
+    if (rk === 'developer') {
+      return 'Projets et tâches qui vous sont assignés, avec les échéances clés.';
+    }
+    return 'Vue centrée sur votre charge personnelle — sans journaux internes.';
+  }
+  if (variant === 'manager') {
+    return 'Pilotage opérationnel : clients, projets, production et charge équipe. Les journaux RH et Auth ne sont pas affichés ici.';
+  }
   switch (scope) {
     case 'full':
-      return 'Pilotage agence : KPI globaux, charge équipe et finance (selon accès). Les blocs détaillés maquette complètent la vue live.';
+      return 'Vue globale agence : indicateurs consolidés, finance, équipe et audit des actions sensibles.';
     case 'finance':
-      return 'Concentré trésorerie et facturation : encaissements, impayés et devis. Les agrégats proviennent de Supabase.';
+      return 'Trésorerie et facturation : encaissements, impayés, échéances et relances — sans charge créative ni journaux RH.';
     case 'commercial':
-      return 'Portefeuille clients qui vous sont attribués, pipeline de devis et suivi des relances. Chiffres devis filtrés sur vos comptes.';
-    case 'individual':
-      return 'Vue centrée sur vos tâches, livrables et échéances assignés — sans métriques globales agence.';
+      return 'Votre portefeuille clients, devis et factures associées. Pas d’audit technique ni de logs employés.';
     default:
       return 'Tableau de bord Supra v.';
   }
@@ -270,11 +299,24 @@ export default async function DashboardPage() {
   }
 
   const todayLabel = format(new Date(), "EEEE d MMMM yyyy", { locale: fr });
-  let recentActivity: Awaited<ReturnType<typeof listRecentActivity>> = [];
-  try {
-    recentActivity = await listRecentActivity(10);
-  } catch {
-    recentActivity = [];
+  const variant = getDashboardVariant(ctx.role);
+
+  let dashboardActivity: Awaited<ReturnType<typeof listDashboardActivityForVariant>> = [];
+  if (shouldLoadGlobalActivityFeed(variant)) {
+    try {
+      dashboardActivity = await listDashboardActivityForVariant(variant, 10);
+    } catch {
+      dashboardActivity = [];
+    }
+  }
+
+  let personalWork: Awaited<ReturnType<typeof getPersonalDashboardWork>> | null = null;
+  if (variant === 'individual' && ctx.employee) {
+    try {
+      personalWork = await getPersonalDashboardWork(ctx.employee.id, ctx.employee.role);
+    } catch {
+      personalWork = { tasks: [], videos: [] };
+    }
   }
 
   const [summary, dashboardNotifications] = await Promise.all([
@@ -282,6 +324,7 @@ export default async function DashboardPage() {
     listRecentNotifications(6, ctx),
   ]);
   const liveFinancePartial = financeSnapshotFromAgg(summary.finance, summary.agencyMonthlyGoal);
+  const illustrativeStats = dashboardStatsWithIllustrativeMoney(DASHBOARD_STATS, summary.agencyDisplayCurrency);
 
   const liveOverrides: Partial<Record<string, Partial<StatCardData>>> = {
     clients: {
@@ -353,13 +396,13 @@ export default async function DashboardPage() {
     const f = summary.finance;
     const c = f.currency;
     liveOverrides.rev = {
-      value: `${f.monthlyRevenue.toLocaleString('fr-FR', { minimumFractionDigits: 0 })} ${c}`,
+      value: formatAgencyMoneyCompact(f.monthlyRevenue, c),
       subtitle: 'factures payées — encaissements du mois',
       trend: undefined,
       tone: 'positive',
     };
     liveOverrides.pending = {
-      value: `${f.pendingAmount.toLocaleString('fr-FR', { minimumFractionDigits: 0 })} ${c}`,
+      value: formatAgencyMoneyCompact(f.pendingAmount, c),
       subtitle: `${f.pendingCount} facture(s) envoyée(s) ou en attente`,
       trend: undefined,
       tone: 'warning',
@@ -380,7 +423,7 @@ export default async function DashboardPage() {
   if (showFinanceTargets) {
     const g = summary.agencyMonthlyGoal;
     const fin = summary.finance;
-    const c = fin?.currency ?? 'MAD';
+    const c = fin?.currency ?? summary.agencyDisplayCurrency;
     const collected = fin?.monthlyRevenue ?? 0;
     if (!g) {
       liveOverrides.target = {
@@ -408,7 +451,7 @@ export default async function DashboardPage() {
       const clamped = Math.min(100, Math.max(0, pct));
       liveOverrides.target = {
         title: 'Objectif mensuel (CA)',
-        value: `${g.revenue_goal.toLocaleString('fr-FR', { minimumFractionDigits: 0 })} ${c}`,
+        value: formatAgencyMoneyCompact(g.revenue_goal, c),
         subtitle: `${clamped} % de l’objectif (CA encaissé ce mois)`,
         trend: undefined,
         tone: clamped >= 100 ? 'positive' : 'default',
@@ -421,12 +464,12 @@ export default async function DashboardPage() {
   if (summary.scope === 'individual') {
     mergedStats = individualStatCards(ctx.employee.role, summary.personal);
   } else if (summary.scope === 'finance') {
-    mergedStats = DASHBOARD_STATS.filter((s) => FINANCE_STAT_IDS.has(s.id)).map((s) => ({
+    mergedStats = illustrativeStats.filter((s) => FINANCE_STAT_IDS.has(s.id)).map((s) => ({
       ...s,
       ...(liveOverrides[s.id] ?? {}),
     }));
   } else if (summary.scope === 'commercial' && summary.commercial) {
-    const baseCommercial = DASHBOARD_STATS.filter((s) => s.id === 'clients').map((s) => ({
+    const baseCommercial = illustrativeStats.filter((s) => s.id === 'clients').map((s) => ({
       ...s,
       ...(liveOverrides[s.id] ?? {}),
     }));
@@ -434,24 +477,35 @@ export default async function DashboardPage() {
     if (summary.finance) {
       mergedStats = [
         ...mergedStats,
-        ...DASHBOARD_STATS.filter((s) => FINANCE_STAT_IDS.has(s.id)).map((s) => ({
+        ...illustrativeStats.filter((s) => FINANCE_STAT_IDS.has(s.id)).map((s) => ({
           ...s,
           ...(liveOverrides[s.id] ?? {}),
         })),
       ];
     }
   } else {
-    mergedStats = DASHBOARD_STATS.map((s) => ({
+    mergedStats = illustrativeStats.map((s) => ({
       ...s,
       ...(liveOverrides[s.id] ?? {}),
     }));
   }
 
-  const showFullProduction = summary.scope === 'full';
+  const showFullProduction =
+    summary.scope === 'full' && (variant === 'admin' || variant === 'manager');
+  const showUrgentTodayMock = variant === 'admin';
   const showTeamBlocks = summary.scope === 'full';
   const showFinanceBlock = summary.scope === 'full' || summary.scope === 'finance' || summary.scope === 'commercial';
   const showClientBlock = summary.scope === 'full' || summary.scope === 'commercial';
   const showProjectBlock = summary.scope === 'full';
+  const showPersonalWorkColumn = Boolean(
+    variant === 'individual' && ctx.employee && personalWork
+  );
+  const activitySectionTitle =
+    variant === 'admin' ? 'Activité récente' : 'Fil d’activité métier';
+  const activitySectionDescription =
+    variant === 'admin'
+      ? 'Audit interne — toutes zones (libellés lisibles).'
+      : 'Dernières actions opérationnelles (excl. RH / Auth).';
 
   return (
     <div className="space-y-8">
@@ -462,7 +516,7 @@ export default async function DashboardPage() {
             Bonjour {firstName(ctx.employee.full_name)},
           </h1>
           <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-base">
-            {introForScope(summary.scope, ctx.employee.role)}
+            {introForDashboard(variant, summary.scope, ctx.employee.role)}
           </p>
           <p className="text-sm text-muted-foreground">
             Rôle :{' '}
@@ -485,8 +539,20 @@ export default async function DashboardPage() {
         </div>
       </header>
 
-      {summary.scope === 'full' ? (
+      {summary.scope === 'full' && variant === 'admin' ? (
         <SectionCard title="Mon activité" description="Vos tâches et charges personnelles (données live).">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {individualStatCards(ctx.employee.role, summary.personal).slice(0, 4).map((s) => (
+              <StatCard key={s.id} data={s} icon={STAT_ICONS[s.id] ?? ListTodo} />
+            ))}
+          </div>
+        </SectionCard>
+      ) : null}
+      {summary.scope === 'full' && variant === 'manager' ? (
+        <SectionCard
+          title="Charge personnelle"
+          description="Vos propres tâches et indicateurs — la vue détaillée équipe est dans les blocs ci-dessous."
+        >
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {individualStatCards(ctx.employee.role, summary.personal).slice(0, 4).map((s) => (
               <StatCard key={s.id} data={s} icon={STAT_ICONS[s.id] ?? ListTodo} />
@@ -508,7 +574,7 @@ export default async function DashboardPage() {
 
       <div className="grid gap-6 xl:grid-cols-3">
         <div className="space-y-6 xl:col-span-2">
-          {summary.scope === 'full' ? (
+          {showUrgentTodayMock ? (
             <SectionCard
               title="Urgent aujourd’hui"
               description="Points nécessitant une action rapide de l’équipe."
@@ -518,13 +584,44 @@ export default async function DashboardPage() {
                 </Link>
               }
             >
-              <UrgentToday items={URGENT_TODAY} />
+              <UrgentToday items={illustrativeUrgentItems(summary.agencyDisplayCurrency)} />
             </SectionCard>
+          ) : null}
+          {showPersonalWorkColumn && personalWork ? (
+            <PersonalWorkOverview
+              role={ctx.employee!.role}
+              tasks={personalWork.tasks}
+              videos={personalWork.videos}
+            />
           ) : null}
           {showFullProduction ? <ProductionOverview videos={VIDEOS_BY_FOCUS} /> : null}
           {showTeamBlocks ? <TeamTasksSection today={TASKS_TODAY} overdue={TASKS_OVERDUE} /> : null}
           {showFinanceBlock ? (
-            <FinanceOverview snapshot={FINANCE_SNAPSHOT} liveFinance={liveFinancePartial} />
+            <FinanceOverview
+              snapshot={illustrativeFinanceSnapshot(summary.agencyDisplayCurrency)}
+              liveFinance={liveFinancePartial}
+              chartCurrency={summary.agencyDisplayCurrency}
+            />
+          ) : null}
+          {summary.scope === 'finance' &&
+          summary.finance &&
+          summary.finance.paidCount === 0 &&
+          summary.finance.pendingCount === 0 &&
+          summary.finance.unpaidCount === 0 ? (
+            <SectionCard title="Rappels" description="Aucune facture en base pour l’instant.">
+              <p className="text-sm text-muted-foreground">
+                Les indicateurs restent à zéro sans erreur. Ajoutez des factures ou des paiements depuis le module
+                Finance lorsque l’activité redémarre.
+              </p>
+            </SectionCard>
+          ) : null}
+          {summary.scope === 'commercial' && summary.commercial && summary.activeClients === 0 ? (
+            <SectionCard title="Portefeuille" description="Aucun client actif ne vous est encore rattaché.">
+              <p className="text-sm text-muted-foreground">
+                Aucun client assigné pour le moment — demandez à un administrateur de vous attribuer des comptes ou
+                créez un prospect si vous en avez le droit.
+              </p>
+            </SectionCard>
           ) : null}
         </div>
         <div className="space-y-6">
@@ -532,9 +629,9 @@ export default async function DashboardPage() {
           {showClientBlock ? <ClientOverview clients={CLIENTS_FOLLOW} /> : null}
           {showProjectBlock ? <ProjectOverview projects={PROJECTS_ONGOING} /> : null}
           <NotificationsPreview items={dashboardNotifications} />
-          {recentActivity.length > 0 ? (
-            <SectionCard title="Activité récente" description="Journal serveur (aperçu).">
-              <RecentActivityPreview logs={recentActivity} />
+          {dashboardActivity.length > 0 && (variant === 'admin' || variant === 'manager') ? (
+            <SectionCard title={activitySectionTitle} description={activitySectionDescription}>
+              <RecentActivityPreview logs={dashboardActivity} variant={variant} />
             </SectionCard>
           ) : null}
         </div>

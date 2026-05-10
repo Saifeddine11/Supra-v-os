@@ -4,6 +4,7 @@ import { getAuthContext } from '@/lib/auth/permissions';
 import { canDeleteClient, canModifyClients } from '@/lib/auth/capabilities';
 import { listClients } from '@/lib/data/clients';
 import { listEmployeesForSelect } from '@/lib/data/employees';
+import { getAgencyDisplayCurrency } from '@/lib/data/agency-settings-db';
 import { CLIENT_STATUS_MAP } from '@/types/domain';
 import { Badge } from '@/components/ui/badge';
 import { SectionCard } from '@/components/shared/section-card';
@@ -28,9 +29,10 @@ export default async function ClientsPage({
       ? 'all'
       : (statusParam as ClientStatus);
 
-  const [clients, employees] = await Promise.all([
+  const [clients, employees, agencyCurrency] = await Promise.all([
     listClients({ search: q, status }, ctx),
     listEmployeesForSelect(ctx),
+    getAgencyDisplayCurrency(),
   ]);
 
   const canEdit = canModifyClients(ctx?.role ?? null);
@@ -50,6 +52,7 @@ export default async function ClientsPage({
         canCreate={canEdit}
         defaultQ={q}
         defaultStatus={statusParam}
+        defaultAgencyCurrency={agencyCurrency}
       />
 
       <SectionCard title="Liste" description={`${clients.length} client(s) affiché(s)`}>
@@ -94,7 +97,13 @@ export default async function ClientsPage({
                         {c.phone ? <span className="block text-xs">{c.phone}</span> : null}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <ClientRowActions client={c} employees={employees} canEdit={canEdit} canDelete={canDelete} />
+                        <ClientRowActions
+                          client={c}
+                          employees={employees}
+                          defaultAgencyCurrency={agencyCurrency}
+                          canEdit={canEdit}
+                          canDelete={canDelete}
+                        />
                       </td>
                     </tr>
                   );

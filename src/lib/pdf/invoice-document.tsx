@@ -1,6 +1,7 @@
 import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
 import type { Client, Invoice, InvoiceItem } from '@/types/database';
 import { INVOICE_STATUS_MAP } from '@/types/domain';
+import { formatAgencyMoney, normalizeAgencyCurrency } from '@/lib/money/format-money';
 
 const ORANGE = '#FF450F';
 const CREAM = '#F8F4EF';
@@ -103,21 +104,21 @@ const styles = StyleSheet.create({
   },
 });
 
-function fmt(n: number, currency: string) {
-  return `${n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
-}
-
 export function InvoicePdfDocument({
   invoice,
   items,
   client,
   agencyName = 'Supra v.',
+  displayCurrency,
 }: {
   invoice: Invoice;
   items: InvoiceItem[];
   client: Client;
   agencyName?: string;
+  displayCurrency?: string | null;
 }) {
+  const cur = normalizeAgencyCurrency(displayCurrency ?? invoice.currency);
+  const fmtPdf = (n: number) => formatAgencyMoney(n, cur);
   const statusLabel = INVOICE_STATUS_MAP[invoice.status].label;
 
   return (
@@ -174,31 +175,31 @@ export function InvoicePdfDocument({
             <Text style={styles.tdDesc}>{line.description}</Text>
             <Text style={styles.tdQty}>{String(line.quantity)}</Text>
             <Text style={styles.tdUnit}>{line.unit ?? '—'}</Text>
-            <Text style={styles.tdPrice}>{fmt(line.unit_price, invoice.currency)}</Text>
-            <Text style={styles.tdTotal}>{fmt(line.total, invoice.currency)}</Text>
+            <Text style={styles.tdPrice}>{fmtPdf(line.unit_price)}</Text>
+            <Text style={styles.tdTotal}>{fmtPdf(line.total)}</Text>
           </View>
         ))}
 
         <View style={styles.totals}>
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>Sous-total HT</Text>
-            <Text style={styles.totalValue}>{fmt(invoice.subtotal, invoice.currency)}</Text>
+            <Text style={styles.totalValue}>{fmtPdf(invoice.subtotal)}</Text>
           </View>
           {invoice.discount > 0 ? (
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>Remise</Text>
-              <Text style={styles.totalValue}>- {fmt(invoice.discount, invoice.currency)}</Text>
+              <Text style={styles.totalValue}>- {fmtPdf(invoice.discount)}</Text>
             </View>
           ) : null}
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>TVA ({invoice.tax_rate}%)</Text>
-            <Text style={styles.totalValue}>{fmt(invoice.tax_amount, invoice.currency)}</Text>
+            <Text style={styles.totalValue}>{fmtPdf(invoice.tax_amount)}</Text>
           </View>
           <View style={[styles.totalRow, styles.grand]}>
             <Text style={[styles.totalLabel, { fontFamily: 'Helvetica-Bold', color: CHARCOAL }]}>
               Total TTC
             </Text>
-            <Text style={[styles.totalValue, { fontSize: 14, color: ORANGE }]}>{fmt(invoice.total, invoice.currency)}</Text>
+            <Text style={[styles.totalValue, { fontSize: 14, color: ORANGE }]}>{fmtPdf(invoice.total)}</Text>
           </View>
         </View>
 

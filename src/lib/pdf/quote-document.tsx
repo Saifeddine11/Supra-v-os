@@ -1,6 +1,7 @@
 import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
 import type { Quote, QuoteItem } from '@/types/database';
 import { QUOTE_PDF_COPY } from '@/lib/pdf/quote-pdf-copy';
+import { agencyCurrencyDisplaySuffix, formatAgencyMoney, normalizeAgencyCurrency } from '@/lib/money/format-money';
 
 const ORANGE = '#FF3D0A';
 const ORANGE_ALT = '#FF450F';
@@ -376,10 +377,6 @@ const styles = StyleSheet.create({
   },
 });
 
-function fmt(n: number, currency: string) {
-  return `${n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
-}
-
 function lineLabel(item: QuoteItem) {
   const name = (item.service_name || item.description).trim();
   return name || 'Prestation';
@@ -418,12 +415,19 @@ export function QuotePdfDocument({
   items,
   client,
   agencyName = 'Supra v.',
+  /** Devise d’affichage globale (Paramètres agence) — sans conversion de montants. */
+  displayCurrency,
 }: {
   quote: Quote;
   items: QuoteItem[];
   client: { name: string };
   agencyName?: string;
+  displayCurrency?: string | null;
 }) {
+  const cur = normalizeAgencyCurrency(displayCurrency ?? quote.currency);
+  const fmtPdf = (n: number) => formatAgencyMoney(n, cur);
+  const subtitleCurrency = agencyCurrencyDisplaySuffix(cur);
+
   const title = (quote.proposal_title ?? '').trim() || QUOTE_PDF_COPY.docType;
   const packageName = (quote.package_name ?? '').trim();
   const positioning = (quote.strategic_positioning ?? '').trim();
@@ -592,10 +596,10 @@ export function QuotePdfDocument({
             </View>
             <View style={styles.tdPrice}>
               <Text style={{ color: CREAM, fontSize: 9.5, fontFamily: 'Helvetica-Bold' }}>
-                {fmt(Number(item.total), quote.currency)}
+                {fmtPdf(Number(item.total))}
               </Text>
               <Text style={{ color: MUTED, fontSize: 7.5, marginTop: 3 }}>
-                {Number(item.quantity)} × {fmt(Number(item.unit_price), quote.currency)}
+                {Number(item.quantity)} × {fmtPdf(Number(item.unit_price))}
               </Text>
             </View>
           </View>
@@ -603,18 +607,18 @@ export function QuotePdfDocument({
 
         <View style={styles.totalsWrap}>
           <Text style={styles.totalsTitle}>{QUOTE_PDF_COPY.totalsTitle}</Text>
-          <Text style={styles.totalsSub}>{QUOTE_PDF_COPY.totalsSubtitle(quote.currency)}</Text>
+          <Text style={styles.totalsSub}>{QUOTE_PDF_COPY.totalsSubtitle(subtitleCurrency)}</Text>
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>{QUOTE_PDF_COPY.subtotalHt}</Text>
-            <Text style={styles.totalValue}>{fmt(subtotal, quote.currency)}</Text>
+            <Text style={styles.totalValue}>{fmtPdf(subtotal)}</Text>
           </View>
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>{QUOTE_PDF_COPY.vat(Number(quote.tax_rate))}</Text>
-            <Text style={styles.totalValue}>{fmt(tax, quote.currency)}</Text>
+            <Text style={styles.totalValue}>{fmtPdf(tax)}</Text>
           </View>
           <View style={styles.totalRow}>
             <Text style={styles.totalLabel}>{QUOTE_PDF_COPY.beforeDiscount}</Text>
-            <Text style={styles.totalValue}>{fmt(totalBeforeDiscount, quote.currency)}</Text>
+            <Text style={styles.totalValue}>{fmtPdf(totalBeforeDiscount)}</Text>
           </View>
           {discount > 0 ? (
             <View style={styles.totalRow}>
@@ -624,23 +628,23 @@ export function QuotePdfDocument({
                   ? ` (${quote.discount_percent} %)`
                   : ''}
               </Text>
-              <Text style={styles.totalValue}>− {fmt(discount, quote.currency)}</Text>
+              <Text style={styles.totalValue}>− {fmtPdf(discount)}</Text>
             </View>
           ) : null}
           <View style={styles.grandRow}>
             <Text style={styles.totalLabel}>{QUOTE_PDF_COPY.totalTtc}</Text>
-            <Text style={[styles.totalValue, { fontSize: 12, color: ORANGE }]}>{fmt(total, quote.currency)}</Text>
+            <Text style={[styles.totalValue, { fontSize: 12, color: ORANGE }]}>{fmtPdf(total)}</Text>
           </View>
           {firstMonth != null && !Number.isNaN(firstMonth) ? (
             <View style={[styles.totalRow, { marginTop: 12 }]}>
               <Text style={styles.totalLabel}>{QUOTE_PDF_COPY.firstMonth}</Text>
-              <Text style={styles.totalValue}>{fmt(firstMonth, quote.currency)}</Text>
+              <Text style={styles.totalValue}>{fmtPdf(firstMonth)}</Text>
             </View>
           ) : null}
           {recurring != null && !Number.isNaN(recurring) ? (
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>{QUOTE_PDF_COPY.recurring}</Text>
-              <Text style={styles.totalValue}>{fmt(recurring, quote.currency)}</Text>
+              <Text style={styles.totalValue}>{fmtPdf(recurring)}</Text>
             </View>
           ) : null}
           {commitment != null && !Number.isNaN(commitment) ? (
@@ -718,10 +722,10 @@ export function QuotePdfDocument({
 
         <View style={styles.totalsWrap}>
           <Text style={styles.totalsTitle}>{QUOTE_PDF_COPY.summaryClosing}</Text>
-          <Text style={styles.totalsSub}>{QUOTE_PDF_COPY.totalsSubtitle(quote.currency)}</Text>
+          <Text style={styles.totalsSub}>{QUOTE_PDF_COPY.totalsSubtitle(subtitleCurrency)}</Text>
           <View style={styles.grandRow}>
             <Text style={styles.totalLabel}>{QUOTE_PDF_COPY.totalTtc}</Text>
-            <Text style={[styles.totalValue, { fontSize: 13, color: ORANGE }]}>{fmt(total, quote.currency)}</Text>
+            <Text style={[styles.totalValue, { fontSize: 13, color: ORANGE }]}>{fmtPdf(total)}</Text>
           </View>
         </View>
 

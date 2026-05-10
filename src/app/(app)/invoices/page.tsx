@@ -16,6 +16,8 @@ import { getStatusTableRowClasses, invoiceStatusToTone } from '@/lib/ui/status-b
 import { AccessDenied } from '@/components/shared/access-denied';
 import { InvoiceFormDialog } from './invoice-form-dialog';
 import { InvoiceRowActions } from './invoice-row-actions';
+import { getAgencyDisplayCurrency } from '@/lib/data/agency-settings-db';
+import { formatAgencyMoney } from '@/lib/money/format-money';
 
 export const metadata: Metadata = { title: 'Factures' };
 
@@ -32,9 +34,10 @@ export default async function InvoicesPage() {
     );
   }
 
-  const [invoices, clients] = await Promise.all([
+  const [invoices, clients, agencyCurrency] = await Promise.all([
     listInvoicesWithClients(ctx),
     listClients({}, ctx),
+    getAgencyDisplayCurrency(),
   ]);
   const clientOpts = clients.map((c) => ({ id: c.id, name: c.name }));
   const today = new Date().toISOString().slice(0, 10);
@@ -51,6 +54,7 @@ export default async function InvoicesPage() {
         {canModify ? (
           <InvoiceFormDialog
             clients={clientOpts}
+            defaultCurrency={agencyCurrency}
             trigger={
               <Button variant="primary" className="rounded-full">
                 <Plus className="h-4 w-4" />
@@ -96,7 +100,7 @@ export default async function InvoicesPage() {
                       <td className="px-4 py-3 font-medium text-foreground">{inv.ref}</td>
                       <td className="px-4 py-3 text-muted-foreground">{inv.clients?.name ?? '—'}</td>
                       <td className="px-4 py-3 tabular-nums text-foreground">
-                        {inv.total.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} {inv.currency}
+                        {formatAgencyMoney(inv.total, agencyCurrency)}
                       </td>
                       <td
                         className={cn(

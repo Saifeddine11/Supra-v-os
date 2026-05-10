@@ -12,6 +12,8 @@ import { getQuotePreset } from '@/data/quote-presets';
 import { normalizeStrategicBlocks } from '@/lib/quotes/normalize';
 import { logStaffActivity } from '@/lib/activity/log-activity';
 import { assertInvoiceRecordVisible, assertQuoteRecordVisible } from '@/lib/auth/data-scope';
+import { getAgencyDisplayCurrency } from '@/lib/data/agency-settings-db';
+import { normalizeAgencyCurrency } from '@/lib/money/format-money';
 
 function computeTotals(
   lines: { quantity: number; unit_price: number }[],
@@ -112,6 +114,7 @@ export async function createQuoteAction(formData: FormData): Promise<ActionResul
   } = await supabase.auth.getUser();
   if (!user) return actionError('Session expirée.');
 
+  const agencyCurrency = await getAgencyDisplayCurrency();
   const clientId = String(formData.get('client_id') ?? '').trim();
   if (!clientId) return actionError('Le client est requis.');
   if (!(await assertQuoteRecordVisible(supabase, ctx, clientId))) {
@@ -227,7 +230,7 @@ export async function createQuoteAction(formData: FormData): Promise<ActionResul
       tax_amount,
       discount,
       total,
-      currency: String(formData.get('currency') ?? 'MAD').trim() || 'MAD',
+      currency: normalizeAgencyCurrency(String(formData.get('currency') ?? '').trim() || agencyCurrency),
       notes: String(formData.get('notes') ?? '').trim() || null,
       conditions,
       template,
@@ -360,6 +363,7 @@ export async function updateQuoteWithItemsAction(quoteId: string, formData: Form
     return actionError('Devis inaccessible.');
   }
 
+  const agencyCurrency = await getAgencyDisplayCurrency();
   const linesRaw = String(formData.get('lines_json') ?? '').trim();
   const parsedLines = parseLinesJson(linesRaw);
   if (!parsedLines) return actionError('Lignes invalides.');
@@ -396,7 +400,7 @@ export async function updateQuoteWithItemsAction(quoteId: string, formData: Form
       discount,
       subtotal,
       total,
-      currency: String(formData.get('currency') ?? 'MAD').trim() || 'MAD',
+      currency: normalizeAgencyCurrency(String(formData.get('currency') ?? '').trim() || agencyCurrency),
       notes: String(formData.get('notes') ?? '').trim() || null,
       conditions: String(formData.get('conditions') ?? '').trim() || null,
       template: String(formData.get('template') ?? '').trim() || 'supra_premium_black_orange',

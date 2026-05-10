@@ -15,6 +15,8 @@ import { AccessDenied } from '@/components/shared/access-denied';
 import { PaymentFormDialog } from './payment-form-dialog';
 import { PaymentsToolbar } from './payments-toolbar';
 import { PaymentRowActions } from './payment-row-actions';
+import { getAgencyDisplayCurrency } from '@/lib/data/agency-settings-db';
+import { formatAgencyMoney } from '@/lib/money/format-money';
 
 export const metadata: Metadata = { title: 'Paiements' };
 
@@ -46,19 +48,22 @@ export default async function PaymentsPage({
   const invStatus =
     sp?.invStatus === 'all' || !sp?.invStatus ? 'all' : (sp.invStatus as InvoiceStatus);
 
-  const payments = await listPaymentsWithRelations(
-    {
-      search: sp?.q,
-      clientId: sp?.client === 'all' || !sp?.client ? 'all' : sp.client,
-      method: sp?.method === 'all' || !sp?.method ? 'all' : (sp.method as 'bank_transfer'),
-      from: sp?.from,
-      to: sp?.to,
-      invoiceStatus: invStatus,
-    },
-    ctx
-  );
-  const stats = await getPaymentDashboardStats(ctx);
-  const invoices = await listInvoicesWithClients(ctx);
+  const [payments, stats, invoices, agencyCurrency] = await Promise.all([
+    listPaymentsWithRelations(
+      {
+        search: sp?.q,
+        clientId: sp?.client === 'all' || !sp?.client ? 'all' : sp.client,
+        method: sp?.method === 'all' || !sp?.method ? 'all' : (sp.method as 'bank_transfer'),
+        from: sp?.from,
+        to: sp?.to,
+        invoiceStatus: invStatus,
+      },
+      ctx
+    ),
+    getPaymentDashboardStats(ctx),
+    listInvoicesWithClients(ctx),
+    getAgencyDisplayCurrency(),
+  ]);
   const unpaid = invoices.filter((i) => i.status !== 'paid' && i.status !== 'cancelled' && i.status !== 'draft');
 
   const clientOpts = [...new Map(invoices.map((i) => [i.client_id, i.clients?.name ?? ''])).entries()].map(
@@ -77,6 +82,7 @@ export default async function PaymentsPage({
         {canPay ? (
           <PaymentFormDialog
             invoices={invoices}
+            agencyDisplayCurrency={agencyCurrency}
             trigger={
               <Button variant="primary" className="rounded-full" disabled={unpaid.length === 0}>
                 <Plus className="h-4 w-4" />
@@ -91,17 +97,17 @@ export default async function PaymentsPage({
         {[
           {
             title: 'Encaissé ce mois',
-            value: `${stats.collected_this_month.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} ${stats.currency}`,
+            value: formatAgencyMoney(stats.collected_this_month, stats.currency),
             hint: `${stats.payments_count_month} paiement(s) enregistré(s) ce mois`,
           },
           {
             title: 'Montant en attente',
-            value: `${stats.pending_invoices_amount.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} ${stats.currency}`,
+            value: formatAgencyMoney(stats.pending_invoices_amount, stats.currency),
             hint: 'Factures non soldées (hors retard)',
           },
           {
             title: 'Montant en retard',
-            value: `${stats.overdue_invoices_amount.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} ${stats.currency}`,
+            value: formatAgencyMoney(stats.overdue_invoices_amount, stats.currency),
             hint: 'À relancer',
           },
           {
@@ -181,7 +187,7 @@ export default async function PaymentsPage({
                         )}
                       </td>
                       <td className="px-4 py-3 tabular-nums text-foreground">
-                        {p.amount.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} {p.currency}
+                        {formatAgencyMoney(p.amount, agencyCurrency)}
                       </td>
                       <td className="px-4 py-3">
                         <Badge variant="outline" className="font-normal">

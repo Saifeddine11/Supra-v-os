@@ -15,12 +15,15 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { createInvoiceAction } from './actions';
+import { AGENCY_CURRENCY_SELECT_OPTIONS, normalizeAgencyCurrency } from '@/lib/money/format-money';
 
 export function InvoiceFormDialog({
   clients,
+  defaultCurrency,
   trigger,
 }: {
   clients: Pick<Client, 'id' | 'name'>[];
+  defaultCurrency: string;
   trigger: React.ReactNode;
 }) {
   const router = useRouter();
@@ -116,7 +119,18 @@ export function InvoiceFormDialog({
             </div>
             <div className="grid gap-2">
               <Label htmlFor="inv-cur">Devise</Label>
-              <Input id="inv-cur" name="currency" defaultValue="MAD" />
+              <select
+                id="inv-cur"
+                name="currency"
+                className="h-10 rounded-lg border border-border bg-muted px-3 text-sm"
+                defaultValue={normalizeAgencyCurrency(defaultCurrency)}
+              >
+                {AGENCY_CURRENCY_SELECT_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
           <div className="grid gap-2">

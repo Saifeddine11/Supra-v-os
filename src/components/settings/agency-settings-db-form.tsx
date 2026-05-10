@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { updateAgencySettingsAction } from '@/app/(app)/settings/actions';
+import { AGENCY_CURRENCY_SELECT_OPTIONS, normalizeAgencyCurrency } from '@/lib/money/format-money';
 
 function displayValues(row: AgencySettingsRow | null) {
   const d = DEFAULT_AGENCY_SETTINGS;
@@ -159,7 +160,23 @@ export function AgencySettingsDbForm({
         </div>
         <div className="grid gap-2">
           <Label htmlFor="default_currency">Devise par défaut</Label>
-          <Input id="default_currency" name="default_currency" defaultValue={v.default_currency} disabled={pending} />
+          <select
+            id="default_currency"
+            name="default_currency"
+            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            defaultValue={normalizeAgencyCurrency(v.default_currency)}
+            disabled={pending}
+          >
+            {AGENCY_CURRENCY_SELECT_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-muted-foreground">
+            Cette devise est utilisée pour le tableau de bord, les objectifs mensuels, devis, factures, paiements,
+            PDF et portail client (affichage uniquement — pas de conversion automatique).
+          </p>
         </div>
         <div className="grid gap-2">
           <Label htmlFor="default_tax_rate">TVA % défaut</Label>

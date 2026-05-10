@@ -19,6 +19,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { createClientAction, updateClientAction } from './actions';
+import { AGENCY_CURRENCY_SELECT_OPTIONS, normalizeAgencyCurrency } from '@/lib/money/format-money';
 
 const STATUSES = [
   { value: 'prospect', label: 'Prospect' },
@@ -36,10 +37,13 @@ const CONTRACTS = [
 export function ClientFormDialog({
   employees,
   client,
+  defaultAgencyCurrency,
   trigger,
 }: {
   employees: Pick<Employee, 'id' | 'full_name'>[];
   client?: Client | null;
+  /** Devise par défaut à la création (Paramètres agence). */
+  defaultAgencyCurrency: string;
   trigger: React.ReactNode;
 }) {
   const router = useRouter();
@@ -190,7 +194,18 @@ export function ClientFormDialog({
             </div>
             <div className="space-y-2">
               <Label htmlFor="currency">Devise</Label>
-              <Input id="currency" name="currency" defaultValue={client?.currency ?? 'MAD'} />
+              <select
+                id="currency"
+                name="currency"
+                className="flex h-10 w-full rounded-lg border border-border bg-muted px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                defaultValue={normalizeAgencyCurrency(client?.currency ?? defaultAgencyCurrency)}
+              >
+                {AGENCY_CURRENCY_SELECT_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="account_manager_id">Account manager</Label>

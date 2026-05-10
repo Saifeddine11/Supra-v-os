@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { getQuoteWithItems } from '@/lib/data/quotes';
 import { getClientById } from '@/lib/data/clients';
 import { QuotePdfDocument } from '@/lib/pdf/quote-document';
+import { getAgencyDisplayCurrency } from '@/lib/data/agency-settings-db';
 
 export const runtime = 'nodejs';
 
@@ -34,9 +35,16 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   }
 
   const agencyName = process.env.NEXT_PUBLIC_AGENCY_NAME ?? 'Supra v.';
+  const displayCurrency = await getAgencyDisplayCurrency();
 
   const buffer = await renderToBuffer(
-    <QuotePdfDocument quote={quote} items={items} client={client} agencyName={agencyName} />
+    <QuotePdfDocument
+      quote={quote}
+      items={items}
+      client={client}
+      agencyName={agencyName}
+      displayCurrency={displayCurrency}
+    />
   );
 
   const filename = `${quote.ref.replace(/[^a-zA-Z0-9-_]/g, '_')}_proposition.pdf`;

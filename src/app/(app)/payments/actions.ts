@@ -9,6 +9,8 @@ import type { Invoice, PaymentMethod } from '@/types/database';
 import { syncInvoiceOverdueStatuses } from '@/lib/data/invoices';
 import { logStaffActivity } from '@/lib/activity/log-activity';
 import { assertInvoiceRecordVisible } from '@/lib/auth/data-scope';
+import { getAgencyDisplayCurrency } from '@/lib/data/agency-settings-db';
+import { normalizeAgencyCurrency } from '@/lib/money/format-money';
 
 export async function createPaymentAction(formData: FormData): Promise<ActionResult<{ id: string }>> {
   const ctx = await getAuthContext();
@@ -18,6 +20,7 @@ export async function createPaymentAction(formData: FormData): Promise<ActionRes
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return actionError('Session expirée.');
 
+  const agencyCurrency = await getAgencyDisplayCurrency();
   const invoice_id = String(formData.get('invoice_id') ?? '').trim();
   if (!invoice_id) return actionError('Facture requise.');
   const client_id = String(formData.get('client_id') ?? '').trim();
@@ -28,7 +31,7 @@ export async function createPaymentAction(formData: FormData): Promise<ActionRes
 
   const method = String(formData.get('method') ?? 'bank_transfer') as PaymentMethod;
   const payment_date = String(formData.get('payment_date') ?? new Date().toISOString().slice(0, 10));
-  const currency = String(formData.get('currency') ?? 'MAD').trim() || 'MAD';
+  const currency = normalizeAgencyCurrency(String(formData.get('currency') ?? '').trim() || agencyCurrency);
   const reference = String(formData.get('reference') ?? '').trim() || null;
   const notes = String(formData.get('notes') ?? '').trim() || null;
 

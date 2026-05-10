@@ -16,6 +16,8 @@ import { getStatusTableRowClasses, quoteStatusToTone } from '@/lib/ui/status-blo
 import { AccessDenied } from '@/components/shared/access-denied';
 import { QuoteFormDialog } from './quote-form-dialog';
 import { QuoteRowActions } from './quote-row-actions';
+import { getAgencyDisplayCurrency } from '@/lib/data/agency-settings-db';
+import { formatAgencyMoney } from '@/lib/money/format-money';
 
 export const metadata: Metadata = { title: 'Devis' };
 
@@ -32,7 +34,11 @@ export default async function QuotesPage() {
     );
   }
 
-  const [quotes, clients] = await Promise.all([listQuotesWithClients(ctx), listClients({}, ctx)]);
+  const [quotes, clients, agencyCurrency] = await Promise.all([
+    listQuotesWithClients(ctx),
+    listClients({}, ctx),
+    getAgencyDisplayCurrency(),
+  ]);
   const clientOpts = clients.map((c) => ({ id: c.id, name: c.name }));
   const today = new Date().toISOString().slice(0, 10);
 
@@ -48,6 +54,7 @@ export default async function QuotesPage() {
         {canModify ? (
           <QuoteFormDialog
             clients={clientOpts}
+            defaultCurrency={agencyCurrency}
             trigger={
               <Button variant="primary" className="rounded-full">
                 <Plus className="h-4 w-4" />
@@ -92,7 +99,7 @@ export default async function QuotesPage() {
                       <td className="px-4 py-3 font-medium text-foreground">{q.ref}</td>
                       <td className="px-4 py-3 text-muted-foreground">{q.clients?.name ?? '—'}</td>
                       <td className="px-4 py-3 tabular-nums text-foreground">
-                        {q.total.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} {q.currency}
+                        {formatAgencyMoney(q.total, agencyCurrency)}
                       </td>
                       <td
                         className={cn(

@@ -8,6 +8,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { updateQuoteWithItemsAction } from './actions';
+import {
+  AGENCY_CURRENCY_SELECT_OPTIONS,
+  formatAgencyMoney,
+  normalizeAgencyCurrency,
+} from '@/lib/money/format-money';
 
 function BuilderSection({
   id,
@@ -65,10 +70,12 @@ export function QuoteEditForm({
   quote,
   items,
   canEdit,
+  agencyDisplayCurrency,
 }: {
   quote: Quote;
   items: QuoteItem[];
   canEdit: boolean;
+  agencyDisplayCurrency: string;
 }) {
   const router = useRouter();
   const [lines, setLines] = useState<Line[]>(() =>
@@ -123,7 +130,7 @@ export function QuoteEditForm({
     quote.discount_percent != null ? String(quote.discount_percent) : ''
   );
   const [validUntil, setValidUntil] = useState(quote.valid_until);
-  const [currency, setCurrency] = useState(quote.currency);
+  const [currency, setCurrency] = useState(normalizeAgencyCurrency(quote.currency));
   const [template, setTemplate] = useState(quote.template || 'supra_premium_black_orange');
   const [notes, setNotes] = useState(quote.notes ?? '');
   const [visible, setVisible] = useState(quote.visible_to_client);
@@ -166,8 +173,8 @@ export function QuoteEditForm({
                 {i.is_optional ? <span className="ml-2 text-xs text-muted-foreground">Option</span> : null}
               </span>
               <span className="tabular-nums text-muted-foreground">
-                {i.quantity} × {i.unit_price.toLocaleString('fr-FR')} = {i.total.toLocaleString('fr-FR')}{' '}
-                {quote.currency}
+                {i.quantity} × {formatAgencyMoney(i.unit_price, agencyDisplayCurrency)} ={' '}
+                {formatAgencyMoney(i.total, agencyDisplayCurrency)}
               </span>
             </li>
           ))}
@@ -327,7 +334,17 @@ export function QuoteEditForm({
           </div>
           <div className="grid gap-2">
             <Label>Devise</Label>
-            <Input value={currency} onChange={(e) => setCurrency(e.target.value)} />
+            <select
+              value={currency}
+              onChange={(e) => setCurrency(normalizeAgencyCurrency(e.target.value))}
+              className="flex h-10 w-full rounded-lg border border-border bg-muted px-3 text-sm"
+            >
+              {AGENCY_CURRENCY_SELECT_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="grid gap-2 sm:col-span-2">
             <Label>Modèle PDF</Label>
@@ -627,25 +644,25 @@ export function QuoteEditForm({
           <p className="text-muted-foreground">
             Sous-total HT :{' '}
             <span className="font-semibold text-foreground">
-              {preview.subtotal.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} {currency}
+              {formatAgencyMoney(preview.subtotal, agencyDisplayCurrency)}
             </span>
           </p>
           <p className="text-muted-foreground">
             TVA :{' '}
             <span className="font-semibold text-foreground">
-              {preview.tax.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} {currency}
+              {formatAgencyMoney(preview.tax, agencyDisplayCurrency)}
             </span>
           </p>
           <p className="text-muted-foreground">
             Remise :{' '}
             <span className="font-semibold text-foreground">
-              {preview.discount.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} {currency}
+              {formatAgencyMoney(preview.discount, agencyDisplayCurrency)}
             </span>
           </p>
           <p className="mt-1 text-foreground">
             Total TTC :{' '}
             <span className="text-lg font-semibold text-primary">
-              {preview.total.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} {currency}
+              {formatAgencyMoney(preview.total, agencyDisplayCurrency)}
             </span>
           </p>
         </div>

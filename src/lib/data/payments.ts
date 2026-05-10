@@ -5,6 +5,8 @@ import { canViewInvoices } from '@/lib/auth/capabilities';
 import { resolveVisibleClientIds } from '@/lib/auth/data-scope';
 import { syncInvoiceOverdueStatuses } from '@/lib/data/invoices';
 import type { Invoice, InvoiceStatus, Payment } from '@/types/database';
+import { getAgencyDisplayCurrency } from '@/lib/data/agency-settings-db';
+import type { AgencyCurrencyIso } from '@/lib/money/format-money';
 
 export type PaymentWithInvoice = Payment & {
   invoices: { ref: string; id: string; status: Invoice['status']; total: number; currency: string } | null;
@@ -85,20 +87,22 @@ export type PaymentDashboardStats = {
   payments_count_month: number;
   pending_invoices_amount: number;
   overdue_invoices_amount: number;
-  currency: string;
+  /** Devise d’affichage globale (Paramètres agence). */
+  currency: AgencyCurrencyIso;
 };
 
 export async function getPaymentDashboardStats(
   ctx: AuthContext | null = null
 ): Promise<PaymentDashboardStats> {
   const auth = ctx ?? (await getAuthContext());
+  const agencyCurrency = await getAgencyDisplayCurrency();
   if (!auth || !canViewInvoices(auth.role)) {
     return {
       collected_this_month: 0,
       payments_count_month: 0,
       pending_invoices_amount: 0,
       overdue_invoices_amount: 0,
-      currency: 'MAD',
+      currency: agencyCurrency,
     };
   }
 
@@ -111,7 +115,7 @@ export async function getPaymentDashboardStats(
       payments_count_month: 0,
       pending_invoices_amount: 0,
       overdue_invoices_amount: 0,
-      currency: 'MAD',
+      currency: agencyCurrency,
     };
   }
 
@@ -132,10 +136,8 @@ export async function getPaymentDashboardStats(
   const [{ data: paymentsMonth }, { data: invoices }] = await Promise.all([payQ, invQ]);
 
   let collected = 0;
-  let currency = 'MAD';
   for (const p of paymentsMonth ?? []) {
     collected += Number((p as { amount: number }).amount);
-    currency = (p as { currency: string }).currency || currency;
   }
 
   const today = now.toISOString().slice(0, 10);
@@ -144,7 +146,6 @@ export async function getPaymentDashboardStats(
   for (const inv of invoices ?? []) {
     const row = inv as Invoice;
     if (row.status === 'paid' || row.status === 'cancelled' || row.status === 'draft') continue;
-    currency = row.currency || currency;
     const amt = Number(row.total);
     const isOverdue = row.status === 'overdue' || row.due_date < today;
     if (isOverdue) overdue += amt;
@@ -156,6 +157,6 @@ export async function getPaymentDashboardStats(
     payments_count_month: paymentsMonth?.length ?? 0,
     pending_invoices_amount: pending,
     overdue_invoices_amount: overdue,
-    currency,
+    currency: agencyCurrency,
   };
 }

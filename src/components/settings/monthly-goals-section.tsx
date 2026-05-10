@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { upsertAgencyMonthlyGoalAction } from '@/app/(app)/settings/monthly-goals-actions';
 import { Loader2 } from 'lucide-react';
+import { agencyCurrencyDisplaySuffix } from '@/lib/money/format-money';
 
 export function MonthlyGoalsSection({
   year,
@@ -19,6 +20,7 @@ export function MonthlyGoalsSection({
   prevHref,
   nextHref,
   initialGoal,
+  agencyCurrency,
 }: {
   year: number;
   month: number;
@@ -26,6 +28,7 @@ export function MonthlyGoalsSection({
   prevHref: string;
   nextHref: string;
   initialGoal: AgencyMonthlyGoalRow | null;
+  agencyCurrency: string;
 }) {
   const [revenue, setRevenue] = useState(
     initialGoal ? String(initialGoal.revenue_goal) : ''
@@ -45,6 +48,7 @@ export function MonthlyGoalsSection({
   const [ok, setOk] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
+  const currencyHint = agencyCurrencyDisplaySuffix(agencyCurrency);
 
   return (
     <SectionCard
@@ -84,7 +88,7 @@ export function MonthlyGoalsSection({
         <input type="hidden" name="year" value={year} />
         <input type="hidden" name="month" value={month} />
         <div className="grid gap-2">
-          <Label htmlFor="revenue_goal">Objectif chiffre d’affaires (MAD)</Label>
+          <Label htmlFor="revenue_goal">Objectif chiffre d’affaires ({currencyHint})</Label>
           <Input
             id="revenue_goal"
             name="revenue_goal"
@@ -95,6 +99,10 @@ export function MonthlyGoalsSection({
             onChange={(e) => setRevenue(e.target.value)}
             placeholder="ex. 220000"
           />
+          <p className="text-xs text-muted-foreground">
+            Montant dans la devise définie dans Paramètres agence (actuellement {currencyHint}). Pas de taux de change
+            : le dashboard affiche les mêmes chiffres avec le libellé de cette devise.
+          </p>
         </div>
         <div className="grid gap-2 sm:grid-cols-3 sm:gap-3">
           <div className="grid gap-2">

@@ -7,6 +7,8 @@ import { createNotificationOnce } from '@/lib/notifications/notify';
 import { joinedRelationName } from '@/lib/supabase/joined-name';
 import { sendEmail } from '@/lib/email/send-email';
 import { invoiceReminderSubject, renderInvoiceReminderEmail } from '@/lib/email/templates/invoice-reminder';
+import { getAgencyDisplayCurrencyWithClient } from '@/lib/data/agency-settings-db';
+import { formatAgencyMoneyCompact } from '@/lib/money/format-money';
 
 export type OverdueInvoicesResult = {
   success: boolean;
@@ -27,6 +29,7 @@ export async function runOverdueInvoices(): Promise<OverdueInvoicesResult> {
   let emailsSkipped = 0;
 
   const admin = createAdminClient();
+  const agencyCurrency = await getAgencyDisplayCurrencyWithClient(admin);
   const today = new Date().toISOString().slice(0, 10);
   const base = appBaseUrl();
 
@@ -68,7 +71,8 @@ export async function runOverdueInvoices(): Promise<OverdueInvoicesResult> {
     invoicesUpdated += 1;
 
     const clientName = joinedRelationName(inv.clients) ?? '';
-    const msg = `${inv.ref} — ${inv.total} ${inv.currency}${clientName ? ` — ${clientName}` : ''}`;
+    const amountLabel = formatAgencyMoneyCompact(Number(inv.total), agencyCurrency);
+    const msg = `${inv.ref} — ${amountLabel}${clientName ? ` — ${clientName}` : ''}`;
 
     for (const row of finance ?? []) {
       if (!row.user_id) continue;
@@ -97,7 +101,7 @@ export async function runOverdueInvoices(): Promise<OverdueInvoicesResult> {
             const { html, text } = renderInvoiceReminderEmail({
               recipientName: row.full_name.split(/\s+/)[0] ?? row.full_name,
               invoiceRef: inv.ref,
-              amount: `${inv.total} ${inv.currency}`,
+              amount: amountLabel,
               dueDate: inv.due_date ?? '',
               status: 'En retard',
               invoiceUrl: `${base}/invoices`,

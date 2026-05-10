@@ -20,11 +20,13 @@ export function ClientsToolbar({
   canCreate,
   defaultQ,
   defaultStatus,
+  defaultAgencyCurrency,
 }: {
   employees: Pick<Employee, 'id' | 'full_name'>[];
   canCreate: boolean;
   defaultQ?: string;
   defaultStatus?: string;
+  defaultAgencyCurrency: string;
 }) {
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -48,6 +50,7 @@ export function ClientsToolbar({
       {canCreate ? (
         <ClientFormDialog
           employees={employees}
+          defaultAgencyCurrency={defaultAgencyCurrency}
           trigger={
             <Button variant="primary" className="rounded-full">
               <Plus className="h-4 w-4" />

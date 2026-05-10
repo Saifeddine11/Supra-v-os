@@ -5,6 +5,7 @@ import { canViewInvoices } from '@/lib/auth/capabilities';
 import { getInvoiceWithItems } from '@/lib/data/invoices';
 import { getClientById } from '@/lib/data/clients';
 import { InvoicePdfDocument } from '@/lib/pdf/invoice-document';
+import { getAgencyDisplayCurrency } from '@/lib/data/agency-settings-db';
 
 export const runtime = 'nodejs';
 
@@ -34,9 +35,16 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   }
 
   const agencyName = process.env.NEXT_PUBLIC_AGENCY_NAME ?? 'Supra v.';
+  const displayCurrency = await getAgencyDisplayCurrency();
 
   const buffer = await renderToBuffer(
-    <InvoicePdfDocument invoice={invoice} items={items} client={client} agencyName={agencyName} />
+    <InvoicePdfDocument
+      invoice={invoice}
+      items={items}
+      client={client}
+      agencyName={agencyName}
+      displayCurrency={displayCurrency}
+    />
   );
 
   const filename = `${invoice.ref.replace(/[^a-zA-Z0-9-_]/g, '_')}.pdf`;

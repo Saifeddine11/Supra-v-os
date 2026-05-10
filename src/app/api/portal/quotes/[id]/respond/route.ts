@@ -5,6 +5,8 @@ import { appBaseUrl } from '@/lib/cron/app-base-url';
 import { notifyFinanceTeam } from '@/lib/notifications/notify';
 import type { QuoteStatus } from '@/types/database';
 import { logPortalActivity } from '@/lib/portal/notify-staff';
+import { getAgencyDisplayCurrencyWithClient } from '@/lib/data/agency-settings-db';
+import { formatAgencyMoneyCompact } from '@/lib/money/format-money';
 
 export const runtime = 'nodejs';
 
@@ -92,6 +94,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   {
     const base = appBaseUrl();
+    const displayCurrency = await getAgencyDisplayCurrencyWithClient(admin);
+    const amountLabel = formatAgencyMoneyCompact(Number(quote.total), displayCurrency);
     await notifyFinanceTeam({
       type: nextStatus === 'accepted' ? 'quote_accepted' : 'system',
       priority: nextStatus === 'accepted' ? 'high' : 'normal',
@@ -99,7 +103,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         nextStatus === 'accepted'
           ? 'Proposition acceptée (portail client)'
           : 'Proposition refusée (portail client)',
-      message: `${quote.ref} — ${quote.total} ${quote.currency}`,
+      message: `${quote.ref} — ${amountLabel}`,
       relatedEntityType: 'quote',
       relatedEntityId: id,
       linkUrl: `${base}/quotes/${id}`,

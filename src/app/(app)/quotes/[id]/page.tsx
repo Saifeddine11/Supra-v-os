@@ -15,6 +15,8 @@ import { QuoteEditForm } from '../quote-edit-form';
 import { QuoteDetailActions } from './quote-detail-actions';
 import { listActivityForEntity } from '@/lib/data/activity-logs';
 import { EntityActivityFeed } from '@/components/activity/entity-activity-feed';
+import { getAgencyDisplayCurrency } from '@/lib/data/agency-settings-db';
+import { formatAgencyMoney } from '@/lib/money/format-money';
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -46,7 +48,7 @@ export default async function QuoteDetailPage({ params }: Props) {
     quoteActivity = [];
   }
 
-  const { quote, items } = await getQuoteWithItems(id, ctx);
+  const [{ quote, items }, agencyCurrency] = await Promise.all([getQuoteWithItems(id, ctx), getAgencyDisplayCurrency()]);
   if (!quote) notFound();
 
   const canEdit = canModify && quote.status !== 'converted';
@@ -92,7 +94,7 @@ export default async function QuoteDetailPage({ params }: Props) {
         <div className="rounded-xl border border-border/80 bg-card/60 p-4">
           <p className="text-xs uppercase tracking-wide text-muted-foreground">Total TTC</p>
           <p className="mt-2 font-sans text-xl font-semibold tabular-nums text-foreground">
-            {quote.total.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} {quote.currency}
+            {formatAgencyMoney(quote.total, agencyCurrency)}
           </p>
         </div>
         <div className="rounded-xl border border-border/80 bg-card/60 p-4">
@@ -123,7 +125,7 @@ export default async function QuoteDetailPage({ params }: Props) {
         title="Constructeur de proposition"
         description="Édition complète : prestations, apports stratégiques, offre et PDF premium."
       >
-        <QuoteEditForm quote={quote} items={items} canEdit={canEdit} />
+        <QuoteEditForm quote={quote} items={items} canEdit={canEdit} agencyDisplayCurrency={agencyCurrency} />
       </SectionCard>
 
       <SectionCard title="Aperçu des lignes" description="Récapitulatif rapide — le détail éditable se trouve ci-dessus.">
@@ -143,12 +145,12 @@ export default async function QuoteDetailPage({ params }: Props) {
                     <p className="mt-1 text-xs text-muted-foreground">
                       {i.is_recommended ? 'Recommandé · ' : ''}
                       {i.is_optional ? 'Option · ' : ''}
-                      {i.quantity} × {i.unit_price.toLocaleString('fr-FR')} {quote.currency}
+                      {i.quantity} × {formatAgencyMoney(i.unit_price, agencyCurrency)}
                     </p>
                   </div>
                 </div>
                 <span className="shrink-0 tabular-nums text-sm text-foreground">
-                  {i.total.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} {quote.currency}
+                  {formatAgencyMoney(i.total, agencyCurrency)}
                 </span>
               </li>
             ))}

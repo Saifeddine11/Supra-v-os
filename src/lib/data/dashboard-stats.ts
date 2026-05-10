@@ -4,6 +4,8 @@ import type { AuthContext } from '@/lib/auth/permissions';
 import type { FinanceSnapshot } from '@/data/dashboard-mock';
 import type { AgencyMonthlyGoalRow, InvoiceStatus, UserRole } from '@/types/database';
 import { currentDashboardYearMonth } from '@/lib/data/agency-monthly-goals';
+import { formatAgencyMoneyCompact, type AgencyCurrencyIso } from '@/lib/money/format-money';
+import { getAgencyDisplayCurrency } from '@/lib/data/agency-settings-db';
 
 export interface DashboardFinanceAgg {
   currency: string;
@@ -61,6 +63,8 @@ export interface DashboardSummary {
   commercial: CommercialKpis | null;
   /** Ligne objectifs du mois calendaire courant, si elle existe. */
   agencyMonthlyGoal: AgencyMonthlyGoalRow | null;
+  /** Devise d’affichage globale (Paramètres agence). */
+  agencyDisplayCurrency: AgencyCurrencyIso;
 }
 
 function emptyPersonal(): PersonalWorkload {
@@ -109,11 +113,12 @@ function reduceInvoiceStats(
     currency: string;
   }[],
   today: string,
-  monthStart: string
+  monthStart: string,
+  agencyDisplayCurrency: AgencyCurrencyIso
 ): DashboardFinanceAgg | null {
   if (!rows.length) {
     return {
-      currency: 'MAD',
+      currency: agencyDisplayCurrency,
       monthlyRevenue: 0,
       pendingAmount: 0,
       unpaidCount: 0,
@@ -126,7 +131,7 @@ function reduceInvoiceStats(
     };
   }
 
-  const currency = rows.find((r) => r.currency)?.currency ?? 'MAD';
+  const currency = agencyDisplayCurrency;
   let monthlyRevenue = 0;
   let pendingAmount = 0;
   let unpaidCount = 0;
@@ -183,7 +188,7 @@ export function financeSnapshotFromAgg(
 ): Partial<FinanceSnapshot> | null {
   if (!agg) return null;
   const c = agg.currency;
-  const collected = `${agg.monthlyRevenue.toLocaleString('fr-FR', { minimumFractionDigits: 0 })} ${c}`;
+  const collected = formatAgencyMoneyCompact(agg.monthlyRevenue, c);
 
   let monthlyTarget: string;
   let targetDetail: string | null = null;
@@ -193,20 +198,20 @@ export function financeSnapshotFromAgg(
     monthlyTarget = 'Non défini';
     targetDetail = 'Aucune ligne pour ce mois dans Paramètres.';
   } else if (goal.revenue_goal <= 0) {
-    monthlyTarget = `0 ${c}`;
+    monthlyTarget = formatAgencyMoneyCompact(0, c);
     targetDetail = 'Objectif chiffre d’affaires à renseigner (montant > 0).';
   } else {
-    monthlyTarget = `${goal.revenue_goal.toLocaleString('fr-FR', { minimumFractionDigits: 0 })} ${c}`;
+    monthlyTarget = formatAgencyMoneyCompact(goal.revenue_goal, c);
     const pct = Math.round((agg.monthlyRevenue / goal.revenue_goal) * 100);
     targetProgressPercent = Math.min(100, Math.max(0, pct));
     targetDetail = `${targetProgressPercent} % de l’objectif (CA encaissé ce mois / objectif)`;
   }
 
   return {
-    monthlyRevenue: `${agg.monthlyRevenue.toLocaleString('fr-FR', { minimumFractionDigits: 0 })} ${c}`,
+    monthlyRevenue: formatAgencyMoneyCompact(agg.monthlyRevenue, c),
     monthlyTarget,
     collected,
-    pending: `${agg.pendingAmount.toLocaleString('fr-FR', { minimumFractionDigits: 0 })} ${c}`,
+    pending: formatAgencyMoneyCompact(agg.pendingAmount, c),
     unpaidInvoicesCount: agg.unpaidCount,
     paidInvoicesCount: agg.paidCount,
     pendingInvoicesCount: agg.pendingCount,
@@ -222,7 +227,8 @@ async function fetchFinanceBlock(
   supabase: Awaited<ReturnType<typeof createClient>>,
   role: UserRole | null,
   today: string,
-  monthStart: string
+  monthStart: string,
+  agencyDisplayCurrency: AgencyCurrencyIso
 ): Promise<{ pendingInvoices: number | null; finance: DashboardFinanceAgg | null }> {
   let pendingInvoices: number | null = null;
   let finance: DashboardFinanceAgg | null = null;
@@ -238,7 +244,7 @@ async function fetchFinanceBlock(
     ]);
 
     if (!invR.error && invR.data) {
-      const base = reduceInvoiceStats(invR.data, today, monthStart);
+      const base = reduceInvoiceStats(invR.data, today, monthStart, agencyDisplayCurrency);
       if (base) {
         base.acceptedQuotes = quotesAccR.count ?? 0;
         base.pendingQuotes = quotesPendR.count ?? 0;
@@ -548,6 +554,8 @@ async function fetchCommercialKpis(
  * Résumé dashboard selon le rôle : agrégats agence, périmètre commercial ou charges personnelles.
  */
 export async function getDashboardSummary(ctx: AuthContext): Promise<DashboardSummary> {
+  const agencyDisplayCurrency = await getAgencyDisplayCurrency();
+
   const empty: DashboardSummary = {
     scope: 'individual',
     activeClients: 0,
@@ -563,6 +571,7 @@ export async function getDashboardSummary(ctx: AuthContext): Promise<DashboardSu
     personal: emptyPersonal(),
     commercial: null,
     agencyMonthlyGoal: null,
+    agencyDisplayCurrency,
   };
 
   if (!ctx.employee || !ctx.role) {
@@ -590,7 +599,7 @@ export async function getDashboardSummary(ctx: AuthContext): Promise<DashboardSu
   if (role === 'admin' || role === 'project_manager') {
     const [agency, fin, _p, goalRes] = await Promise.all([
       fetchAgencyAggregates(supabase, now, monthStart),
-      fetchFinanceBlock(supabase, role, today, monthStart),
+      fetchFinanceBlock(supabase, role, today, monthStart, agencyDisplayCurrency),
       Promise.resolve(personal),
       goalPromise,
     ]);
@@ -603,12 +612,13 @@ export async function getDashboardSummary(ctx: AuthContext): Promise<DashboardSu
       personal,
       commercial: null,
       agencyMonthlyGoal,
+      agencyDisplayCurrency,
     };
   }
 
   if (role === 'finance') {
     const [fin, goalRes] = await Promise.all([
-      fetchFinanceBlock(supabase, role, today, monthStart),
+      fetchFinanceBlock(supabase, role, today, monthStart, agencyDisplayCurrency),
       goalPromise,
     ]);
     const agencyMonthlyGoal = (goalRes.data as AgencyMonthlyGoalRow | null) ?? null;
@@ -627,13 +637,14 @@ export async function getDashboardSummary(ctx: AuthContext): Promise<DashboardSu
       personal,
       commercial: null,
       agencyMonthlyGoal,
+      agencyDisplayCurrency,
     };
   }
 
   if (role === 'commercial') {
     const [commercial, fin, goalRes] = await Promise.all([
       fetchCommercialKpis(supabase, empId, today),
-      fetchFinanceBlock(supabase, role, today, monthStart),
+      fetchFinanceBlock(supabase, role, today, monthStart, agencyDisplayCurrency),
       goalPromise,
     ]);
     const agencyMonthlyGoal = (goalRes.data as AgencyMonthlyGoalRow | null) ?? null;
@@ -652,6 +663,7 @@ export async function getDashboardSummary(ctx: AuthContext): Promise<DashboardSu
       personal,
       commercial,
       agencyMonthlyGoal,
+      agencyDisplayCurrency,
     };
   }
 
@@ -664,7 +676,7 @@ export async function getDashboardSummary(ctx: AuthContext): Promise<DashboardSu
   ) {
     const [fin, goalRes] = await Promise.all([
       canViewInvoices(role)
-        ? fetchFinanceBlock(supabase, role, today, monthStart)
+        ? fetchFinanceBlock(supabase, role, today, monthStart, agencyDisplayCurrency)
         : Promise.resolve({ pendingInvoices: null, finance: null }),
       goalPromise,
     ]);
@@ -691,6 +703,7 @@ export async function getDashboardSummary(ctx: AuthContext): Promise<DashboardSu
       personal,
       commercial: null,
       agencyMonthlyGoal,
+      agencyDisplayCurrency,
     };
   }
 
@@ -699,5 +712,6 @@ export async function getDashboardSummary(ctx: AuthContext): Promise<DashboardSu
     ...empty,
     personal,
     agencyMonthlyGoal: (goalFallback as AgencyMonthlyGoalRow | null) ?? null,
+    agencyDisplayCurrency,
   };
 }

@@ -22,6 +22,8 @@ import { EntityActivityFeed } from '@/components/activity/entity-activity-feed';
 import { DocumentPortalVisibilityButton } from '@/components/documents/document-portal-visibility-button';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import { getAgencyDisplayCurrency } from '@/lib/data/agency-settings-db';
+import { formatAgencyMoneyCompact } from '@/lib/money/format-money';
 
 export async function generateMetadata({
   params,
@@ -44,10 +46,11 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   }
 
   const ctx = await getAuthContext();
-  const [client, bundle, employees] = await Promise.all([
+  const [client, bundle, employees, agencyCurrency] = await Promise.all([
     getClientById(id, ctx),
     getClientRelations(id, ctx),
     listEmployeesForSelect(ctx),
+    getAgencyDisplayCurrency(),
   ]);
 
   if (!client) notFound();
@@ -88,6 +91,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
           <ClientDetailActions
             client={client}
             employees={employees}
+            defaultAgencyCurrency={agencyCurrency}
             canEdit={canEdit}
             canDelete={canDelete}
           />
@@ -287,7 +291,9 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="font-medium tabular-nums">{inv.total} MAD</p>
+                  <p className="font-medium tabular-nums">
+                    {formatAgencyMoneyCompact(Number(inv.total), agencyCurrency)}
+                  </p>
                   <Badge variant="outline" className="mt-1">
                     {INVOICE_STATUS_MAP[inv.status].label}
                   </Badge>

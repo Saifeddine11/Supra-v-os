@@ -2,16 +2,20 @@ import { SectionCard } from '@/components/shared/section-card';
 import { RevenueChart } from '@/components/dashboard/revenue-chart';
 import type { FinanceSnapshot } from '@/data/dashboard-mock';
 import { MOCK_INVOICES_PREVIEW, REVENUE_CHART } from '@/data/dashboard-mock';
+import { formatAgencyMoneyCompact } from '@/lib/money/format-money';
 import { cn } from '@/lib/utils/cn';
 import { dashboardInvoicePreviewLabelToTone, getStatusBlockSurface } from '@/lib/ui/status-block-tone';
 
 export function FinanceOverview({
   snapshot,
   liveFinance,
+  chartCurrency,
 }: {
   snapshot: FinanceSnapshot;
   /** Quand défini, remplace les champs correspondants (données Supabase). */
   liveFinance?: Partial<FinanceSnapshot> | null;
+  /** Devise agence pour le graphique et l’extrait facture fictif. */
+  chartCurrency: string;
 }) {
   const s: FinanceSnapshot = { ...snapshot, ...(liveFinance ?? {}) };
   const isLive = liveFinance != null && Object.keys(liveFinance).length > 0;
@@ -87,7 +91,7 @@ export function FinanceOverview({
             <p className="mb-2 text-[11px] text-muted-foreground">
               Données d’illustration — l’objectif du mois courant provient des paramètres agence.
             </p>
-            <RevenueChart data={REVENUE_CHART} />
+            <RevenueChart data={REVENUE_CHART} currency={chartCurrency} />
           </div>
           <div>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -103,7 +107,9 @@ export function FinanceOverview({
                   )}
                 >
                   <span className="min-w-0 truncate text-foreground">{inv.client}</span>
-                  <span className="shrink-0 tabular-nums text-muted-foreground">{inv.amount}</span>
+                  <span className="shrink-0 tabular-nums text-muted-foreground">
+                    {formatAgencyMoneyCompact(inv.amountValue, chartCurrency)}
+                  </span>
                   <span className="shrink-0 text-right text-xs text-primary/90">{inv.status}</span>
                 </li>
               ))}

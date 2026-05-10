@@ -16,6 +16,9 @@ import {
 } from '@/lib/ui/status-block-tone';
 import { buildPortalCalendarEvents } from '@/lib/portal/calendar-events';
 import { PortalClientCalendar } from './portal-client-calendar';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { getAgencyDisplayCurrencyWithClient } from '@/lib/data/agency-settings-db';
+import { formatAgencyMoney, formatAgencyMoneyCompact } from '@/lib/money/format-money';
 
 export const metadata: Metadata = {
   title: 'Espace client',
@@ -59,9 +62,11 @@ export default async function ClientPortalPage({
 
   await recordPortalAccess(validation.portal.id);
 
-  const [bundle, quota] = await Promise.all([
+  const admin = createAdminClient();
+  const [bundle, quota, agencyCurrency] = await Promise.all([
     loadPortalPublicData(clientId),
     getMonthlyVideoDeliverySnapshot(clientId),
+    getAgencyDisplayCurrencyWithClient(admin),
   ]);
 
   if (!bundle) {
@@ -271,7 +276,7 @@ export default async function ClientPortalPage({
                     <div className="shrink-0 text-right">
                       <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Total TTC</p>
                       <p className="mt-1 tabular-nums text-base font-semibold text-foreground">
-                        {q.total.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} {q.currency}
+                        {formatAgencyMoney(q.total, agencyCurrency)}
                       </p>
                     </div>
                   </div>
@@ -310,7 +315,8 @@ export default async function ClientPortalPage({
               >
                 <span className="text-foreground">{inv.ref}</span>
                 <span className="tabular-nums text-muted-foreground">
-                  {inv.total} {inv.currency} · {INVOICE_STATUS_MAP[inv.status].label}
+                  {formatAgencyMoneyCompact(Number(inv.total), agencyCurrency)} ·{' '}
+                  {INVOICE_STATUS_MAP[inv.status].label}
                 </span>
               </li>
             ))

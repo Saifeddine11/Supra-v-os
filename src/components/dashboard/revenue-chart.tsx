@@ -10,8 +10,9 @@ import {
   YAxis,
 } from 'recharts';
 import type { RevenueChartPoint } from '@/data/dashboard-mock';
+import { formatAgencyMoneyCompact } from '@/lib/money/format-money';
 
-export function RevenueChart({ data }: { data: RevenueChartPoint[] }) {
+export function RevenueChart({ data, currency }: { data: RevenueChartPoint[]; currency: string }) {
   return (
     <div className="h-[220px] w-full">
       <ResponsiveContainer width="100%" height="100%">
@@ -49,7 +50,7 @@ export function RevenueChart({ data }: { data: RevenueChartPoint[] }) {
               fontSize: '12px',
             }}
             formatter={(value: number, name: string) => [
-              `${value.toLocaleString('fr-FR')} MAD`,
+              formatAgencyMoneyCompact(value, currency),
               name === 'revenue' ? 'CA réalisé' : 'Objectif',
             ]}
           />

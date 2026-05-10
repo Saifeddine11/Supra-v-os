@@ -18,7 +18,7 @@ import {
 } from '@/lib/auth/capabilities';
 import { Button } from '@/components/ui/button';
 import { signOutAction } from '@/app/(app)/actions';
-import { getAgencySettingsRow } from '@/lib/data/agency-settings-db';
+import { getAgencyDisplayCurrency, getAgencySettingsRow } from '@/lib/data/agency-settings-db';
 import {
   currentDashboardYearMonth,
   getAgencyMonthlyGoalForMonth,
@@ -56,10 +56,11 @@ export default async function SettingsPage({
   const nextYm = `${nextD.getFullYear()}-${String(nextD.getMonth() + 1).padStart(2, '0')}`;
   const monthLabel = format(goalAnchor, 'MMMM yyyy', { locale: fr });
 
-  const [agencyRow, notifPrefs, monthlyGoalRow] = await Promise.all([
+  const [agencyRow, notifPrefs, monthlyGoalRow, agencyCurrency] = await Promise.all([
     showAgencyAndPortal ? getAgencySettingsRow() : Promise.resolve(null),
     ctx.userId ? getMyNotificationPreferences(ctx.userId) : Promise.resolve(null),
     showAgencyAndPortal ? getAgencyMonthlyGoalForMonth(ymSel.year, ymSel.month) : Promise.resolve(null),
+    showAgencyAndPortal ? getAgencyDisplayCurrency() : Promise.resolve('MAD' as const),
   ]);
 
   const employee = ctx.employee;
@@ -181,6 +182,7 @@ export default async function SettingsPage({
             prevHref={`/settings?ym=${prevYm}#objectifs-mensuels`}
             nextHref={`/settings?ym=${nextYm}#objectifs-mensuels`}
             initialGoal={monthlyGoalRow}
+            agencyCurrency={agencyCurrency}
             key={`goal-${ymSel.year}-${ymSel.month}-${monthlyGoalRow?.updated_at ?? 'new'}`}
           />
 

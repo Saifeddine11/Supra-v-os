@@ -15,6 +15,8 @@ import {
 import { createNotificationOnce, getEmployeeUserId } from '@/lib/notifications/notify';
 import { joinedRelationName } from '@/lib/supabase/joined-name';
 import { getCronEmailPrefs } from '@/lib/cron/user-notification-prefs';
+import { getAgencyDisplayCurrencyWithClient } from '@/lib/data/agency-settings-db';
+import { formatAgencyMoneyCompact } from '@/lib/money/format-money';
 
 export type DeadlineAlertsResult = {
   success: boolean;
@@ -34,6 +36,7 @@ export async function runDeadlineAlerts(): Promise<DeadlineAlertsResult> {
   let emailsSent = 0;
   let emailsSkipped = 0;
   const admin = createAdminClient();
+  const agencyCurrency = await getAgencyDisplayCurrencyWithClient(admin);
   const now = new Date();
   const in24h = new Date(now.getTime() + 24 * 3600_000);
   const todayStr = now.toISOString().slice(0, 10);
@@ -263,7 +266,7 @@ export async function runDeadlineAlerts(): Promise<DeadlineAlertsResult> {
 
   for (const inv of invSoon ?? []) {
     const clientName = joinedRelationName(inv.clients);
-    const msg = `${inv.ref} — ${inv.total} ${inv.currency}`;
+    const msg = `${inv.ref} — ${formatAgencyMoneyCompact(Number(inv.total), agencyCurrency)}`;
     for (const fu of financeUsers) {
       if (!fu.user_id) continue;
       await notifyUser({
@@ -302,7 +305,7 @@ export async function runDeadlineAlerts(): Promise<DeadlineAlertsResult> {
   for (const q of quotesExp ?? []) {
     const clientName = joinedRelationName(q.clients) ?? '';
     const msg = `${q.ref} — validité jusqu'au ${q.valid_until}`;
-    const amountStr = [q.total, q.currency].filter(Boolean).join(' ').trim() || '—';
+    const amountStr = formatAgencyMoneyCompact(Number(q.total), agencyCurrency);
     for (const fu of financeUsers) {
       if (!fu.user_id) continue;
       const row = {

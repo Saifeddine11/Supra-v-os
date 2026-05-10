@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { getAuthContext } from '@/lib/auth/permissions';
 import { actionError, actionOk, getPostgrestError, type ActionResult } from '@/lib/actions/types';
+import { isRecognizedAgencyCurrencyInput, normalizeAgencyCurrency } from '@/lib/money/format-money';
 
 function checkboxTrue(formData: FormData, name: string): boolean {
   return formData.getAll(name).includes('true');
@@ -14,6 +15,12 @@ export async function updateAgencySettingsAction(formData: FormData): Promise<Ac
   if (!ctx || ctx.role !== 'admin') {
     return actionError('Seuls les administrateurs peuvent modifier les paramètres agence.');
   }
+
+  const rawCurrency = String(formData.get('default_currency') ?? '').trim();
+  if (!isRecognizedAgencyCurrencyInput(rawCurrency)) {
+    return actionError('Devise non reconnue. Choisissez MAD, EUR, USD, GBP, AED ou SAR.');
+  }
+  const default_currency = normalizeAgencyCurrency(rawCurrency || 'MAD');
 
   const supabase = await createClient();
   const { error } = await supabase
@@ -28,7 +35,7 @@ export async function updateAgencySettingsAction(formData: FormData): Promise<Ac
       tax_id: String(formData.get('tax_id') ?? '').trim() || null,
       invoice_prefix: String(formData.get('invoice_prefix') ?? '').trim() || 'FAC-',
       quote_prefix: String(formData.get('quote_prefix') ?? '').trim() || 'DEV-',
-      default_currency: String(formData.get('default_currency') ?? '').trim() || 'MAD',
+      default_currency,
       default_payment_terms: String(formData.get('default_payment_terms') ?? '').trim() || null,
       default_tax_rate: Number(formData.get('default_tax_rate') ?? '') || 0,
       portal_base_url: String(formData.get('portal_base_url') ?? '').trim() || null,
@@ -39,6 +46,12 @@ export async function updateAgencySettingsAction(formData: FormData): Promise<Ac
 
   if (error) return actionError(getPostgrestError(error));
   revalidatePath('/settings');
+  revalidatePath('/dashboard');
+  revalidatePath('/invoices');
+  revalidatePath('/quotes');
+  revalidatePath('/payments');
+  revalidatePath('/clients');
+  revalidatePath('/portal-admin');
   return actionOk();
 }
 
