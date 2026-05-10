@@ -31,6 +31,7 @@ import {
   setEmployeeActiveAction,
   unarchiveEmployeeAction,
 } from './actions';
+import { inviteEmployeeAuthAction, sendEmployeePasswordResetAction } from './employee-auth-actions';
 import { ROLE_LABELS, TEAM_ASSIGNABLE_ROLES } from '@/types/domain';
 import type { UserRole } from '@/types/database';
 
@@ -44,6 +45,7 @@ export function TeamMemberRowActions({
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [authOk, setAuthOk] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [confirmDemote, setConfirmDemote] = useState(false);
   const [confirmPromote, setConfirmPromote] = useState(false);
@@ -61,6 +63,7 @@ export function TeamMemberRowActions({
 
   async function run(label: string, fn: () => Promise<ActionResult<unknown>>) {
     setErr(null);
+    setAuthOk(null);
     setPending(label);
     try {
       const res = await fn();
@@ -93,6 +96,44 @@ export function TeamMemberRowActions({
     }
   }
 
+  async function runInviteAuth() {
+    setErr(null);
+    setAuthOk(null);
+    setPending('invite-auth');
+    try {
+      const res = await inviteEmployeeAuthAction(member.id);
+      if (!res.ok) {
+        setErr(res.error);
+        return;
+      }
+      setAuthOk(
+        res.data?.mode === 'linked_existing'
+          ? 'Compte Auth lié (utilisateur déjà présent).'
+          : 'Invitation envoyée.',
+      );
+      router.refresh();
+    } finally {
+      setPending(null);
+    }
+  }
+
+  async function runPasswordReset() {
+    setErr(null);
+    setAuthOk(null);
+    setPending('pwd-reset');
+    try {
+      const res = await sendEmployeePasswordResetAction(member.id);
+      if (!res.ok) {
+        setErr(res.error);
+        return;
+      }
+      setAuthOk('E-mail de réinitialisation envoyé.');
+      router.refresh();
+    } finally {
+      setPending(null);
+    }
+  }
+
   return (
     <>
       <div className="flex flex-col items-end gap-1">
@@ -110,6 +151,27 @@ export function TeamMemberRowActions({
               <Link href={`/team/${member.id}`}>Modifier sur la fiche</Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
+            {!member.user_id && member.email?.trim() ? (
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault();
+                  void runInviteAuth();
+                }}
+              >
+                Envoyer invitation Auth
+              </DropdownMenuItem>
+            ) : null}
+            {member.user_id && member.email?.trim() ? (
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault();
+                  void runPasswordReset();
+                }}
+              >
+                Réinitialisation mot de passe
+              </DropdownMenuItem>
+            ) : null}
+            {member.email?.trim() ? <DropdownMenuSeparator /> : null}
             <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">Changer le rôle</div>
             {TEAM_ASSIGNABLE_ROLES.filter((r) => r !== member.role).map((r) => (
               <DropdownMenuItem
@@ -165,6 +227,7 @@ export function TeamMemberRowActions({
           </DropdownMenuContent>
         </DropdownMenu>
         {err ? <p className="max-w-[200px] text-right text-xs text-destructive">{err}</p> : null}
+        {authOk ? <p className="max-w-[220px] text-right text-xs text-emerald-600 dark:text-emerald-400">{authOk}</p> : null}
         {pending ? <p className="text-xs text-muted-foreground">{pending}…</p> : null}
       </div>
 

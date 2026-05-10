@@ -7,6 +7,7 @@ import type { Notification } from '@/types/database';
 import { cn } from '@/lib/utils/cn';
 import { Badge } from '@/components/ui/badge';
 import { NOTIFICATION_PRIORITY_LABELS, NOTIFICATION_TYPE_LABELS } from '@/lib/notifications/labels';
+import { getStatusBlockSurface, notificationPreviewTone } from '@/lib/ui/status-block-tone';
 
 export function NotificationsPreview({ items }: { items: Notification[] }) {
   return (
@@ -30,12 +31,7 @@ export function NotificationsPreview({ items }: { items: Notification[] }) {
           {items.map((n) => (
             <li
               key={n.id}
-              className={cn(
-                'rounded-xl border px-3 py-2.5 transition-colors',
-                !n.is_read
-                  ? 'border-primary/25 bg-primary/[0.05]'
-                  : 'border-border/60 bg-muted/50'
-              )}
+              className={cn('px-3 py-2.5 transition-colors', getStatusBlockSurface(notificationPreviewTone(n.priority, n.is_read)))}
             >
               <div className="flex items-start justify-between gap-2">
                 <p className={cn('text-sm leading-snug', !n.is_read ? 'text-foreground' : 'text-muted-foreground')}>

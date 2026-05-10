@@ -12,6 +12,8 @@ import { UserAvatar } from '@/components/shared/user-avatar';
 import { TeamToolbar } from './team-toolbar';
 import { NewTeamMemberDialog } from './new-member-dialog';
 import { TeamMemberRowActions } from './team-member-row-actions';
+import { cn } from '@/lib/utils/cn';
+import { getStatusTableRowClasses, teamMemberTableRowTone } from '@/lib/ui/status-block-tone';
 
 export const metadata: Metadata = { title: 'Équipe' };
 
@@ -107,7 +109,19 @@ export default async function TeamPage({
               </thead>
               <tbody className="divide-y divide-border/60">
                 {rows.map((e) => (
-                  <tr key={e.id} className="bg-card/40 transition-colors hover:bg-accent/30">
+                  <tr
+                    key={e.id}
+                    className={cn(
+                      getStatusTableRowClasses(
+                        teamMemberTableRowTone({
+                          availability: e.availability,
+                          is_active: e.is_active,
+                          archived_at: e.archived_at,
+                          overdue_tasks: e.overdue_tasks,
+                        }),
+                      ),
+                    )}
+                  >
                     <td className="px-4 py-3">
                       <Link href={`/team/${e.id}`} className="flex items-center gap-3">
                         <UserAvatar
@@ -153,11 +167,15 @@ export default async function TeamPage({
                             Archivé
                           </Badge>
                         ) : null}
-                        {!e.user_id ? (
+                        {e.user_id ? (
+                          <Badge variant="outline" className="border-emerald-500/40 text-xs font-normal text-emerald-800 dark:text-emerald-300">
+                            Auth lié
+                          </Badge>
+                        ) : (
                           <Badge variant="outline" className="border-amber-500/50 text-xs font-normal text-amber-800 dark:text-amber-200">
                             Auth non lié
                           </Badge>
-                        ) : null}
+                        )}
                       </div>
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">

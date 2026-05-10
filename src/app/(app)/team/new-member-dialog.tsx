@@ -28,11 +28,10 @@ export function NewTeamMemberDialog() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [ok, setOk] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { setOpen(v); setErr(null); setOk(null); }}>
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); setErr(null); }}>
       <DialogTrigger asChild>
         <Button type="button" variant="primary" className="rounded-full gap-2">
           <Plus className="h-4 w-4" />
@@ -43,14 +42,14 @@ export function NewTeamMemberDialog() {
         <DialogHeader>
           <DialogTitle>Nouveau membre</DialogTitle>
           <DialogDescription>
-            Crée le profil dans Supabase. Sans compte Auth lié, le collaborateur apparaît comme « Auth non lié ».
+            Crée le profil employé. Vous pouvez envoyer une invitation Supabase Auth tout de suite si la case ci-dessous
+            est cochée.
           </DialogDescription>
         </DialogHeader>
         <form
           className="grid gap-4 py-2"
           action={async (formData) => {
             setErr(null);
-            setOk(null);
             setPending(true);
             try {
               const res = await createEmployeeAction(formData);
@@ -58,9 +57,11 @@ export function NewTeamMemberDialog() {
                 setErr(res.error);
                 return;
               }
-              setOk('Membre créé.');
               setOpen(false);
               router.refresh();
+              if (res.data?.authNotice) {
+                window.alert(`Membre créé.\n\n${res.data.authNotice}`);
+              }
               if (res.data?.id) router.push(`/team/${res.data.id}`);
             } finally {
               setPending(false);
@@ -115,8 +116,17 @@ export function NewTeamMemberDialog() {
             <Label htmlFor="nm-notes">Notes internes</Label>
             <Textarea id="nm-notes" name="notes_internal" rows={2} />
           </div>
+          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border/60 bg-muted/20 p-3 text-sm leading-snug">
+            <input id="nm-invite-auth" type="checkbox" name="invite_auth" value="on" className="mt-0.5 h-4 w-4 rounded border-input" />
+            <span>
+              <span className="font-medium text-foreground">Créer / inviter un compte de connexion</span>
+              <span className="mt-1 block text-xs text-muted-foreground">
+                Envoie une invitation Supabase à l’e-mail saisi et lie <span className="font-mono text-[10px]">user_id</span>{' '}
+                si possible. Nécessite SMTP configuré côté projet.
+              </span>
+            </span>
+          </label>
           {err ? <p className="text-sm text-destructive">{err}</p> : null}
-          {ok ? <p className="text-sm text-emerald-600 dark:text-emerald-400">{ok}</p> : null}
           <DialogFooter className="gap-2 sm:gap-0">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               Annuler

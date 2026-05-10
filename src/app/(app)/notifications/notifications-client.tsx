@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { NOTIFICATION_PRIORITY_LABELS, NOTIFICATION_TYPE_LABELS } from '@/lib/notifications/labels';
 import { markAllNotificationsReadAction, markNotificationReadAction } from './actions';
+import { getStatusBlockSurface, notificationListTone } from '@/lib/ui/status-block-tone';
 
 const FILTERS: { id: string; label: string }[] = [
   { id: 'all', label: 'Tout' },
@@ -126,8 +127,10 @@ export function NotificationsClient({
             <li
               key={n.id}
               className={cn(
-                'rounded-xl border border-border/80 bg-card/55 p-4 transition-colors',
-                !n.is_read && 'border-primary/20 bg-primary/[0.04]'
+                'p-4 transition-colors',
+                getStatusBlockSurface(notificationListTone(n.priority, n.is_read), {
+                  urgentGlow: !n.is_read && n.priority === 'urgent',
+                }),
               )}
             >
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

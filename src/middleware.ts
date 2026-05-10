@@ -26,13 +26,31 @@ const isPublic = (pathname: string) =>
 
 export async function middleware(request: NextRequest) {
   const response = NextResponse.next({ request });
+  const pathname = request.nextUrl.pathname;
 
   const supabaseUrl = normalizeSupabaseProjectUrl(
     process.env.NEXT_PUBLIC_SUPABASE_URL
   );
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();
 
-  const supabase = createServerClient(supabaseUrl!, anonKey!, {
+  /** Avoid throwing inside Edge — missing public env breaks createServerClient and yields MIDDLEWARE_INVOCATION_FAILED on Vercel. */
+  if (!supabaseUrl || !anonKey) {
+    console.error(
+      '[middleware] Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY (check Vercel → Settings → Environment Variables → Production)',
+    );
+    if (pathname === '/') {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+    if (isPublic(pathname)) {
+      return NextResponse.next();
+    }
+    const url = request.nextUrl.clone();
+    url.pathname = '/login';
+    url.searchParams.set('next', pathname);
+    return NextResponse.redirect(url);
+  }
+
+  const supabase = createServerClient(supabaseUrl, anonKey, {
     cookies: {
       getAll() {
         return request.cookies.getAll();
@@ -46,19 +64,24 @@ export async function middleware(request: NextRequest) {
     },
   });
 
-  // Refresh session
-  const { data: { user } } = await supabase.auth.getUser();
+  let user = null;
+  try {
+    const { data } = await supabase.auth.getUser();
+    user = data.user ?? null;
+  } catch (e) {
+    console.error('[middleware] auth.getUser failed', e instanceof Error ? e.message : e);
+  }
 
   // Redirect to /login for protected routes if not authenticated
-  if (!user && !isPublic(request.nextUrl.pathname) && request.nextUrl.pathname !== '/') {
+  if (!user && !isPublic(pathname) && pathname !== '/') {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
-    url.searchParams.set('next', request.nextUrl.pathname);
+    url.searchParams.set('next', pathname);
     return NextResponse.redirect(url);
   }
 
   // Redirect / to dashboard or login
-  if (request.nextUrl.pathname === '/') {
+  if (pathname === '/') {
     const url = request.nextUrl.clone();
     url.pathname = user ? '/dashboard' : '/login';
     return NextResponse.redirect(url);

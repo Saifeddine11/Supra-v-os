@@ -12,6 +12,7 @@ import { SectionCard } from '@/components/shared/section-card';
 import { EmptyState } from '@/components/shared/empty-state';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils/cn';
+import { getStatusTableRowClasses, quoteStatusToTone } from '@/lib/ui/status-block-tone';
 import { AccessDenied } from '@/components/shared/access-denied';
 import { QuoteFormDialog } from './quote-form-dialog';
 import { QuoteRowActions } from './quote-row-actions';
@@ -77,6 +78,7 @@ export default async function QuotesPage() {
                 {quotes.map((q) => {
                   const expiredUi =
                     q.status !== 'converted' && q.status !== 'accepted' && q.valid_until < today;
+                  const rowTone = quoteStatusToTone(q.status, { expiredUi });
                   const tone =
                     q.status === 'accepted' || q.status === 'converted'
                       ? 'success'
@@ -86,7 +88,7 @@ export default async function QuotesPage() {
                           ? 'outline'
                           : 'outline';
                   return (
-                    <tr key={q.id} className="bg-card/40 transition-colors hover:bg-muted/50">
+                    <tr key={q.id} className={cn(getStatusTableRowClasses(rowTone))}>
                       <td className="px-4 py-3 font-medium text-foreground">{q.ref}</td>
                       <td className="px-4 py-3 text-muted-foreground">{q.clients?.name ?? '—'}</td>
                       <td className="px-4 py-3 tabular-nums text-foreground">

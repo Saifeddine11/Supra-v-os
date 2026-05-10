@@ -1,6 +1,8 @@
 import { SectionCard } from '@/components/shared/section-card';
 import { Badge } from '@/components/ui/badge';
 import type { ClientFollowMock } from '@/data/dashboard-mock';
+import { cn } from '@/lib/utils/cn';
+import { clientFollowTagToTone, getStatusBlockSurface } from '@/lib/ui/status-block-tone';
 
 const tagLabel: Record<ClientFollowMock['tag'], string> = {
   active: 'Actif',
@@ -16,7 +18,10 @@ export function ClientOverview({ clients }: { clients: ClientFollowMock[] }) {
         {clients.map((c) => (
           <li
             key={c.id}
-            className="flex flex-col gap-2 rounded-lg border border-primary/20 bg-gradient-to-br from-card to-surface-secondary px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+            className={cn(
+              'flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between',
+              getStatusBlockSurface(clientFollowTagToTone(c.tag)),
+            )}
           >
             <div>
               <p className="text-sm font-medium text-foreground">{c.name}</p>

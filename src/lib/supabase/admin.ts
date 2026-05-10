@@ -7,6 +7,7 @@
  *   - Portal token validation (clients have no auth session)
  *   - Cron jobs (morning reminders, deadline alerts, overdue invoice marking)
  *   - PDF generation (need to fetch invoices regardless of caller's role)
+ *   - Admin-only employee Auth flows (inviteUserByEmail / createUser / link user_id), server actions only
  *   - Admin maintenance scripts
  *
  * NEVER use in Client Components or expose service_role key to the browser.

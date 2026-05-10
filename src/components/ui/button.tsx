@@ -11,10 +11,13 @@ const buttonVariants = cva(
         default:
           'rounded-full border border-border bg-secondary text-secondary-foreground shadow-sm hover:border-primary/45 hover:bg-primary/[0.08]',
         primary:
-          'rounded-full bg-primary text-primary-foreground shadow-[0_0_24px_-4px_rgba(255,69,15,0.28)] hover:opacity-95',
+          'rounded-full border border-primary/25 bg-primary text-primary-foreground shadow-[0_0_24px_-4px_rgba(255,69,15,0.28)] hover:border-primary/35 hover:bg-primary/90 hover:text-primary-foreground dark:hover:bg-primary/88 dark:hover:text-primary-foreground',
         ghost: 'hover:bg-accent/60 hover:text-foreground',
         outline:
           'border border-border/80 bg-transparent text-foreground hover:border-primary/35 hover:bg-primary/[0.04]',
+        /** Actions rapides (topbar, etc.) : jamais texte foncé sur fond brun. */
+        quickSecondary:
+          'rounded-full border border-primary/40 bg-background font-medium text-foreground shadow-sm hover:border-primary/55 hover:bg-primary/[0.07] dark:border-primary/45 dark:bg-secondary dark:text-secondary-foreground dark:hover:border-primary/55 dark:hover:bg-secondary/90 dark:hover:text-secondary-foreground',
         link: 'text-primary underline-offset-4 hover:underline',
       },
       size: {

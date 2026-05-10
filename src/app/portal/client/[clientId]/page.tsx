@@ -7,6 +7,15 @@ import { getMonthlyVideoDeliverySnapshot } from '@/lib/portal/quota';
 import { INVOICE_STATUS_MAP, QUOTE_STATUS_MAP, VIDEO_PUBLIC_STATUS_MAP } from '@/types/domain';
 import { PortalVideoActions } from './portal-video-actions';
 import { PortalQuoteActions } from './portal-quote-actions';
+import { cn } from '@/lib/utils/cn';
+import {
+  getStatusBlockSurface,
+  portalInvoiceStatusToTone,
+  portalQuoteStatusToTone,
+  portalVideoPublicStatusToTone,
+} from '@/lib/ui/status-block-tone';
+import { buildPortalCalendarEvents } from '@/lib/portal/calendar-events';
+import { PortalClientCalendar } from './portal-client-calendar';
 
 export const metadata: Metadata = {
   title: 'Espace client',
@@ -77,7 +86,7 @@ export default async function ClientPortalPage({
       </header>
 
       {quota.quota > 0 ? (
-        <section className="rounded-2xl border border-primary/25 bg-gradient-to-br from-secondary to-card p-6">
+        <section className={cn('p-6', getStatusBlockSurface('neutral'), 'ring-1 ring-primary/15')}>
           <h2 className="text-xs font-semibold uppercase tracking-wider text-primary">Quota vidéo (mois en cours)</h2>
           <p className="mt-2 font-sans text-2xl font-semibold tabular-nums text-foreground">
             {quota.deliveredThisMonth} / {quota.quota}
@@ -91,10 +100,7 @@ export default async function ClientPortalPage({
           <h2 className="text-sm font-semibold uppercase tracking-wide text-primary">Validations en attente</h2>
           <ul className="mt-3 space-y-3">
             {pendingVideos.map((v) => (
-              <li
-                key={v.id}
-                className="rounded-xl border border-primary/35 bg-card p-4"
-              >
+              <li key={v.id} className={cn('p-4', getStatusBlockSurface('warning', { urgentGlow: true }))}>
                 <p className="font-medium text-foreground">{v.title}</p>
                 <p className="text-xs text-muted-foreground">{VIDEO_PUBLIC_STATUS_MAP[v.public_status].label}</p>
               </li>
@@ -103,7 +109,7 @@ export default async function ClientPortalPage({
         </section>
       ) : null}
 
-      <section>
+      <section className="scroll-mt-6 space-y-4" id="portal-section-videos">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-primary">Vidéos</h2>
         <ul className="mt-4 space-y-4">
           {bundle.videos.length === 0 ? (
@@ -112,7 +118,8 @@ export default async function ClientPortalPage({
             bundle.videos.map((v) => (
               <li
                 key={v.id}
-                className="rounded-xl border border-border/80 bg-card p-4"
+                id={`portal-video-${v.id}`}
+                className={cn('scroll-mt-6 p-4', getStatusBlockSurface(portalVideoPublicStatusToTone(v.public_status)))}
               >
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
@@ -154,14 +161,18 @@ export default async function ClientPortalPage({
         </ul>
       </section>
 
-      <section>
+      <section className="scroll-mt-6 space-y-4" id="portal-section-projects">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-primary">Projets</h2>
         <ul className="mt-4 space-y-2">
           {bundle.projects.length === 0 ? (
             <li className="text-sm text-muted-foreground">—</li>
           ) : (
             bundle.projects.map((p) => (
-              <li key={p.id} className="rounded-lg border border-border/60 px-3 py-2 text-sm">
+              <li
+                key={p.id}
+                id={`portal-project-${p.id}`}
+                className={cn('scroll-mt-4 px-3 py-2 text-sm', getStatusBlockSurface('muted'))}
+              >
                 <span className="text-foreground">{p.title}</span>
                 <span className="ml-2 text-xs text-muted-foreground">{p.status}</span>
               </li>
@@ -170,7 +181,7 @@ export default async function ClientPortalPage({
         </ul>
       </section>
 
-      <section>
+      <section className="scroll-mt-6 space-y-4" id="portal-section-quotes">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-primary">Propositions commerciales</h2>
         <p className="mt-2 max-w-2xl text-xs leading-relaxed text-muted-foreground">
           Vos devis visibles ici : montants publics uniquement. Aucune note interne n&apos;est affichée. Pour une
@@ -187,7 +198,8 @@ export default async function ClientPortalPage({
               return (
                 <li
                   key={q.id}
-                  className="rounded-2xl border border-border bg-gradient-to-br from-card to-surface-secondary/80 p-5 shadow-[0_0_0_1px_hsl(var(--primary)/0.12)]"
+                  id={`portal-quote-${q.id}`}
+                  className={cn('scroll-mt-6 p-5', getStatusBlockSurface(portalQuoteStatusToTone(q.status)))}
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
@@ -226,7 +238,7 @@ export default async function ClientPortalPage({
         </ul>
       </section>
 
-      <section>
+      <section className="scroll-mt-6 space-y-4" id="portal-section-invoices">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-primary">Factures</h2>
         <ul className="mt-4 space-y-2">
           {bundle.invoices.length === 0 ? (
@@ -235,7 +247,11 @@ export default async function ClientPortalPage({
             bundle.invoices.map((inv) => (
               <li
                 key={inv.id}
-                className="flex flex-wrap justify-between gap-2 rounded-lg border border-border/60 px-3 py-2 text-sm"
+                id={`portal-invoice-${inv.id}`}
+                className={cn(
+                  'scroll-mt-4 flex min-h-[48px] flex-wrap items-center justify-between gap-2 px-3 py-3 text-sm sm:py-2',
+                  getStatusBlockSurface(portalInvoiceStatusToTone(inv.status)),
+                )}
               >
                 <span className="text-foreground">{inv.ref}</span>
                 <span className="tabular-nums text-muted-foreground">
@@ -247,7 +263,7 @@ export default async function ClientPortalPage({
         </ul>
       </section>
 
-      <section>
+      <section className="scroll-mt-6 space-y-4" id="portal-section-documents">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-primary">Documents</h2>
         <ul className="mt-4 space-y-2">
           {bundle.documents.length === 0 ? (
@@ -258,14 +274,22 @@ export default async function ClientPortalPage({
                 ? `/api/portal/documents/${d.id}/download?clientId=${encodeURIComponent(clientId)}&token=${encodeURIComponent(safeToken)}`
                 : d.file_url || d.external_link;
               return (
-                <li key={d.id} className="text-sm">
+                <li
+                  key={d.id}
+                  id={`portal-document-${d.id}`}
+                  className={cn(
+                    'scroll-mt-4 flex min-h-[48px] flex-col gap-1 text-sm sm:flex-row sm:items-center sm:justify-between',
+                    getStatusBlockSurface('info'),
+                    'px-3 py-3 sm:py-2',
+                  )}
+                >
                   <span className="text-foreground">{d.name}</span>
                   {href ? (
                     <a
                       href={href}
                       target="_blank"
                       rel="noreferrer"
-                      className="ml-2 text-xs text-primary hover:underline"
+                      className="ml-0 mt-2 inline-flex min-h-[44px] items-center text-sm font-semibold text-primary hover:underline sm:ml-2 sm:mt-0 sm:text-xs sm:font-medium"
                     >
                       {d.file_storage_path ? 'Télécharger' : 'Ouvrir'}
                     </a>
@@ -277,7 +301,7 @@ export default async function ClientPortalPage({
         </ul>
       </section>
 
-      <section>
+      <section className="scroll-mt-6 space-y-4" id="portal-section-reports">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-primary">Rapports</h2>
         <ul className="mt-4 space-y-3">
           {bundle.reports.length === 0 ? (
@@ -286,14 +310,18 @@ export default async function ClientPortalPage({
             bundle.reports.map((r) => {
               const pdfHref = `/api/portal/reports/${r.id}/pdf?clientId=${encodeURIComponent(clientId)}&token=${encodeURIComponent(safeToken)}`;
               return (
-                <li key={r.id} className="rounded-lg border border-border/60 p-3 text-sm">
+                <li
+                  key={r.id}
+                  id={`portal-report-${r.id}`}
+                  className={cn('scroll-mt-6 p-4 text-sm sm:p-3', getStatusBlockSurface('neutral'))}
+                >
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <p className="font-medium text-foreground">{r.title}</p>
                     <a
                       href={pdfHref}
                       target="_blank"
                       rel="noreferrer"
-                      className="shrink-0 text-xs font-semibold text-primary hover:underline"
+                      className="inline-flex min-h-[44px] shrink-0 items-center text-sm font-semibold text-primary hover:underline sm:text-xs"
                     >
                       PDF
                     </a>

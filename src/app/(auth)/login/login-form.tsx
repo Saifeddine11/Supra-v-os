@@ -1,9 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { APP_NAME, AGENCY } from '@/lib/constants';
 import { ThemeToggle } from '@/components/app/theme-toggle';
+import { createClient } from '@/lib/supabase/client';
+
+const NO_EMPLOYEE_AFTER_SSO_MSG =
+  'Compte connecté mais aucun profil employé trouvé.';
 
 const NETWORK_HELP_CLIENT =
   'Impossible de joindre le serveur d’application. Vérifiez que le serveur de dev tourne (npm run dev), ' +
@@ -72,6 +76,43 @@ export function LoginForm() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  /**
+   * Après invitation / lien magique : le hash (#access_token=…) est lu par le client Supabase
+   * (detectSessionInUrl), persisté en cookies — on redirige si session valide + employé lié.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const supabase = createClient();
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (cancelled || !session?.user) return;
+
+        const { data: employee, error: empError } = await supabase
+          .from('employees')
+          .select('id')
+          .eq('user_id', session.user.id)
+          .maybeSingle();
+
+        if (empError || !employee) {
+          setError(NO_EMPLOYEE_AFTER_SSO_MSG);
+          await supabase.auth.signOut();
+          return;
+        }
+
+        router.replace(next.startsWith('/') ? next : '/dashboard');
+        router.refresh();
+      } catch (e) {
+        console.error('[login-form] session depuis URL / invitation', e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [router, next]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

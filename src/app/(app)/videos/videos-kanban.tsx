@@ -10,6 +10,7 @@ import { VIDEO_KANBAN_COLUMNS, VIDEO_STATUS_MAP, VIDEO_PUBLIC_STATUS_MAP, PRIORI
 import type { VideoWithClient } from '@/lib/data/videos';
 import type { VideoStatus } from '@/types/database';
 import { cn } from '@/lib/utils/cn';
+import { getStatusBlockSurface, videoWorkflowToStatusTone } from '@/lib/ui/status-block-tone';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
@@ -76,15 +77,11 @@ export function VideosKanban({
                     v.status !== 'archived' &&
                     v.status !== 'cancelled' &&
                     new Date(v.delivery_deadline) < new Date();
+                  const tone = videoWorkflowToStatusTone(v, { deliveryOverdue: Boolean(od) });
                   return (
                     <article
                       key={v.id}
-                      className={cn(
-                        'rounded-xl border bg-card/90 p-3',
-                        od
-                          ? 'border-destructive/35 ring-1 ring-destructive/10'
-                          : 'border-border/80'
-                      )}
+                      className={cn('p-3', getStatusBlockSurface(tone, { urgentGlow: Boolean(od) }))}
                     >
                       <p className="text-sm font-medium text-foreground">{v.title}</p>
                       <p className="mt-0.5 text-xs text-muted-foreground">{v.clients?.name ?? '—'}</p>

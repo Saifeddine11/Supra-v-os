@@ -17,6 +17,7 @@ import {
   countActiveAdminsExcluding,
   employeeHasBlockingRelations,
 } from '@/lib/data/employee-guards';
+import { inviteEmployeeAuth } from '@/lib/employees/auth-provision';
 
 function parseAssignableRole(raw: string): UserRole | null {
   const r = raw.trim() as UserRole;
@@ -42,7 +43,9 @@ function caughtActionError(e: unknown): ActionResult<never> {
   );
 }
 
-export async function createEmployeeAction(formData: FormData): Promise<ActionResult<{ id: string }>> {
+export async function createEmployeeAction(
+  formData: FormData,
+): Promise<ActionResult<{ id: string; authNotice?: string }>> {
   try {
   const ctx = await getAuthContext();
   if (!ctx || !canManageEmployees(ctx.role)) {
@@ -58,6 +61,7 @@ export async function createEmployeeAction(formData: FormData): Promise<ActionRe
   const avatar_initials = initialsFromName(full_name, avatar_initials_raw || null);
   const notes_internal = String(formData.get('notes_internal') ?? '').trim() || null;
   const is_active = String(formData.get('is_active') ?? 'true') !== 'false';
+  const invite_auth = String(formData.get('invite_auth') ?? '') === 'on';
 
   if (!full_name) return actionError('Le nom est requis.');
   if (!email) return actionError('L’e-mail est requis.');
@@ -93,12 +97,49 @@ export async function createEmployeeAction(formData: FormData): Promise<ActionRe
     action: 'employee_created',
     entityType: 'employee',
     entityId: data.id,
-    metadata: { full_name, email, role, operational_skills },
+    metadata: { full_name, email, role, operational_skills, invite_auth_requested: invite_auth },
   });
+
+  let authNotice: string | undefined;
+  if (invite_auth) {
+    try {
+      const ir = await inviteEmployeeAuth(data.id, email);
+      if (ir.ok) {
+        authNotice =
+          ir.mode === 'linked_existing'
+            ? 'Compte Auth existant : profil lié.'
+            : 'Invitation envoyée. Compte Auth lié.';
+        await logStaffActivity(ctx, {
+          action: ir.mode === 'linked_existing' ? 'employee_auth_linked' : 'employee_auth_invite_sent',
+          entityType: 'employee',
+          entityId: data.id,
+          metadata: { full_name, email, mode: ir.mode },
+        });
+      } else {
+        authNotice = `Auth : ${ir.error}`;
+        await logStaffActivity(ctx, {
+          action: 'employee_auth_invite_failed',
+          entityType: 'employee',
+          entityId: data.id,
+          metadata: { full_name, email, reason: ir.error },
+        });
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'erreur inconnue';
+      authNotice =
+        'Le profil est créé, mais l’étape Auth a échoué (vérifiez SUPABASE_SERVICE_ROLE_KEY et la configuration e-mail).';
+      await logStaffActivity(ctx, {
+        action: 'employee_auth_invite_failed',
+        entityType: 'employee',
+        entityId: data.id,
+        metadata: { full_name, email, reason: msg },
+      });
+    }
+  }
 
   revalidatePath('/team');
   revalidatePath(`/team/${data.id}`);
-  return actionOk({ id: data.id });
+  return actionOk({ id: data.id, authNotice });
   } catch (e) {
     return caughtActionError(e);
   }

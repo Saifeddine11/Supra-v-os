@@ -426,11 +426,18 @@ export default async function DashboardPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          {canModifyClients(ctx.role) ? <ActionButton href="/clients">Nouveau client</ActionButton> : null}
-          {navItemVisible('/tasks', ctx.employee.role) ? (
-            <ActionButton href="/tasks">Nouvelle tâche</ActionButton>
-          ) : null}
-          {canModifyInvoices(ctx.role) ? <ActionButton href="/invoices">Nouvelle facture</ActionButton> : null}
+          {(() => {
+            type Quick = { href: string; label: string };
+            const items: Quick[] = [];
+            if (canModifyClients(ctx.role)) items.push({ href: '/clients', label: 'Nouveau client' });
+            if (navItemVisible('/tasks', ctx.employee.role)) items.push({ href: '/tasks', label: 'Nouvelle tâche' });
+            if (canModifyInvoices(ctx.role)) items.push({ href: '/invoices', label: 'Nouvelle facture' });
+            return items.map((item, i) => (
+              <ActionButton key={item.href} href={item.href} variant={i === 0 ? 'primary' : 'secondary'}>
+                {item.label}
+              </ActionButton>
+            ));
+          })()}
         </div>
       </header>
 

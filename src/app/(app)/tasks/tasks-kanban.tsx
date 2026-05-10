@@ -8,6 +8,7 @@ import type { Client, Employee, Task, TaskStatus } from '@/types/database';
 import { TASK_STATUS_MAP, PRIORITY_MAP, TASK_KANBAN_STATUSES } from '@/types/domain';
 import type { TaskEnriched } from '@/types/database';
 import { cn } from '@/lib/utils/cn';
+import { getStatusBlockSurface, taskToStatusTone } from '@/lib/ui/status-block-tone';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
@@ -33,14 +34,13 @@ function TaskCard({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const od = overdue(task);
+  const tone = taskToStatusTone(task);
 
   return (
     <article
       className={cn(
-        'rounded-xl border bg-card/90 p-3 shadow-sm transition-colors',
-        od
-          ? 'border-destructive/40 ring-1 ring-destructive/15'
-          : 'border-border/80'
+        'p-3 shadow-sm transition-colors',
+        getStatusBlockSurface(tone, { urgentGlow: od || task.priority === 'urgent' }),
       )}
     >
       <div className="flex items-start justify-between gap-2">

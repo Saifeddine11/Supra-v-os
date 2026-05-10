@@ -43,30 +43,47 @@ export function AppTopbar({ employee, email, initialUnread, initialBellPreview }
         </div>
 
         <div className="hidden shrink-0 items-center gap-2 sm:flex">
-          {navItemVisible('/clients', employee.role) ? (
-            <Button variant="outline" size="sm" className="rounded-full" asChild>
-              <Link href="/clients">
-                <Plus className="h-4 w-4" />
-                Client
-              </Link>
-            </Button>
-          ) : null}
-          {navItemVisible('/tasks', employee.role) ? (
-            <Button variant="outline" size="sm" className="rounded-full" asChild>
-              <Link href="/tasks">
-                <Plus className="h-4 w-4" />
-                Tâche
-              </Link>
-            </Button>
-          ) : null}
-          {canModifyInvoices(employee.role) ? (
-            <Button variant="primary" size="sm" className="rounded-full" asChild>
-              <Link href="/invoices">
-                <Plus className="h-4 w-4" />
-                Facture
-              </Link>
-            </Button>
-          ) : null}
+          {(() => {
+            const showClients = navItemVisible('/clients', employee.role);
+            const showTasks = navItemVisible('/tasks', employee.role);
+            const showInvoices = canModifyInvoices(employee.role);
+            let primaryUsed = false;
+            const nextVariant = (): 'primary' | 'quickSecondary' => {
+              if (!primaryUsed) {
+                primaryUsed = true;
+                return 'primary';
+              }
+              return 'quickSecondary';
+            };
+            return (
+              <>
+                {showClients ? (
+                  <Button variant={nextVariant()} size="sm" className="rounded-full" asChild>
+                    <Link href="/clients">
+                      <Plus className="h-4 w-4" />
+                      Client
+                    </Link>
+                  </Button>
+                ) : null}
+                {showTasks ? (
+                  <Button variant={nextVariant()} size="sm" className="rounded-full" asChild>
+                    <Link href="/tasks">
+                      <Plus className="h-4 w-4" />
+                      Tâche
+                    </Link>
+                  </Button>
+                ) : null}
+                {showInvoices ? (
+                  <Button variant={nextVariant()} size="sm" className="rounded-full" asChild>
+                    <Link href="/invoices">
+                      <Plus className="h-4 w-4" />
+                      Facture
+                    </Link>
+                  </Button>
+                ) : null}
+              </>
+            );
+          })()}
         </div>
 
         <ThemeToggle />

@@ -1,6 +1,16 @@
 import { SectionCard } from '@/components/shared/section-card';
 import { PriorityBadge } from '@/components/shared/priority-badge';
 import type { TaskRowMock } from '@/data/dashboard-mock';
+import { cn } from '@/lib/utils/cn';
+import { getStatusBlockSurface } from '@/lib/ui/status-block-tone';
+import type { StatusBlockTone } from '@/lib/ui/status-block-tone';
+
+function mockTaskRowTone(t: TaskRowMock): StatusBlockTone {
+  if (t.overdue) return 'danger';
+  if (t.priority === 'urgent') return 'danger';
+  if (t.priority === 'high') return 'warning';
+  return 'info';
+}
 
 function TaskList({ title, tasks }: { title: string; tasks: TaskRowMock[] }) {
   return (
@@ -10,7 +20,10 @@ function TaskList({ title, tasks }: { title: string; tasks: TaskRowMock[] }) {
         {tasks.map((t) => (
           <li
             key={t.id}
-            className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/20 bg-gradient-to-br from-card to-surface-secondary px-3 py-2"
+            className={cn(
+              'flex flex-wrap items-center justify-between gap-2 px-3 py-2',
+              getStatusBlockSurface(mockTaskRowTone(t), { urgentGlow: Boolean(t.overdue) }),
+            )}
           >
             <div className="min-w-0">
               <p className="text-sm font-medium text-foreground">{t.title}</p>

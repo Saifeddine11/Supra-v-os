@@ -13,6 +13,7 @@ import { listActivityForEntity } from '@/lib/data/activity-logs';
 import { EmployeeAdminForm } from '../employee-admin-form';
 import { EmployeeRoleForm } from '../employee-role-form';
 import { TeamMemberRowActions } from '../team-member-row-actions';
+import { EmployeeAuthPanel } from '../employee-auth-panel';
 
 export async function generateMetadata({
   params,
@@ -113,6 +114,15 @@ export default async function TeamMemberPage({ params }: { params: Promise<{ id:
           </div>
         ) : null}
       </div>
+
+      {canAdmin ? (
+        <SectionCard
+          title="Accès Supabase Auth"
+          description="Invitation par e-mail, création avec mot de passe temporaire (affichage unique) ou lien de réinitialisation."
+        >
+          <EmployeeAuthPanel employeeId={member.id} email={member.email} userId={member.user_id} />
+        </SectionCard>
+      ) : null}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <SectionCard title="Profil" description="Coordonnées et capacité">

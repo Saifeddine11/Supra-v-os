@@ -11,6 +11,7 @@ export interface PortalVideoRow {
   title: string;
   public_status: Video['public_status'];
   status: Video['status'];
+  shooting_date: string | null;
   delivery_deadline: string | null;
   publication_date: string | null;
   preview_url: string | null;
@@ -62,7 +63,7 @@ export async function loadPortalPublicData(clientId: string): Promise<PortalBund
     admin
       .from('videos')
       .select(
-        'id, title, public_status, status, delivery_deadline, publication_date, preview_url, final_url'
+        'id, title, public_status, status, shooting_date, delivery_deadline, publication_date, preview_url, final_url'
       )
       .eq('client_id', clientId)
       .not('status', 'eq', 'archived')

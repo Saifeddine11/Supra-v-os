@@ -12,6 +12,7 @@ import { SectionCard } from '@/components/shared/section-card';
 import { EmptyState } from '@/components/shared/empty-state';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils/cn';
+import { getStatusTableRowClasses, invoiceStatusToTone } from '@/lib/ui/status-block-tone';
 import { AccessDenied } from '@/components/shared/access-denied';
 import { InvoiceFormDialog } from './invoice-form-dialog';
 import { InvoiceRowActions } from './invoice-row-actions';
@@ -89,8 +90,9 @@ export default async function InvoicesPage() {
                       : inv.status === 'overdue' || overdueUi
                         ? 'destructive'
                         : 'outline';
+                  const rowTone = invoiceStatusToTone(inv.status, overdueUi);
                   return (
-                    <tr key={inv.id} className="bg-card/40 transition-colors hover:bg-muted/50">
+                    <tr key={inv.id} className={cn(getStatusTableRowClasses(rowTone))}>
                       <td className="px-4 py-3 font-medium text-foreground">{inv.ref}</td>
                       <td className="px-4 py-3 text-muted-foreground">{inv.clients?.name ?? '—'}</td>
                       <td className="px-4 py-3 tabular-nums text-foreground">
