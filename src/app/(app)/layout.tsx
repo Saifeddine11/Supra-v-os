@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation';
 import { requireAuth } from '@/lib/auth/permissions';
 import { getUnreadNotificationsCount, listBellPreview } from '@/lib/data/notifications-user';
+import { getMyNotificationPreferences } from '@/lib/data/notification-preferences';
+import { notificationSoundPrefsFromRow } from '@/lib/notifications/notification-sound-prefs';
 import { AppShell } from '@/components/app/app-shell';
 import { StaffPasswordChangeGate } from '@/components/app/staff-password-change-gate';
 import type { Notification } from '@/types/database';
@@ -15,11 +17,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   let initialUnread = 0;
   let initialBellPreview: Notification[] = [];
+  let notificationSoundPrefs = notificationSoundPrefsFromRow(null);
   if (!mustChangePassword) {
-    [initialUnread, initialBellPreview] = await Promise.all([
+    const [unread, bellPreview, notifPrefs] = await Promise.all([
       getUnreadNotificationsCount(ctx),
       listBellPreview(8, ctx),
+      ctx.userId ? getMyNotificationPreferences(ctx.userId) : Promise.resolve(null),
     ]);
+    initialUnread = unread;
+    initialBellPreview = bellPreview;
+    notificationSoundPrefs = notificationSoundPrefsFromRow(notifPrefs);
   }
 
   return (
@@ -30,6 +37,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         email={ctx.email}
         initialUnread={initialUnread}
         initialBellPreview={initialBellPreview}
+        notificationSoundPrefs={notificationSoundPrefs}
       >
         {children}
       </AppShell>

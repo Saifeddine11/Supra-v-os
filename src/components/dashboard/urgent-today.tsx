@@ -1,6 +1,7 @@
 import { AlertTriangle, ChevronRight } from 'lucide-react';
 import type { UrgentItem } from '@/data/dashboard-mock';
 import { cn } from '@/lib/utils/cn';
+import { ClientColorDot } from '@/components/shared/client-color-dot';
 import { getStatusBlockSurface, getStatusIconBox } from '@/lib/ui/status-block-tone';
 import type { StatusBlockTone } from '@/lib/ui/status-block-tone';
 
@@ -38,7 +39,10 @@ export function UrgentToday({ items }: { items: UrgentItem[] }) {
               <AlertTriangle className="h-4 w-4" aria-hidden />
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{item.type}</p>
+              <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {item.clientBrandHex ? <ClientColorDot hex={item.clientBrandHex} size="sm" /> : null}
+                <span>{item.type}</span>
+              </p>
               <p className="truncate text-sm font-medium text-foreground">{item.title}</p>
               <p className="text-xs text-muted-foreground">{item.detail}</p>
             </div>

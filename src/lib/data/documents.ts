@@ -10,7 +10,7 @@ import { fetchVideoIdsAssignedToEmployee, fetchVideoIdsForAssignmentRole } from 
 import type { DocumentRecord, DocumentType } from '@/types/database';
 
 export type DocumentWithRelations = DocumentRecord & {
-  clients: { name: string; id: string } | null;
+  clients: { name: string; id: string; color_hex: string | null } | null;
   projects: { title: string; id: string } | null;
 };
 
@@ -96,7 +96,7 @@ export async function listDocumentsWithRelations(
 
   let q = sb
     .from('documents')
-    .select('*, clients(name, id), projects(title, id)')
+    .select('*, clients(name, id, color_hex), projects(title, id)')
     .order('uploaded_at', { ascending: false });
 
   if (orFilter) q = q.or(orFilter);

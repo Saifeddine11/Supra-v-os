@@ -13,11 +13,19 @@ import { effectiveClientDeliveryIso, isVideoDeliveryOverdue } from '@/lib/videos
 import { videoKanbanAssigneeSummary } from '@/lib/videos/video-assignee-labels';
 import { cn } from '@/lib/utils/cn';
 import { getStatusBlockSurface, videoWorkflowToStatusTone } from '@/lib/ui/status-block-tone';
+import {
+  getClientDeliveryBadge,
+  getShootingBadge,
+  getVideoProductionBadgeClass,
+  getVideoPublicBadgeClass,
+} from '@/lib/ui/status-colors';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
 import { VideoFormDialog } from './video-form-dialog';
 import { deleteVideoAction, updateVideoStatusAction } from './actions';
+import { ClientColorDot } from '@/components/shared/client-color-dot';
+import { getClientColor } from '@/lib/ui/client-colors';
 
 const TERMINAL: VideoStatus[] = ['archived', 'cancelled'];
 
@@ -28,7 +36,7 @@ export function VideosKanban({
   canDelete,
 }: {
   videos: VideoWithClient[];
-  clients: Pick<Client, 'id' | 'name'>[];
+  clients: Pick<Client, 'id' | 'name' | 'color_hex' | 'color_label'>[];
   employees: VideoAssignEmployeeRow[];
   canDelete: boolean;
 }) {
@@ -76,16 +84,68 @@ export function VideosKanban({
                   const od = isVideoDeliveryOverdue(v);
                   const tone = videoWorkflowToStatusTone(v, { deliveryOverdue: Boolean(od) });
                   const deliveryIso = effectiveClientDeliveryIso(v);
+                  const scheduleNow = new Date();
+                  const shootB = getShootingBadge(v.shooting_date, v.status, scheduleNow);
+                  const delB = getClientDeliveryBadge(v, scheduleNow);
                   return (
                     <article
                       key={v.id}
-                      className={cn('p-3', getStatusBlockSurface(tone, { urgentGlow: Boolean(od) }))}
+                      className={cn(
+                        'relative overflow-hidden p-3 pl-3.5',
+                        getStatusBlockSurface(tone, { urgentGlow: Boolean(od) }),
+                      )}
                     >
+                      {v.clients?.name ? (
+                        <span
+                          className="pointer-events-none absolute bottom-2.5 left-1 top-2.5 w-[3px] rounded-full opacity-95"
+                          style={{
+                            backgroundColor: getClientColor({
+                              name: v.clients.name,
+                              color_hex: v.clients.color_hex,
+                            }),
+                          }}
+                          aria-hidden
+                        />
+                      ) : null}
                       <p className="text-sm font-medium text-foreground">{v.title}</p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">{v.clients?.name ?? '—'}</p>
+                      <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                        {v.clients?.name ? (
+                          <>
+                            <ClientColorDot
+                              hex={getClientColor({ name: v.clients.name, color_hex: v.clients.color_hex })}
+                              size="sm"
+                              title={v.clients.name}
+                            />
+                            <span>{v.clients.name}</span>
+                          </>
+                        ) : (
+                          '—'
+                        )}
+                      </p>
                       <div className="mt-2 flex flex-wrap gap-1">
-                        <Badge variant="outline" className="text-[10px]">
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            'text-[10px] font-medium',
+                            getVideoProductionBadgeClass(v.status, v.public_status, {
+                              deliveryOverdue: od,
+                              video: v,
+                            }),
+                          )}
+                        >
+                          {VIDEO_STATUS_MAP[v.status].label}
+                        </Badge>
+                        <Badge
+                          variant="outline"
+                          className={cn('text-[10px] font-medium', getVideoPublicBadgeClass(v.public_status))}
+                        >
                           {VIDEO_PUBLIC_STATUS_MAP[v.public_status].label}
+                        </Badge>
+                        <Badge variant="outline" className={cn('text-[10px] font-medium', shootB.className)}>
+                          {shootB.label}
+                        </Badge>
+                        <Badge variant="outline" className={cn('text-[10px] font-medium', delB.className)}>
+                          {delB.label}
                         </Badge>
                         <Badge variant="primary" className="text-[10px]">
                           {PRIORITY_MAP[v.priority].label}

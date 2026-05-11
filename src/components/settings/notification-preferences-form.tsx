@@ -8,6 +8,8 @@ import { DEFAULT_NOTIFICATION_PREFS } from '@/data/notification-defaults';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { updateNotificationPreferencesAction } from '@/app/(app)/settings/actions';
+import type { NotificationSoundPrefs } from '@/lib/notifications/notification-sound-prefs';
+import { NotificationSoundTestButtons } from '@/components/settings/notification-sound-test-buttons';
 
 function FormFeedback({ kind, message }: { kind: 'success' | 'error'; message: string }) {
   if (kind === 'success') {
@@ -79,14 +81,13 @@ export function NotificationPreferencesForm({
     return () => window.clearTimeout(t);
   }, [feedback]);
 
-  const p = prefs
-    ? {
-        email_reminders_enabled: prefs.email_reminders_enabled,
-        morning_reminder_enabled: prefs.morning_reminder_enabled,
-        evening_summary_enabled: prefs.evening_summary_enabled,
-        deadline_alerts_enabled: prefs.deadline_alerts_enabled,
-      }
-    : DEFAULT_NOTIFICATION_PREFS;
+  const p = { ...DEFAULT_NOTIFICATION_PREFS, ...(prefs ?? {}) };
+
+  const soundPrefsForTest: NotificationSoundPrefs = {
+    notification_sound_enabled: p.notification_sound_enabled,
+    notification_sound_urgent_only: p.notification_sound_urgent_only,
+    notification_sound_volume: p.notification_sound_volume,
+  };
 
   return (
     <form
@@ -107,6 +108,15 @@ export function NotificationPreferencesForm({
       }}
     >
       {feedback ? <FormFeedback kind={feedback.kind} message={feedback.text} /> : null}
+
+      <div className="rounded-xl border border-destructive/35 bg-destructive/[0.07] px-4 py-3 text-sm text-foreground">
+        <p className="font-semibold text-destructive">Alertes critiques — non désactivables</p>
+        <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+          Les retards et situations critiques (tâches, livraisons vidéo, factures selon votre rôle), le bandeau rouge en
+          haut de l’app, les rappels e-mail toutes les 2 h et le son critique associé sont obligatoires pour l’équipe.
+          Les réglages ci-dessous ne s’appliquent pas à ces alertes.
+        </p>
+      </div>
 
       <ToggleRow
         name="email_reminders_enabled"
@@ -136,6 +146,55 @@ export function NotificationPreferencesForm({
         defaultChecked={p.deadline_alerts_enabled}
         disabled={pending}
       />
+
+      <div className="mt-4 space-y-3 rounded-xl border border-border/60 border-l-2 border-l-primary/50 bg-card/30 p-4 dark:bg-card/40">
+        <div>
+          <p className="text-sm font-medium text-foreground">Notifications sonores</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Activez un son court pour les notifications importantes et urgentes. Les alertes mineures restent silencieuses
+            dans l’app.
+          </p>
+          <p className="mt-2 text-[11px] text-muted-foreground/90">
+            Si le navigateur bloque l’audio, cliquez une fois dans l’app ou utilisez « Tester » ci-dessous pour
+            débloquer.
+          </p>
+        </div>
+        <ToggleRow
+          name="notification_sound_enabled"
+          label="Activer les sons"
+          description="Si désactivé, aucun son ne sera joué pour les nouvelles notifications."
+          defaultChecked={p.notification_sound_enabled}
+          disabled={pending}
+        />
+        <ToggleRow
+          name="notification_sound_urgent_only"
+          label="Sons uniquement pour urgences"
+          description="Seules les alertes urgentes ou critiques produisent un son (échéances imminentes, retards, factures critiques)."
+          defaultChecked={p.notification_sound_urgent_only}
+          disabled={pending}
+        />
+        <div className="flex flex-col gap-2 rounded-lg border border-border/50 bg-background/40 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <Label className="text-foreground">Volume</Label>
+            <p className="text-xs text-muted-foreground">Faible, moyen ou fort (appliqué aux sons in-app).</p>
+          </div>
+          <select
+            name="notification_sound_volume"
+            defaultValue={p.notification_sound_volume}
+            disabled={pending}
+            className="h-9 rounded-lg border border-border/80 bg-card px-3 text-sm text-foreground outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring/40"
+          >
+            <option value="low">Faible</option>
+            <option value="medium">Moyen</option>
+            <option value="high">Fort</option>
+          </select>
+        </div>
+        <div className="space-y-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Tester</p>
+          <NotificationSoundTestButtons prefs={soundPrefsForTest} />
+        </div>
+      </div>
+
       <Button type="submit" variant="outline" className="mt-2 w-fit rounded-full border-primary/35" disabled={pending}>
         {pending ? (
           <>

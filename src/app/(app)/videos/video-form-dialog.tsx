@@ -22,6 +22,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils/cn';
 import { createVideoAction, updateVideoAction } from './actions';
+import { ClientColorDot } from '@/components/shared/client-color-dot';
+import { getClientColor } from '@/lib/ui/client-colors';
 
 const STATUSES = Object.keys(VIDEO_STATUS_MAP) as VideoStatus[];
 const PUBLIC_STATUSES = Object.keys(VIDEO_PUBLIC_STATUS_MAP) as VideoPublicStatus[];
@@ -98,7 +100,7 @@ export function VideoFormDialog({
   trigger,
 }: {
   video?: VideoWithClient | null;
-  clients: Pick<Client, 'id' | 'name'>[];
+  clients: Pick<Client, 'id' | 'name' | 'color_hex' | 'color_label'>[];
   employees: VideoAssignEmployeeRow[];
   trigger: React.ReactNode;
 }) {
@@ -108,6 +110,7 @@ export function VideoFormDialog({
   const [pending, setPending] = useState(false);
   const [editorSel, setEditorSel] = useState<Set<string>>(() => new Set());
   const [camSel, setCamSel] = useState<Set<string>>(() => new Set());
+  const [clientSel, setClientSel] = useState(video?.client_id ?? clients[0]?.id ?? '');
   const isEdit = Boolean(video);
 
   useEffect(() => {
@@ -118,6 +121,7 @@ export function VideoFormDialog({
   /** Ne resynchroniser qu’à l’ouverture ou au changement de fiche — pas sur chaque rerender serveur (évite d’écraser Monteur/Caméraman en cours). */
   useEffect(() => {
     if (!open) return;
+    setClientSel(video?.client_id ?? clients[0]?.id ?? '');
     const { editors, cameramen } = initialAssignSets(video ?? null);
     setEditorSel(new Set(editors));
     setCamSel(new Set(cameramen));
@@ -219,12 +223,23 @@ export function VideoFormDialog({
             <div className="space-y-8 pb-2">
               <FormSection title="Informations générales" description="Client et contenu de la vidéo.">
                 <div className="grid gap-2">
-                  <Label htmlFor="v-client">Client</Label>
+                  <div className="flex items-center justify-between gap-2">
+                    <Label htmlFor="v-client">Client</Label>
+                    {clientSel ? (
+                      <ClientColorDot
+                        hex={getClientColor(
+                          clients.find((c) => c.id === clientSel) ?? { name: 'Client', color_hex: null },
+                        )}
+                        title={clients.find((c) => c.id === clientSel)?.name}
+                      />
+                    ) : null}
+                  </div>
                   <select
                     id="v-client"
                     name="client_id"
                     required
-                    defaultValue={video?.client_id}
+                    value={clientSel}
+                    onChange={(e) => setClientSel(e.target.value)}
                     className={fieldSelectClass}
                   >
                     {clients.map((c) => (

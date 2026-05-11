@@ -12,6 +12,7 @@ import {
   calendarTaskOverdue,
   getCalendarTaskTone,
 } from '@/lib/tasks/calendar-visual';
+import { getCalendarVideoDotClass } from '@/lib/ui/status-colors';
 import { CalendarTaskChip } from './calendar-task-chip';
 import { DayTasksDrawer } from './day-tasks-drawer';
 import { TaskFormDialog } from '../task-form-dialog';
@@ -33,6 +34,32 @@ function sortByDeadline(a: TaskEnriched, b: TaskEnriched): number {
   const ta = a.deadline ? new Date(a.deadline).getTime() : Infinity;
   const tb = b.deadline ? new Date(b.deadline).getTime() : Infinity;
   return ta - tb;
+}
+
+function dayEventDots(
+  dayTasks: TaskEnriched[],
+  dayVids: CalendarVideoEvent[],
+  colorBy: CalendarColorBy,
+  max = 6,
+): string[] {
+  const dots: string[] = [];
+  for (const t of dayTasks) {
+    if (dots.length >= max) break;
+    dots.push(getCalendarTaskTone(t, colorBy).dot);
+  }
+  for (const v of dayVids) {
+    if (dots.length >= max) break;
+    dots.push(
+      getCalendarVideoDotClass(v.kind, {
+        status: v.status,
+        public_status: v.public_status,
+        shooting_date: v.shooting_date,
+        client_delivery_at: v.client_delivery_at,
+        delivery_deadline: v.delivery_deadline,
+      }, v.at),
+    );
+  }
+  return dots;
 }
 
 function dayAgendaGroups(tasks: TaskEnriched[]) {
@@ -65,7 +92,7 @@ function DayAgendaView({
   anchorDay: Date;
   tasks: TaskEnriched[];
   videoEvents: CalendarVideoEvent[];
-  clients: Pick<Client, 'id' | 'name'>[];
+  clients: Pick<Client, 'id' | 'name' | 'color_hex' | 'color_label'>[];
   employees: Pick<Employee, 'id' | 'full_name'>[];
   colorBy: CalendarColorBy;
 }) {
@@ -213,7 +240,7 @@ export function TasksCalendarExperience({
   displayDayISOs: string[];
   tasks: TaskEnriched[];
   videoEvents: CalendarVideoEvent[];
-  clients: Pick<Client, 'id' | 'name'>[];
+  clients: Pick<Client, 'id' | 'name' | 'color_hex' | 'color_label'>[];
   employees: Pick<Employee, 'id' | 'full_name'>[];
   colorBy: CalendarColorBy;
 }) {
@@ -379,6 +406,14 @@ export function TasksCalendarExperience({
                 </p>
               </button>
 
+              {isMonth && (dayTasks.length > 0 || dayVids.length > 0) ? (
+                <div className="flex flex-wrap justify-center gap-1 px-0.5 pb-1 md:hidden" aria-hidden>
+                  {dayEventDots(dayTasks, dayVids, colorBy, 6).map((cls, i) => (
+                    <span key={`${day.toISOString()}-dot-${i}`} className={cn('h-1.5 w-1.5 rounded-full', cls)} />
+                  ))}
+                </div>
+              ) : null}
+
               <div className="hidden min-h-0 flex-1 flex-col gap-1 overflow-y-auto md:flex">
                 {view === 'week' ? (
                   <>
@@ -461,8 +496,8 @@ export function TasksCalendarExperience({
                     className={cn(
                       'flex min-h-[44px] w-full flex-col items-stretch justify-center gap-1 rounded-lg border border-l-[3px] px-2 py-2 text-left transition-colors active:bg-muted/40',
                       firstVid.kind === 'shoot'
-                        ? 'border-border/55 border-l-violet-600 bg-violet-500/[0.08]'
-                        : 'border-border/55 border-l-primary bg-primary/[0.08]',
+                        ? 'border-border/55 border-l-blue-600 bg-blue-500/[0.08] dark:bg-blue-500/[0.12]'
+                        : 'border-border/55 border-l-orange-500 bg-orange-500/[0.08] dark:bg-orange-500/[0.12]',
                     )}
                   >
                     <span className="truncate text-sm font-semibold leading-tight text-foreground">

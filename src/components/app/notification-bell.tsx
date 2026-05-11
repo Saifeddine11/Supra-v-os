@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import { Bell } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -19,16 +19,83 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { NOTIFICATION_PRIORITY_LABELS, NOTIFICATION_TYPE_LABELS } from '@/lib/notifications/labels';
 import { markNotificationReadAction } from '@/app/(app)/notifications/actions';
+import type { NotificationSoundPrefs } from '@/lib/notifications/notification-sound-prefs';
+import { canPlayNotificationSound } from '@/lib/notifications/notification-sound-prefs';
+import { playMandatoryCriticalAlarm, playNotificationSound } from '@/lib/notifications/notification-sound';
+import type { NotificationSoundLevel } from '@/lib/notifications/notification-sound-level';
+import { getNotificationSoundLevel, soundLevelRank } from '@/lib/notifications/notification-sound-level';
 
 export function NotificationBell({
   initialUnread,
   initialPreview,
+  soundPrefs,
 }: {
   initialUnread: number;
   initialPreview: Notification[];
+  soundPrefs: NotificationSoundPrefs;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [unread, setUnread] = useState(initialUnread);
+  const [preview, setPreview] = useState(initialPreview);
+  const sinceRef = useRef<string>(new Date().toISOString());
+
+  useEffect(() => {
+    setUnread(initialUnread);
+    setPreview(initialPreview);
+  }, [initialUnread, initialPreview]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function tick() {
+      try {
+        const r = await fetch(
+          `/api/notifications/bell-sync?since=${encodeURIComponent(sinceRef.current)}`,
+          { cache: 'no-store' }
+        );
+        if (!r.ok || cancelled) return;
+        const j = (await r.json()) as {
+          unread: number;
+          preview: Notification[];
+          fresh: Notification[];
+        };
+        setUnread(j.unread);
+        setPreview(j.preview);
+
+        const fresh = j.fresh ?? [];
+        if (fresh.length === 0) return;
+
+        let maxIso = sinceRef.current;
+        let maxLevel: NotificationSoundLevel = 'silent';
+
+        for (const n of fresh) {
+          if (new Date(n.created_at) > new Date(maxIso)) maxIso = n.created_at;
+          if (!n.is_read) {
+            const lvl = getNotificationSoundLevel(n);
+            if (soundLevelRank(lvl) > soundLevelRank(maxLevel)) maxLevel = lvl;
+          }
+        }
+        sinceRef.current = maxIso;
+
+        if (maxLevel === 'critical') {
+          playMandatoryCriticalAlarm();
+        } else if (maxLevel !== 'silent' && canPlayNotificationSound(maxLevel, soundPrefs)) {
+          playNotificationSound(maxLevel, soundPrefs);
+        }
+      } catch {
+        /* réseau / parse : ignorer */
+      }
+    }
+
+    const interval = window.setInterval(tick, 35_000);
+    const first = window.setTimeout(tick, 6_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      window.clearTimeout(first);
+    };
+  }, [soundPrefs]);
 
   async function onOpenItem(n: Notification) {
     if (!n.is_read) {
@@ -42,7 +109,7 @@ export function NotificationBell({
     }
   }
 
-  const showBadge = initialUnread > 0;
+  const showBadge = unread > 0;
 
   return (
     <DropdownMenu>
@@ -53,12 +120,12 @@ export function NotificationBell({
             'relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border/80 text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground',
             showBadge && 'border-primary/25 text-primary'
           )}
-          aria-label={`Notifications${showBadge ? ` — ${initialUnread} non lues` : ''}`}
+          aria-label={`Notifications${showBadge ? ` — ${unread} non lues` : ''}`}
         >
           <Bell className="h-[18px] w-[18px]" />
           {showBadge ? (
             <span className="absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">
-              {initialUnread > 99 ? '99+' : initialUnread}
+              {unread > 99 ? '99+' : unread}
             </span>
           ) : null}
         </button>
@@ -68,16 +135,16 @@ export function NotificationBell({
           <span className="text-foreground">Notifications</span>
           {showBadge ? (
             <Badge variant="primary" className="text-[10px]">
-              {initialUnread} non lues
+              {unread} non lues
             </Badge>
           ) : null}
         </DropdownMenuLabel>
         <DropdownMenuSeparator className="my-0" />
         <div className="max-h-[min(420px,70vh)] overflow-y-auto">
-          {initialPreview.length === 0 ? (
+          {preview.length === 0 ? (
             <p className="px-3 py-8 text-center text-sm text-muted-foreground">Aucune notification récente.</p>
           ) : (
-            initialPreview.map((n) => (
+            preview.map((n) => (
               <DropdownMenuItem
                 key={n.id}
                 className="cursor-pointer flex-col items-stretch gap-1 rounded-none border-b border-border/70 px-3 py-3 last:border-0"

@@ -4,6 +4,8 @@ import { Plus } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { listDocumentsWithRelations } from '@/lib/data/documents';
+import { ClientColorDot } from '@/components/shared/client-color-dot';
+import { getClientColor } from '@/lib/ui/client-colors';
 import { listClients } from '@/lib/data/clients';
 import { listProjectsForSelect } from '@/lib/data/projects-list';
 import { getAuthContext } from '@/lib/auth/permissions';
@@ -63,7 +65,12 @@ export default async function DocumentsPage({
     listClients({}, ctx),
     listProjectsForSelect(ctx),
   ]);
-  const clientOpts = clients.map((c) => ({ id: c.id, name: c.name }));
+  const clientOpts = clients.map((c) => ({
+    id: c.id,
+    name: c.name,
+    color_hex: c.color_hex,
+    color_label: c.color_label,
+  }));
 
   return (
     <div className="space-y-6">
@@ -155,7 +162,19 @@ export default async function DocumentsPage({
                     <td className="px-4 py-3 font-medium text-foreground">{d.name}</td>
                     <td className="px-4 py-3 text-muted-foreground">{DOCUMENT_TYPE_LABELS[d.type]}</td>
                     <td className="px-4 py-3 text-muted-foreground">{fileTypeLabel(d)}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{d.clients?.name ?? '—'}</td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {d.clients?.name ? (
+                        <span className="inline-flex items-center gap-2">
+                          <ClientColorDot
+                            hex={getClientColor({ name: d.clients.name, color_hex: d.clients.color_hex })}
+                            title={d.clients.name}
+                          />
+                          {d.clients.name}
+                        </span>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-muted-foreground">{d.projects?.title ?? '—'}</td>
                     <td className="px-4 py-3">
                       <Badge variant={d.visible_to_client ? 'success' : 'outline'}>

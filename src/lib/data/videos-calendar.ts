@@ -10,6 +10,7 @@ import {
   fetchVideoIdsAssignedToEmployee,
   fetchVideoIdsForAssignmentRole,
 } from '@/lib/data/video-assignments';
+import { getClientColor } from '@/lib/ui/client-colors';
 
 export type CalendarVideoEventKind = 'shoot' | 'delivery';
 
@@ -19,9 +20,13 @@ export interface CalendarVideoEvent {
   kind: CalendarVideoEventKind;
   title: string;
   clientName: string;
+  client_brand_hex: string;
   at: string;
   status: VideoStatus;
   public_status: VideoPublicStatus;
+  shooting_date: string | null;
+  client_delivery_at: string | null;
+  delivery_deadline: string | null;
 }
 
 function inRange(iso: string, startMs: number, endMs: number): boolean {
@@ -45,7 +50,7 @@ export async function listCalendarVideoEvents(
   let q = supabase
     .from('videos')
     .select(
-      'id, title, status, public_status, shooting_date, client_delivery_at, delivery_deadline, editor_id, cameraman_id, clients(name)',
+      'id, title, status, public_status, shooting_date, client_delivery_at, delivery_deadline, editor_id, cameraman_id, clients(name, color_hex)',
     )
     .not('status', 'in', '(archived,cancelled)');
 
@@ -104,7 +109,9 @@ export async function listCalendarVideoEvents(
     const title = row.title as string;
     const status = row.status as VideoStatus;
     const public_status = row.public_status as VideoPublicStatus;
-    const clientName = (row.clients as { name?: string } | null)?.name ?? '—';
+    const cl = row.clients as { name?: string; color_hex?: string | null } | null;
+    const clientName = cl?.name ?? '—';
+    const client_brand_hex = getClientColor({ name: clientName === '—' ? 'Client' : clientName, color_hex: cl?.color_hex ?? null });
     const shoot = row.shooting_date as string | null;
     const deliveryIso = effectiveClientDeliveryIso({
       client_delivery_at: row.client_delivery_at as string | null,
@@ -131,9 +138,13 @@ export async function listCalendarVideoEvents(
         kind: 'shoot',
         title,
         clientName,
+        client_brand_hex,
         at: shoot,
         status,
         public_status,
+        shooting_date: shoot,
+        client_delivery_at: row.client_delivery_at as string | null,
+        delivery_deadline: row.delivery_deadline as string | null,
       });
     }
     if (showDelivery && deliveryIso && inRange(deliveryIso, startMs, endMs)) {
@@ -143,9 +154,13 @@ export async function listCalendarVideoEvents(
         kind: 'delivery',
         title,
         clientName,
+        client_brand_hex,
         at: deliveryIso,
         status,
         public_status,
+        shooting_date: shoot,
+        client_delivery_at: row.client_delivery_at as string | null,
+        delivery_deadline: row.delivery_deadline as string | null,
       });
     }
   }

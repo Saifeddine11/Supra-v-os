@@ -19,6 +19,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { createDocumentAction } from './actions';
 import { Loader2 } from 'lucide-react';
+import { ClientColorDot } from '@/components/shared/client-color-dot';
+import { getClientColor } from '@/lib/ui/client-colors';
 
 const DOC_TYPES = Object.keys(DOCUMENT_TYPE_LABELS) as DocumentType[];
 
@@ -28,7 +30,7 @@ export function DocumentFormDialog({
   storageConfigured,
   trigger,
 }: {
-  clients: Pick<Client, 'id' | 'name'>[];
+  clients: Pick<Client, 'id' | 'name' | 'color_hex' | 'color_label'>[];
   projects: ProjectOption[];
   storageConfigured: boolean;
   trigger: React.ReactNode;
@@ -98,7 +100,14 @@ export function DocumentFormDialog({
             <Input id="doc-name" name="name" required placeholder="ex. Charte graphique v2" />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="doc-client">Client</Label>
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="doc-client">Client</Label>
+              {clientId ? (
+                <ClientColorDot
+                  hex={getClientColor(clients.find((c) => c.id === clientId) ?? { name: 'Client', color_hex: null })}
+                />
+              ) : null}
+            </div>
             <select
               id="doc-client"
               name="client_id"

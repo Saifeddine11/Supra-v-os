@@ -2,6 +2,7 @@ import { SectionCard } from '@/components/shared/section-card';
 import { StatusBadge } from '@/components/shared/status-badge';
 import type { VideoRowMock } from '@/data/dashboard-mock';
 import { cn } from '@/lib/utils/cn';
+import { ClientColorDot } from '@/components/shared/client-color-dot';
 import { getStatusBlockSurface, mockVideoRowToTone } from '@/lib/ui/status-block-tone';
 
 export function ProductionOverview({
@@ -42,7 +43,10 @@ export function ProductionOverview({
               >
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-foreground">{v.title}</p>
-                  <p className="text-xs text-muted-foreground">{v.client}</p>
+                  <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                    {v.clientBrandHex ? <ClientColorDot hex={v.clientBrandHex} size="sm" title={v.client} /> : null}
+                    <span>{v.client}</span>
+                  </p>
                 </div>
                 <StatusBadge
                   status={

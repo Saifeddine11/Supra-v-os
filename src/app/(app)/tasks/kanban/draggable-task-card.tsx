@@ -11,11 +11,14 @@ import type { Client, Employee, Task, TaskStatus, TaskEnriched } from '@/types/d
 import { TASK_STATUS_MAP, PRIORITY_MAP, TASK_KANBAN_STATUSES } from '@/types/domain';
 import { cn } from '@/lib/utils/cn';
 import { getStatusBlockSurface, taskToStatusTone } from '@/lib/ui/status-block-tone';
+import { getTaskDeadlineState } from '@/lib/deadlines/deadline-state';
+import { getTaskPriorityBadgeClass, getTaskStatusBadgeClass, operationalBadgeClass } from '@/lib/ui/status-colors';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
 import { TaskFormDialog } from '../task-form-dialog';
 import { archiveTaskAction, deleteTaskAction, updateTaskStatusAction } from '../actions';
+import { ClientColorDot } from '@/components/shared/client-color-dot';
 
 function overdue(task: Task): boolean {
   if (!task.deadline || task.status === 'done') return false;
@@ -30,7 +33,7 @@ export function DraggableTaskCard({
   dragEnabled,
 }: {
   task: TaskEnriched;
-  clients: Pick<Client, 'id' | 'name'>[];
+  clients: Pick<Client, 'id' | 'name' | 'color_hex' | 'color_label'>[];
   employees: Pick<Employee, 'id' | 'full_name'>[];
   canDelete: boolean;
   dragEnabled: boolean;
@@ -39,6 +42,7 @@ export function DraggableTaskCard({
   const router = useRouter();
   const od = overdue(task);
   const tone = taskToStatusTone(task);
+  const dlState = getTaskDeadlineState(task.deadline, task.status);
 
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: task.id,
@@ -54,7 +58,8 @@ export function DraggableTaskCard({
       ref={setNodeRef}
       style={style}
       className={cn(
-        'max-w-full rounded-xl border border-border/50 p-3 shadow-sm',
+        'relative max-w-full overflow-hidden rounded-xl border border-border/50 p-3 pl-3.5 shadow-sm',
+        od && 'border-destructive/60 ring-1 ring-destructive/25',
         getStatusBlockSurface(tone, { urgentGlow: od || task.priority === 'urgent' }),
         isDragging && 'relative z-[200]',
         isDragging && '!transition-none',
@@ -63,6 +68,13 @@ export function DraggableTaskCard({
         dragEnabled && !isDragging && 'cursor-grab active:cursor-grabbing',
       )}
     >
+      {task.client_brand_hex ? (
+        <span
+          className="pointer-events-none absolute bottom-2.5 left-1 top-2.5 w-[3px] rounded-full opacity-95"
+          style={{ backgroundColor: task.client_brand_hex }}
+          aria-hidden
+        />
+      ) : null}
       <div
         className={cn(dragEnabled && 'touch-none select-none')}
         {...(dragEnabled ? { ...listeners, ...attributes } : {})}
@@ -78,9 +90,50 @@ export function DraggableTaskCard({
           </Badge>
         </div>
         {task.client_name ? (
-          <p className="mt-1 text-xs text-muted-foreground">{task.client_name}</p>
+          <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+            {task.client_brand_hex ? (
+              <ClientColorDot hex={task.client_brand_hex} size="sm" title={task.client_name} />
+            ) : null}
+            <span>{task.client_name}</span>
+          </p>
         ) : null}
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          {od ? (
+            <span
+              className={cn(
+                'rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
+                operationalBadgeClass('danger'),
+              )}
+            >
+              En retard
+            </span>
+          ) : null}
+          {task.priority === 'urgent' && task.status !== 'done' ? (
+            <span
+              className={cn(
+                'rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
+                operationalBadgeClass('danger'),
+              )}
+            >
+              Urgent
+            </span>
+          ) : null}
+          <span
+            className={cn(
+              'rounded-md border px-2 py-0.5 text-[10px] font-medium',
+              getTaskStatusBadgeClass(task.status),
+            )}
+          >
+            {TASK_STATUS_MAP[task.status].label}
+          </span>
+          <span
+            className={cn(
+              'rounded-md border px-2 py-0.5 text-[10px] font-medium',
+              getTaskPriorityBadgeClass(task.priority),
+            )}
+          >
+            {PRIORITY_MAP[task.priority].label}
+          </span>
           {task.video_id ? (
             <Badge
               variant="outline"
@@ -111,7 +164,14 @@ export function DraggableTaskCard({
         </div>
         <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           {task.deadline ? (
-            <span className={cn('tabular-nums', od && 'font-semibold text-destructive')}>
+            <span
+              className={cn(
+                'tabular-nums',
+                od && 'font-semibold text-destructive',
+                dlState === 'today' && !od && 'font-medium text-orange-600 dark:text-orange-400',
+                dlState === 'tomorrow' && !od && 'font-medium text-amber-700 dark:text-amber-400',
+              )}
+            >
               {format(new Date(task.deadline), 'd MMM · HH:mm', { locale: fr })}
             </span>
           ) : (

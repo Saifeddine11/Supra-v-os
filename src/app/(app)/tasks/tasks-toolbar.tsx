@@ -15,7 +15,7 @@ export function TasksToolbar({
   defaultAssignee,
   defaultPriority,
 }: {
-  clients: Pick<Client, 'id' | 'name'>[];
+  clients: Pick<Client, 'id' | 'name' | 'color_hex' | 'color_label'>[];
   employees: Pick<Employee, 'id' | 'full_name'>[];
   defaultQ?: string;
   defaultAssignee?: string;

@@ -2,6 +2,7 @@ import { SectionCard } from '@/components/shared/section-card';
 import { PriorityBadge } from '@/components/shared/priority-badge';
 import type { TaskRowMock } from '@/data/dashboard-mock';
 import { cn } from '@/lib/utils/cn';
+import { ClientColorDot } from '@/components/shared/client-color-dot';
 import { getStatusBlockSurface } from '@/lib/ui/status-block-tone';
 import type { StatusBlockTone } from '@/lib/ui/status-block-tone';
 
@@ -32,8 +33,16 @@ function TaskList({ title, tasks }: { title: string; tasks: TaskRowMock[] }) {
             >
               <div className="min-w-0">
                 <p className="text-sm font-medium text-foreground">{t.title}</p>
-                <p className="text-xs text-muted-foreground">
-                  {t.assignee} · {t.due}
+                <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                  {t.clientBrandHex && t.clientName ? (
+                    <span className="inline-flex items-center gap-1">
+                      <ClientColorDot hex={t.clientBrandHex} size="sm" title={t.clientName} />
+                      <span>{t.clientName}</span>
+                    </span>
+                  ) : null}
+                  <span>
+                    {t.assignee} · {t.due}
+                  </span>
                 </p>
               </div>
               <div className="flex items-center gap-2">

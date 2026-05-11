@@ -5,7 +5,7 @@ import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import type { MorningReminderProps } from '@/lib/email/templates/morning-reminder';
 import type { DeadlineAlertProps } from '@/lib/email/templates/deadline-alert';
-import type { EveningSummaryProps } from '@/lib/email/templates/evening-summary';
+import type { EveningSummaryEmailProps } from '@/lib/email/templates/evening-summary';
 import type { InvoiceReminderProps } from '@/lib/email/templates/invoice-reminder';
 import type { ClientFeedbackProps } from '@/lib/email/templates/client-feedback';
 import type { QuoteExpiringProps } from '@/lib/email/templates/quote-expiring';
@@ -40,14 +40,20 @@ export function deadlineAlertSample(base: string, recipientName: string): Deadli
   };
 }
 
-export function eveningSummarySample(base: string, recipientName: string, now = new Date()): EveningSummaryProps {
+export function eveningSummarySample(base: string, recipientName: string, now = new Date()): EveningSummaryEmailProps {
   return {
-    recipientName,
-    date: sampleDateLabel(now),
-    completedTasks: ['Validation brief — Atlas'],
-    remainingTasks: ['Montage suite B-roll'],
-    overdueTasks: [],
-    tomorrowTasks: ['Étalonnage — campagne Riad'],
+    digest: {
+      recipientFirstName: recipientName,
+      dateLabel: sampleDateLabel(now),
+      overdue: [{ text: 'Tâche — Montage suite B-roll (échéance dépassée)', url: `${base}/tasks` }],
+      tomorrow: [
+        { text: 'Tournage demain — Spot Atlas', url: `${base}/videos` },
+        { text: 'Livraison demain — Vidéo Emara', url: `${base}/videos` },
+      ],
+      watch: [{ text: 'Validation client — Teaser Riad', url: `${base}/videos` }],
+      finance: [{ text: '2 factures en retard à traiter', url: `${base}/invoices` }],
+    },
+    completedToday: [{ text: 'Validation brief — Atlas', url: `${base}/tasks` }],
     dashboardUrl: `${base}/dashboard`,
   };
 }

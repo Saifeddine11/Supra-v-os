@@ -17,7 +17,7 @@ export function VideoRowActions({
   canDelete,
 }: {
   video: VideoWithClient;
-  clients: Pick<Client, 'id' | 'name'>[];
+  clients: Pick<Client, 'id' | 'name' | 'color_hex' | 'color_label'>[];
   employees: VideoAssignEmployeeRow[];
   canDelete: boolean;
 }) {

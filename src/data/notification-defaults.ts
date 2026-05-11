@@ -5,4 +5,7 @@ export const DEFAULT_NOTIFICATION_PREFS: Omit<UserNotificationPreferencesRow, 'u
   morning_reminder_enabled: true,
   evening_summary_enabled: true,
   deadline_alerts_enabled: true,
+  notification_sound_enabled: true,
+  notification_sound_urgent_only: false,
+  notification_sound_volume: 'medium',
 };

@@ -17,7 +17,7 @@ import {
 } from '@/lib/data/video-assignments';
 
 export type VideoWithClient = Video & {
-  clients: { name: string } | null;
+  clients: { name: string; color_hex: string | null } | null;
   /** Libellés concaténés (liste / legacy). */
   editor_name: string | null;
   cameraman_name: string | null;
@@ -26,7 +26,7 @@ export type VideoWithClient = Video & {
 };
 
 async function enrichVideoRows(
-  rows: (Video & { clients: { name: string } | null })[]
+  rows: (Video & { clients: { name: string; color_hex: string | null } | null })[]
 ): Promise<VideoWithClient[]> {
   if (rows.length === 0) return [];
   const supabase = await createClient();
@@ -76,7 +76,7 @@ export async function listVideosWithClients(
 
   let q = supabase
     .from('videos')
-    .select('*, clients(name)')
+    .select('*, clients(name, color_hex)')
     .order('delivery_deadline', { ascending: true, nullsFirst: false });
 
   if (hasFullOrgDataAccess(auth) || auth.role === 'commercial') {
@@ -105,7 +105,9 @@ export async function listVideosWithClients(
 
   const { data, error } = await q;
   if (error) throw new Error(error.message);
-  const enriched = await enrichVideoRows((data ?? []) as (Video & { clients: { name: string } | null })[]);
+  const enriched = await enrichVideoRows(
+    (data ?? []) as (Video & { clients: { name: string; color_hex: string | null } | null })[],
+  );
   enriched.sort((a, b) => {
     const ta = effectiveClientDeliveryIso(a);
     const tb = effectiveClientDeliveryIso(b);
@@ -126,7 +128,7 @@ export async function getVideoById(
 
   const { data, error } = await supabase
     .from('videos')
-    .select('*, clients(name)')
+    .select('*, clients(name, color_hex)')
     .eq('id', id)
     .maybeSingle();
   if (error) throw new Error(error.message);
@@ -134,6 +136,8 @@ export async function getVideoById(
 
   if (!(await assertVideoRecordVisible(supabase, auth, id))) return null;
 
-  const [enriched] = await enrichVideoRows([data as Video & { clients: { name: string } | null }]);
+  const [enriched] = await enrichVideoRows([
+    data as Video & { clients: { name: string; color_hex: string | null } | null },
+  ]);
   return enriched ?? null;
 }

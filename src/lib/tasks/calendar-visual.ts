@@ -54,11 +54,16 @@ function statusAccent(status: TaskStatus, overdue: boolean): CalendarTaskAccent 
         tint: 'bg-blue-500/[0.07] dark:bg-blue-500/[0.1]',
       };
     case 'waiting_client':
-    case 'waiting_team':
       return {
-        border: 'border-l-amber-600/85 dark:border-l-amber-400/70',
+        border: 'border-l-amber-500/90 dark:border-l-amber-400/75',
         dot: 'bg-amber-500 dark:bg-amber-400',
         tint: 'bg-amber-500/[0.08] dark:bg-amber-500/[0.1]',
+      };
+    case 'waiting_team':
+      return {
+        border: 'border-l-orange-500/90 dark:border-l-orange-400/75',
+        dot: 'bg-orange-500 dark:bg-orange-400',
+        tint: 'bg-orange-500/[0.08] dark:bg-orange-500/[0.1]',
       };
     case 'review':
       return {

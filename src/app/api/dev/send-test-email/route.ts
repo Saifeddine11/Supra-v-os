@@ -80,7 +80,7 @@ export async function POST(request: Request) {
     case 'evening': {
       const p = eveningSummarySample(base, recipientName);
       ({ html, text } = renderEveningSummaryEmail(p));
-      subject = eveningSummarySubject();
+      subject = eveningSummarySubject({ digest: p.digest });
       break;
     }
     case 'invoice': {

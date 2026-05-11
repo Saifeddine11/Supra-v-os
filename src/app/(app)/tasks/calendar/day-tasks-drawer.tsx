@@ -7,6 +7,7 @@ import { PRIORITY_MAP, TASK_STATUS_MAP, VIDEO_PUBLIC_STATUS_MAP, VIDEO_STATUS_MA
 import { cn } from '@/lib/utils/cn';
 import type { CalendarColorBy } from '@/lib/tasks/calendar-visual';
 import { calendarTaskOverdue, getCalendarTaskTone } from '@/lib/tasks/calendar-visual';
+import { getTaskDeadlineState } from '@/lib/deadlines/deadline-state';
 import {
   Dialog,
   DialogContent,
@@ -16,6 +17,7 @@ import {
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { TaskFormDialog } from '../task-form-dialog';
+import { ClientColorDot } from '@/components/shared/client-color-dot';
 import type { CalendarVideoEvent } from '@/lib/data/videos-calendar';
 
 function taskContextLine(task: TaskEnriched): string {
@@ -40,7 +42,7 @@ export function DayTasksDrawer({
   day: Date | null;
   tasks: TaskEnriched[];
   videoEvents: CalendarVideoEvent[];
-  clients: Pick<Client, 'id' | 'name'>[];
+  clients: Pick<Client, 'id' | 'name' | 'color_hex' | 'color_label'>[];
   employees: Pick<Employee, 'id' | 'full_name'>[];
   colorBy: CalendarColorBy;
 }) {
@@ -71,6 +73,17 @@ export function DayTasksDrawer({
                     {tasks.map((t) => {
                       const od = calendarTaskOverdue(t);
                       const accent = getCalendarTaskTone(t, colorBy);
+                      const dlU = t.deadline ? getTaskDeadlineState(t.deadline, t.status) : 'none';
+                      const urgency =
+                        dlU === 'overdue'
+                          ? 'En retard'
+                          : dlU === 'today'
+                            ? 'Échéance aujourd’hui'
+                            : dlU === 'tomorrow'
+                              ? 'Échéance demain'
+                              : dlU === 'soon'
+                                ? 'Échéance sous 3 jours'
+                                : null;
                       return (
                         <li key={t.id}>
                           <div
@@ -81,7 +94,12 @@ export function DayTasksDrawer({
                             )}
                           >
                             <p className="text-sm font-semibold leading-snug text-foreground">{t.title}</p>
-                            <p className="mt-1 text-sm text-muted-foreground">{taskContextLine(t)}</p>
+                            <p className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
+                              {t.client_brand_hex ? (
+                                <ClientColorDot hex={t.client_brand_hex} title={t.client_name ?? undefined} />
+                              ) : null}
+                              <span>{taskContextLine(t)}</span>
+                            </p>
                             <dl className="mt-2 grid gap-1 text-sm text-muted-foreground">
                               <div className="flex flex-wrap gap-x-2">
                                 <dt className="font-medium text-foreground/80">Assignés</dt>
@@ -104,6 +122,20 @@ export function DayTasksDrawer({
                                   <dt className="font-medium text-foreground/80">Échéance</dt>
                                   <dd className={cn('tabular-nums', od && 'font-medium text-destructive')}>
                                     {format(new Date(t.deadline), 'd MMM yyyy · HH:mm', { locale: fr })}
+                                  </dd>
+                                </div>
+                              ) : null}
+                              {urgency ? (
+                                <div className="flex flex-wrap gap-x-2">
+                                  <dt className="font-medium text-foreground/80">Urgence</dt>
+                                  <dd
+                                    className={cn(
+                                      od && 'font-medium text-destructive',
+                                      dlU === 'today' && !od && 'font-medium text-orange-600 dark:text-orange-400',
+                                      dlU === 'tomorrow' && !od && 'font-medium text-amber-700 dark:text-amber-400',
+                                    )}
+                                  >
+                                    {urgency}
                                   </dd>
                                 </div>
                               ) : null}
@@ -150,7 +182,11 @@ export function DayTasksDrawer({
                           <p className="text-sm font-semibold leading-snug text-foreground">
                             {ev.kind === 'shoot' ? 'Tournage vidéo' : 'Livraison vidéo'} — {ev.title}
                           </p>
-                          <p className="mt-1 text-xs text-muted-foreground">Client : {ev.clientName}</p>
+                          <p className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                            <span>Client :</span>
+                            <ClientColorDot hex={ev.client_brand_hex} title={ev.clientName} />
+                            <span>{ev.clientName}</span>
+                          </p>
                           <p className="mt-1 text-xs tabular-nums text-muted-foreground">
                             {format(new Date(ev.at), 'd MMM yyyy · HH:mm', { locale: fr })}
                           </p>

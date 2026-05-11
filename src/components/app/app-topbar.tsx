@@ -9,6 +9,7 @@ import { UserAvatar } from '@/components/shared/user-avatar';
 import { NotificationBell } from '@/components/app/notification-bell';
 import { ThemeToggle } from '@/components/app/theme-toggle';
 import type { Employee, Notification } from '@/types/database';
+import type { NotificationSoundPrefs } from '@/lib/notifications/notification-sound-prefs';
 import { navItemVisible } from '@/lib/auth/nav-policy';
 import { canModifyInvoices } from '@/lib/auth/capabilities';
 
@@ -17,14 +18,21 @@ export interface AppTopbarProps {
   email: string;
   initialUnread: number;
   initialBellPreview: Notification[];
+  notificationSoundPrefs: NotificationSoundPrefs;
 }
 
-export function AppTopbar({ employee, email, initialUnread, initialBellPreview }: AppTopbarProps) {
+export function AppTopbar({
+  employee,
+  email,
+  initialUnread,
+  initialBellPreview,
+  notificationSoundPrefs,
+}: AppTopbarProps) {
   const pathname = usePathname();
   const title = titleForPathname(pathname);
 
   return (
-    <header className="sticky top-0 z-30 border-b border-border/80 bg-[hsl(var(--background)/0.88)] backdrop-blur-md">
+    <header className="relative z-30 border-b border-border/80 bg-[hsl(var(--background)/0.88)] backdrop-blur-md">
       <div className="flex h-16 items-center gap-3 px-4 sm:gap-4 sm:px-6 lg:px-8">
         <div className="min-w-0 flex-1">
           <h1 className="truncate font-sans text-lg font-semibold tracking-tight text-foreground sm:text-xl">
@@ -87,7 +95,11 @@ export function AppTopbar({ employee, email, initialUnread, initialBellPreview }
         </div>
 
         <ThemeToggle />
-        <NotificationBell initialUnread={initialUnread} initialPreview={initialBellPreview} />
+        <NotificationBell
+          initialUnread={initialUnread}
+          initialPreview={initialBellPreview}
+          soundPrefs={notificationSoundPrefs}
+        />
 
         <div className="hidden h-8 w-px shrink-0 bg-border sm:block" />
 

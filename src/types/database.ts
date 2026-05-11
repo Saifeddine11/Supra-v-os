@@ -144,7 +144,8 @@ export type NotificationType =
   | 'document_uploaded'
   | 'morning_summary'
   | 'evening_summary'
-  | 'system';
+  | 'system'
+  | 'critical_alert_reminder';
 
 export type NotificationPriority = 'low' | 'normal' | 'high' | 'urgent';
 
@@ -216,6 +217,10 @@ export interface Client {
   logo_url: string | null;
   avatar_initials: string | null;
   avatar_color: string | null;
+  /** Couleur marque #RRGGBB (optionnel — fallback stable depuis le nom). */
+  color_hex: string | null;
+  /** Libellé interne optionnel (ex. « Bleu immobilier »). */
+  color_label: string | null;
   services: string[];
   monthly_video_quota: number;
   monthly_fee: number;
@@ -651,12 +656,17 @@ export interface AgencySettingsRow {
   updated_at: string;
 }
 
+export type NotificationSoundVolume = 'low' | 'medium' | 'high';
+
 export interface UserNotificationPreferencesRow {
   user_id: string;
   email_reminders_enabled: boolean;
   morning_reminder_enabled: boolean;
   evening_summary_enabled: boolean;
   deadline_alerts_enabled: boolean;
+  notification_sound_enabled: boolean;
+  notification_sound_urgent_only: boolean;
+  notification_sound_volume: NotificationSoundVolume;
   updated_at: string;
 }
 
@@ -881,6 +891,8 @@ export interface TaskEnriched extends Task {
   /** Assignés effectifs (pivot + repli legacy assignee_id). */
   assignees: { id: string; full_name: string }[];
   client_name: string | null;
+  /** Hex résolu (DB ou palette nom) pour pastilles / barres client. */
+  client_brand_hex: string | null;
 }
 
 /** Video enriched with related entities */

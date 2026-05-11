@@ -20,6 +20,8 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { getAgencyDisplayCurrencyWithClient } from '@/lib/data/agency-settings-db';
 import { formatAgencyMoney, formatAgencyMoneyCompact } from '@/lib/money/format-money';
 import { effectiveClientDeliveryIso } from '@/lib/videos/video-schedule';
+import { getClientAccent, getSoftBackgroundColor } from '@/lib/ui/client-colors';
+import { ClientColorDot } from '@/components/shared/client-color-dot';
 
 export const metadata: Metadata = {
   title: 'Espace client',
@@ -84,12 +86,22 @@ export default async function ClientPortalPage({
   const calendarEvents = buildPortalCalendarEvents(bundle);
 
   const safeToken = token!;
+  const portalAccent = getClientAccent(bundle.client);
 
   return (
-    <div className="space-y-10">
+    <div
+      className="space-y-10 rounded-2xl border border-border/70 px-4 py-8 sm:px-6"
+      style={{
+        borderColor: `${portalAccent.color}44`,
+        background: `linear-gradient(180deg, ${getSoftBackgroundColor(portalAccent.color, 0.1)} 0%, transparent 42%)`,
+      }}
+    >
       <header className="border-b border-border/80 pb-8">
         <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-primary">Supra v.</p>
-        <h1 className="mt-2 font-serif text-3xl tracking-tight text-foreground">{bundle.client.name}</h1>
+        <h1 className="mt-2 flex flex-wrap items-center gap-2 font-serif text-3xl tracking-tight text-foreground">
+          <ClientColorDot hex={portalAccent.color} className="h-3.5 w-3.5" title={bundle.client.name} />
+          {bundle.client.name}
+        </h1>
         <p className="mt-2 text-sm text-muted-foreground">Votre espace sécurisé — données visibles uniquement par vous.</p>
       </header>
 

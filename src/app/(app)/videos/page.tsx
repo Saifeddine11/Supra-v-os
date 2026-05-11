@@ -19,6 +19,14 @@ import { VideosKanban } from './videos-kanban';
 import { VideoRowActions } from './video-row-actions';
 import { effectiveClientDeliveryIso, isVideoDeliveryOverdue } from '@/lib/videos/video-schedule';
 import { videoCadreurTableCell, videoMonteurTableCell } from '@/lib/videos/video-assignee-labels';
+import {
+  getClientDeliveryBadge,
+  getShootingBadge,
+  getVideoProductionBadgeClass,
+  getVideoPublicBadgeClass,
+} from '@/lib/ui/status-colors';
+import { ClientColorDot } from '@/components/shared/client-color-dot';
+import { getClientColor } from '@/lib/ui/client-colors';
 
 export const metadata: Metadata = { title: 'Production vidéo' };
 
@@ -45,12 +53,17 @@ export default async function VideosPage({
     listClients({}, ctx),
     listEmployeesForVideoAssign(ctx),
   ]);
-  const clientOpts = clients.map((c) => ({ id: c.id, name: c.name }));
+  const clientOpts = clients.map((c) => ({
+    id: c.id,
+    name: c.name,
+    color_hex: c.color_hex,
+    color_label: c.color_label,
+  }));
   const canDelete = canDeleteVideo(ctx?.role ?? null);
 
-  const now = new Date();
-  const weekStart = startOfWeek(now, { weekStartsOn: 1 });
-  const weekEnd = endOfWeek(now, { weekStartsOn: 1 });
+  const scheduleNow = new Date();
+  const weekStart = startOfWeek(scheduleNow, { weekStartsOn: 1 });
+  const weekEnd = endOfWeek(scheduleNow, { weekStartsOn: 1 });
 
   let rows = videos;
   if (clientFilter) {
@@ -186,25 +199,78 @@ export default async function VideosPage({
                 {rows.map((v) => {
                   const deliveryIso = effectiveClientDeliveryIso(v);
                   const od = isVideoDeliveryOverdue(v);
+                  const shootBadge = getShootingBadge(v.shooting_date, v.status, scheduleNow);
+                  const delBadge = getClientDeliveryBadge(v, scheduleNow);
                   return (
-                    <tr key={v.id} className="bg-card/40 transition-colors hover:bg-muted/50">
+                    <tr
+                      key={v.id}
+                      className={cn(
+                        'bg-card/40 transition-colors hover:bg-muted/50',
+                        od && 'bg-red-500/[0.04] dark:bg-red-500/[0.06]',
+                      )}
+                    >
                       <td className="px-4 py-3 font-medium text-foreground">{v.title}</td>
-                      <td className="px-4 py-3 text-muted-foreground">{v.clients?.name ?? '—'}</td>
-                      <td className="px-4 py-3 tabular-nums text-muted-foreground">
-                        {v.shooting_date
-                          ? format(new Date(v.shooting_date), 'd MMM yyyy · HH:mm', { locale: fr })
-                          : 'Non planifié'}
-                      </td>
-                      <td className={cn('px-4 py-3 tabular-nums text-muted-foreground', od && 'font-semibold text-destructive')}>
-                        {deliveryIso
-                          ? format(new Date(deliveryIso), 'd MMM yyyy · HH:mm', { locale: fr })
-                          : 'Non planifié'}
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {v.clients?.name ? (
+                          <span className="inline-flex items-center gap-2">
+                            <ClientColorDot
+                              hex={getClientColor({ name: v.clients.name, color_hex: v.clients.color_hex })}
+                              title={v.clients.name}
+                            />
+                            {v.clients.name}
+                          </span>
+                        ) : (
+                          '—'
+                        )}
                       </td>
                       <td className="px-4 py-3">
-                        <Badge variant="outline">{VIDEO_STATUS_MAP[v.status].label}</Badge>
+                        <div className="flex flex-col gap-1.5">
+                          <span className="tabular-nums text-xs text-muted-foreground">
+                            {v.shooting_date
+                              ? format(new Date(v.shooting_date), 'd MMM yyyy · HH:mm', { locale: fr })
+                              : '—'}
+                          </span>
+                          <Badge variant="outline" className={cn('w-fit text-[10px] font-medium', shootBadge.className)}>
+                            {shootBadge.label}
+                          </Badge>
+                        </div>
                       </td>
                       <td className="px-4 py-3">
-                        <Badge variant="primary" className="text-[10px]">
+                        <div className="flex flex-col gap-1.5">
+                          <span
+                            className={cn(
+                              'tabular-nums text-xs text-muted-foreground',
+                              od && 'font-semibold text-destructive',
+                            )}
+                          >
+                            {deliveryIso
+                              ? format(new Date(deliveryIso), 'd MMM yyyy · HH:mm', { locale: fr })
+                              : '—'}
+                          </span>
+                          <Badge variant="outline" className={cn('w-fit text-[10px] font-medium', delBadge.className)}>
+                            {delBadge.label}
+                          </Badge>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            'text-[10px] font-medium',
+                            getVideoProductionBadgeClass(v.status, v.public_status, {
+                              deliveryOverdue: od,
+                              video: v,
+                            }),
+                          )}
+                        >
+                          {VIDEO_STATUS_MAP[v.status].label}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3">
+                        <Badge
+                          variant="outline"
+                          className={cn('text-[10px] font-medium', getVideoPublicBadgeClass(v.public_status))}
+                        >
                           {VIDEO_PUBLIC_STATUS_MAP[v.public_status].label}
                         </Badge>
                       </td>

@@ -10,6 +10,7 @@ import { assertClientRecordVisible } from '@/lib/auth/data-scope';
 import type { ClientStatus, ContractType } from '@/types/database';
 import { getAgencyDisplayCurrency } from '@/lib/data/agency-settings-db';
 import { normalizeAgencyCurrency } from '@/lib/money/format-money';
+import { isValidClientHex, normalizeHexColor } from '@/lib/ui/client-colors';
 
 function parseServices(raw: string): string[] {
   return raw
@@ -22,6 +23,7 @@ function parseOptionalDate(formData: FormData, key: string): string | null {
   const v = String(formData.get(key) ?? '').trim();
   return v || null;
 }
+
 
 export async function createClientAction(formData: FormData): Promise<ActionResult<{ id: string }>> {
   const ctx = await getAuthContext();
@@ -41,6 +43,13 @@ export async function createClientAction(formData: FormData): Promise<ActionResu
 
   const sector = String(formData.get('sector') ?? '').trim();
   if (!sector) return actionError('Le secteur est requis.');
+
+  const rawColorHex = String(formData.get('color_hex') ?? '').trim();
+  if (rawColorHex && !isValidClientHex(rawColorHex)) {
+    return actionError('Couleur : format #RRGGBB invalide.');
+  }
+  const color_hex = normalizeHexColor(rawColorHex || null);
+  const color_label = String(formData.get('color_label') ?? '').trim() || null;
 
   const status = String(formData.get('status') ?? 'prospect') as ClientStatus;
   const contract_type = String(formData.get('contract_type') ?? 'one_shot') as ContractType;
@@ -69,6 +78,8 @@ export async function createClientAction(formData: FormData): Promise<ActionResu
     currency: normalizeAgencyCurrency(String(formData.get('currency') ?? '').trim() || agencyCurrency),
     notes_internal: String(formData.get('notes_internal') ?? '').trim() || null,
     account_manager_id: accountManager || null,
+    color_hex,
+    color_label,
     created_by: user.id,
   };
 
@@ -105,6 +116,13 @@ export async function updateClientAction(id: string, formData: FormData): Promis
   const sector = String(formData.get('sector') ?? '').trim();
   if (!sector) return actionError('Le secteur est requis.');
 
+  const rawColorHex = String(formData.get('color_hex') ?? '').trim();
+  if (rawColorHex && !isValidClientHex(rawColorHex)) {
+    return actionError('Couleur : format #RRGGBB invalide.');
+  }
+  const color_hex = normalizeHexColor(rawColorHex || null);
+  const color_label = String(formData.get('color_label') ?? '').trim() || null;
+
   const status = String(formData.get('status') ?? 'prospect') as ClientStatus;
   const contract_type = String(formData.get('contract_type') ?? 'one_shot') as ContractType;
   const services = parseServices(String(formData.get('services') ?? ''));
@@ -132,6 +150,8 @@ export async function updateClientAction(id: string, formData: FormData): Promis
     currency: normalizeAgencyCurrency(String(formData.get('currency') ?? '').trim() || agencyCurrency),
     notes_internal: String(formData.get('notes_internal') ?? '').trim() || null,
     account_manager_id: accountManager || null,
+    color_hex,
+    color_label,
     updated_at: new Date().toISOString(),
   };
   const { error } = await supabase.from('clients').update(patch).eq('id', id);

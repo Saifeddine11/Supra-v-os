@@ -50,7 +50,7 @@ export function TasksKanban({
   allowKanbanDrag,
 }: {
   tasks: TaskEnriched[];
-  clients: Pick<Client, 'id' | 'name'>[];
+  clients: Pick<Client, 'id' | 'name' | 'color_hex' | 'color_label'>[];
   employees: Pick<Employee, 'id' | 'full_name'>[];
   canDelete: boolean;
   allowKanbanDrag: boolean;

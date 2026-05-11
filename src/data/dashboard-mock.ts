@@ -29,12 +29,15 @@ export interface UrgentItem {
   title: string;
   detail: string;
   severity: 'high' | 'medium';
+  /** Pastille client (hex résolu). */
+  clientBrandHex?: string | null;
 }
 
 export interface VideoRowMock {
   id: string;
   title: string;
   client: string;
+  clientBrandHex?: string | null;
   status: string;
   tone?: 'default' | 'warning' | 'success';
 }
@@ -46,6 +49,8 @@ export interface TaskRowMock {
   due: string;
   priority: 'urgent' | 'high' | 'normal' | 'low';
   overdue?: boolean;
+  clientName?: string | null;
+  clientBrandHex?: string | null;
 }
 
 export interface WorkloadMember {
@@ -80,6 +85,7 @@ export interface ClientFollowMock {
   name: string;
   note: string;
   tag: 'active' | 'follow-up' | 'portal' | 'invoice';
+  brandHex?: string | null;
 }
 
 export interface ProjectRowMock {

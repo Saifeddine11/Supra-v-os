@@ -70,6 +70,26 @@ export async function listBellPreview(limit = 8, ctx: AuthContext | null = null)
   return [...u, ...((rest ?? []) as Notification[])];
 }
 
+/** Notifications créées strictement après `iso` (pour sons / polling sans rejouer l’historique). */
+export async function listNotificationsCreatedAfter(
+  iso: string,
+  limit = 25,
+  ctx: AuthContext | null = null
+): Promise<Notification[]> {
+  const auth = ctx ?? (await getAuthContext());
+  const supabase = await createClient();
+  let q = supabase
+    .from('notifications')
+    .select('*')
+    .gt('created_at', iso)
+    .order('created_at', { ascending: true })
+    .limit(limit);
+  q = scopeNotifications(q, auth);
+  const { data, error } = await q;
+  if (error) throw new Error(error.message);
+  return (data ?? []) as Notification[];
+}
+
 export async function listNotificationsForPage(
   options: {
     tab?: 'all' | 'unread' | 'urgent';

@@ -7,6 +7,7 @@ import type { CalendarColorBy } from '@/lib/tasks/calendar-visual';
 import { getCalendarTaskLabel, getCalendarTaskTone } from '@/lib/tasks/calendar-visual';
 import { TaskFormDialog } from '../task-form-dialog';
 import type { Client, Employee } from '@/types/database';
+import { ClientColorDot } from '@/components/shared/client-color-dot';
 
 function initials(name: string | null | undefined): string {
   if (!name?.trim()) return '—';
@@ -24,7 +25,7 @@ export function CalendarTaskChip({
 }: {
   task: TaskEnriched;
   colorBy: CalendarColorBy;
-  clients: Pick<Client, 'id' | 'name'>[];
+  clients: Pick<Client, 'id' | 'name' | 'color_hex' | 'color_label'>[];
   employees: Pick<Employee, 'id' | 'full_name'>[];
   density: 'month' | 'week';
 }) {
@@ -53,7 +54,12 @@ export function CalendarTaskChip({
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-start gap-2">
-            <span className={cn('mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full', accent.dot)} aria-hidden />
+            <div className="mt-1.5 flex shrink-0 flex-col items-center gap-1" aria-hidden>
+              <span className={cn('h-1.5 w-1.5 rounded-full', accent.dot)} />
+              {task.client_brand_hex ? (
+                <ClientColorDot hex={task.client_brand_hex} size="sm" title={task.client_name ?? undefined} />
+              ) : null}
+            </div>
             <div className="min-w-0 flex-1">
               <p
                 className={cn(

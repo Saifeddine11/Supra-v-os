@@ -6,6 +6,9 @@ import { Button } from '@/components/ui/button';
 import { signOutAction } from '@/app/(app)/actions';
 import { AGENCY } from '@/lib/constants';
 import type { Employee, Notification } from '@/types/database';
+import type { NotificationSoundPrefs } from '@/lib/notifications/notification-sound-prefs';
+import { NotificationSoundBootstrap } from '@/components/app/notification-sound-bootstrap';
+import { GlobalCriticalAlertBar } from '@/components/app/global-critical-alert-bar';
 
 export type AppShellMode = 'full' | 'password_gate';
 
@@ -14,6 +17,7 @@ export interface AppShellProps {
   email: string;
   initialUnread: number;
   initialBellPreview: Notification[];
+  notificationSoundPrefs: NotificationSoundPrefs;
   children: React.ReactNode;
   /** Sans navigation : changement de mot de passe obligatoire. */
   mode?: AppShellMode;
@@ -24,6 +28,7 @@ export function AppShell({
   email,
   initialUnread,
   initialBellPreview,
+  notificationSoundPrefs,
   children,
   mode = 'full',
 }: AppShellProps) {
@@ -57,18 +62,23 @@ export function AppShell({
 
   return (
     <div className="relative min-h-screen bg-background">
+      <NotificationSoundBootstrap />
       <div
         className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,color-mix(in_srgb,hsl(var(--orange-glow))_16%,transparent),transparent_55%)]"
         aria-hidden
       />
       <AppSidebar employee={employee} email={email} />
       <div className="lg:pl-[272px]">
-        <AppTopbar
-          employee={employee}
-          email={email}
-          initialUnread={initialUnread}
-          initialBellPreview={initialBellPreview}
-        />
+        <div className="sticky top-0 z-[48]">
+          <GlobalCriticalAlertBar />
+          <AppTopbar
+            employee={employee}
+            email={email}
+            initialUnread={initialUnread}
+            initialBellPreview={initialBellPreview}
+            notificationSoundPrefs={notificationSoundPrefs}
+          />
+        </div>
         <main className="relative z-10 mx-auto max-w-[1600px] px-4 py-6 pb-24 sm:px-6 lg:px-8 lg:py-8 lg:pb-8">
           {children}
         </main>

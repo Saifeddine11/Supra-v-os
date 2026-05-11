@@ -17,6 +17,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils/cn';
 import { createTaskAction, updateTaskAction } from './actions';
+import { ClientColorDot } from '@/components/shared/client-color-dot';
+import { getClientColor } from '@/lib/ui/client-colors';
 
 const STATUSES: TaskStatus[] = [...TASK_KANBAN_STATUSES];
 const PRIORITIES: TaskPriority[] = ['low', 'normal', 'high', 'urgent'];
@@ -36,7 +38,7 @@ export function TaskFormDialog({
   trigger,
 }: {
   task?: Task | TaskEnriched | null;
-  clients: Pick<Client, 'id' | 'name'>[];
+  clients: Pick<Client, 'id' | 'name' | 'color_hex' | 'color_label'>[];
   employees: Pick<Employee, 'id' | 'full_name'>[];
   trigger: React.ReactNode;
 }) {
@@ -45,6 +47,7 @@ export function TaskFormDialog({
   const [err, setErr] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [assigneeSel, setAssigneeSel] = useState<Set<string>>(() => new Set());
+  const [clientSel, setClientSel] = useState(task?.client_id ?? '');
   const isEdit = Boolean(task);
   const taskKey = task?.id ?? '__create__';
   const videoLinked = Boolean(task?.video_id);
@@ -56,6 +59,7 @@ export function TaskFormDialog({
   useEffect(() => {
     if (!open) return;
     setAssigneeSel(initialAssigneeSet(task ?? null));
+    setClientSel(task?.client_id ?? '');
   }, [open, taskKey, task]);
 
   const dlValue =
@@ -106,11 +110,22 @@ export function TaskFormDialog({
           </div>
           <div className="grid gap-2 sm:grid-cols-2">
             <div className="grid gap-2">
-              <Label htmlFor="task-client">Client</Label>
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="task-client">Client</Label>
+                {clientSel ? (
+                  <ClientColorDot
+                    hex={getClientColor(
+                      clients.find((c) => c.id === clientSel) ?? { name: 'Client', color_hex: null },
+                    )}
+                    title={clients.find((c) => c.id === clientSel)?.name}
+                  />
+                ) : null}
+              </div>
               <select
                 id="task-client"
                 name="client_id"
-                defaultValue={task?.client_id ?? ''}
+                value={clientSel}
+                onChange={(e) => setClientSel(e.target.value)}
                 className="h-10 rounded-lg border border-border bg-muted px-3 text-sm"
               >
                 <option value="">—</option>

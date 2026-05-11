@@ -35,7 +35,12 @@ export default async function TasksPage({
     listEmployeesForSelect(ctx),
   ]);
 
-  const clientOptions = clients.map((c) => ({ id: c.id, name: c.name }));
+  const clientOptions = clients.map((c) => ({
+    id: c.id,
+    name: c.name,
+    color_hex: c.color_hex,
+    color_label: c.color_label,
+  }));
   const canDelete = canDeleteTask(ctx?.role ?? null);
   const allowKanbanDrag = Boolean(ctx && !taskListingDenied(ctx));
 

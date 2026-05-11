@@ -19,6 +19,7 @@ import { INVOICE_STATUS_MAP, ROLE_LABELS, VIDEO_STATUS_MAP } from '@/types/domai
 import { formatAgencyMoneyCompact } from '@/lib/money/format-money';
 import { getAgencyDisplayCurrency } from '@/lib/data/agency-settings-db';
 import { fetchAssignmentsForTasks, formatTaskAssigneeSummary } from '@/lib/data/task-assignments';
+import { getClientColor } from '@/lib/ui/client-colors';
 
 const ACTIVE_PROJECT_STATUSES = ['in_progress', 'waiting_client', 'waiting_content', 'review'] as const;
 
@@ -82,7 +83,7 @@ export async function fetchCommercialClientsFollow(ctx: AuthContext): Promise<Cl
   const [activeClients, invR, portalsR, videosR] = await Promise.all([
     supabase
       .from('clients')
-      .select('id, name, updated_at')
+      .select('id, name, color_hex, updated_at')
       .in('id', ids)
       .eq('status', 'active')
       .order('updated_at', { ascending: false })
@@ -133,7 +134,15 @@ export async function fetchCommercialClientsFollow(ctx: AuthContext): Promise<Cl
       tag = 'portal';
       note = 'Portail client actif';
     }
-    return { id, name: c.name as string, note, tag };
+    const name = c.name as string;
+    const color_hex = (c as { color_hex?: string | null }).color_hex ?? null;
+    return {
+      id,
+      name,
+      note,
+      tag,
+      brandHex: getClientColor({ name, color_hex }),
+    };
   });
 }
 
@@ -183,23 +192,25 @@ export async function fetchDashboardOperational(ctx: AuthContext): Promise<Dashb
       .eq('is_active', true),
     supabase
       .from('tasks')
-      .select('id, title, deadline, priority, status, assignee_id, estimated_hours')
+      .select(
+        'id, title, deadline, priority, status, assignee_id, estimated_hours, client_id, clients(name, color_hex)',
+      )
       .not('status', 'in', '(done,archived)')
       .limit(500),
     supabase
       .from('videos')
-      .select('id, title, status, public_status, client_id, updated_at, clients(name)')
+      .select('id, title, status, public_status, client_id, updated_at, clients(name, color_hex)')
       .order('updated_at', { ascending: false })
       .limit(400),
     showInvoiceAmountsInFeed
       ? supabase
           .from('invoices')
-          .select('id, client_id, due_date, status, total, clients(name)')
+          .select('id, client_id, due_date, status, total, clients(name, color_hex)')
           .in('status', ['overdue', 'sent', 'pending'])
           .limit(200)
       : supabase
           .from('invoices')
-          .select('id, client_id, due_date, status, clients(name)')
+          .select('id, client_id, due_date, status, clients(name, color_hex)')
           .in('status', ['overdue', 'sent', 'pending'])
           .limit(200),
     supabase
@@ -214,7 +225,11 @@ export async function fetchDashboardOperational(ctx: AuthContext): Promise<Dashb
       .in('status', [...ACTIVE_PROJECT_STATUSES])
       .order('updated_at', { ascending: false })
       .limit(40),
-    supabase.from('reports').select('id, title, client_id, clients(name)').is('sent_at', null).limit(25),
+    supabase
+      .from('reports')
+      .select('id, title, client_id, clients(name, color_hex)')
+      .is('sent_at', null)
+      .limit(25),
     supabase.from('client_portals').select('client_id').eq('is_active', true),
   ]);
 
@@ -255,12 +270,14 @@ export async function fetchDashboardOperational(ctx: AuthContext): Promise<Dashb
     .filter((v) => !['published', 'archived', 'cancelled'].includes(v.status as string))
     .slice(0, 12)
     .map((v) => {
-      const client = (v.clients as { name?: string } | null)?.name ?? '—';
+      const cl = v.clients as { name?: string; color_hex?: string | null } | null;
+      const client = cl?.name ?? '—';
       const st = v.status as VideoStatus;
       return {
         id: v.id as string,
         title: v.title as string,
         client,
+        clientBrandHex: getClientColor({ name: client === '—' ? 'Client' : client, color_hex: cl?.color_hex ?? null }),
         status: VIDEO_STATUS_MAP[st]?.label ?? st,
         tone: videoTone(st),
       };
@@ -282,6 +299,11 @@ export async function fetchDashboardOperational(ctx: AuthContext): Promise<Dashb
     );
     const pr = t.priority as TaskPriority;
     const overdue = isBefore(d, dayStart);
+    const crow = (t as { clients?: { name?: string; color_hex?: string | null } | null }).clients;
+    const clientName = crow?.name ?? null;
+    const clientBrandHex = clientName
+      ? getClientColor({ name: clientName, color_hex: crow?.color_hex ?? null })
+      : null;
 
     const row: TaskRowMock = {
       id: t.id as string,
@@ -290,6 +312,8 @@ export async function fetchDashboardOperational(ctx: AuthContext): Promise<Dashb
       due: taskDueLabel(dl, overdue),
       priority: pr,
       overdue,
+      clientName,
+      clientBrandHex,
     };
 
     if (overdue) {
@@ -348,13 +372,15 @@ export async function fetchDashboardOperational(ctx: AuthContext): Promise<Dashb
 
   const { data: activeClients } = await supabase
     .from('clients')
-    .select('id, name, updated_at')
+    .select('id, name, color_hex, updated_at')
     .eq('status', 'active')
     .order('updated_at', { ascending: false })
     .limit(14);
 
   const clientsFollow: ClientFollowMock[] = (activeClients ?? []).map((c) => {
     const id = c.id as string;
+    const name = c.name as string;
+    const color_hex = (c as { color_hex?: string | null }).color_hex ?? null;
     let tag: ClientFollowMock['tag'] = 'active';
     let note = 'Client actif';
     if (overdueByClient.has(id)) {
@@ -367,7 +393,7 @@ export async function fetchDashboardOperational(ctx: AuthContext): Promise<Dashb
       tag = 'portal';
       note = 'Portail client actif';
     }
-    return { id, name: c.name as string, note, tag };
+    return { id, name, note, tag, brandHex: getClientColor({ name, color_hex }) };
   });
 
   /** --- Projets --- */
@@ -397,10 +423,11 @@ export async function fetchDashboardOperational(ctx: AuthContext): Promise<Dashb
       due_date: string;
       status: InvoiceStatus;
       total?: number;
-      clients: { name?: string } | null;
+      clients: { name?: string; color_hex?: string | null } | null;
     };
     if (!invoiceIsOpenDebt(row)) continue;
     const name = row.clients?.name ?? 'Client';
+    const clientBrandHex = getClientColor({ name, color_hex: row.clients?.color_hex ?? null });
     urgentAcc.push({
       id: `inv-${row.id}`,
       type: 'Facture',
@@ -413,6 +440,7 @@ export async function fetchDashboardOperational(ctx: AuthContext): Promise<Dashb
           : `Échéance ${row.due_date} · ${INVOICE_STATUS_MAP[row.status].label}`
         : 'Suivi administratif — montant non affiché sur ce rôle',
       severity: 'high',
+      clientBrandHex,
     });
   }
 
@@ -426,6 +454,9 @@ export async function fetchDashboardOperational(ctx: AuthContext): Promise<Dashb
       taskAssignMap,
       empName,
     );
+    const uc = (t as { clients?: { name?: string; color_hex?: string | null } | null }).clients;
+    const un = uc?.name ?? null;
+    const clientBrandHex = un ? getClientColor({ name: un, color_hex: uc?.color_hex ?? null }) : null;
     urgentAcc.push({
       id: `task-${t.id}`,
       type: 'Tâche',
@@ -437,31 +468,42 @@ export async function fetchDashboardOperational(ctx: AuthContext): Promise<Dashb
         .filter(Boolean)
         .join(' · '),
       severity: 'high',
+      clientBrandHex,
     });
   }
 
   for (const v of videoRows) {
     const ps = v.public_status as string | undefined;
     if (ps === 'in_validation' || v.status === 'sent_to_client') {
-      const client = (v.clients as { name?: string } | null)?.name ?? '';
+      const cl = v.clients as { name?: string; color_hex?: string | null } | null;
+      const client = cl?.name ?? '';
+      const clientBrandHex = client
+        ? getClientColor({ name: client, color_hex: cl?.color_hex ?? null })
+        : null;
       urgentAcc.push({
         id: `vid-${v.id}`,
         type: 'Validation',
         title: `${v.title as string}${client ? ` — ${client}` : ''}`,
         detail: 'Validation ou retour client attendu',
         severity: 'medium',
+        clientBrandHex,
       });
     }
   }
 
   for (const r of reportsR.data ?? []) {
-    const client = (r.clients as { name?: string } | null)?.name ?? '';
+    const cl = r.clients as { name?: string; color_hex?: string | null } | null;
+    const client = cl?.name ?? '';
+    const clientBrandHex = client
+      ? getClientColor({ name: client, color_hex: cl?.color_hex ?? null })
+      : null;
     urgentAcc.push({
       id: `rep-${r.id}`,
       type: 'Rapport',
       title: `${r.title as string}${client ? ` — ${client}` : ''}`,
       detail: 'Rapport non envoyé',
       severity: 'medium',
+      clientBrandHex,
     });
   }
 

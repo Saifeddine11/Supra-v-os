@@ -60,12 +60,19 @@ export async function updateNotificationPreferencesAction(formData: FormData): P
   if (!ctx?.userId) return actionError('Session expirée.');
 
   const supabase = await createClient();
+  const vol = String(formData.get('notification_sound_volume') ?? 'medium').trim();
+  const soundVolume =
+    vol === 'low' || vol === 'high' ? (vol as 'low' | 'high') : ('medium' as const);
+
   const row = {
     user_id: ctx.userId,
     email_reminders_enabled: checkboxTrue(formData, 'email_reminders_enabled'),
     morning_reminder_enabled: checkboxTrue(formData, 'morning_reminder_enabled'),
     evening_summary_enabled: checkboxTrue(formData, 'evening_summary_enabled'),
     deadline_alerts_enabled: checkboxTrue(formData, 'deadline_alerts_enabled'),
+    notification_sound_enabled: checkboxTrue(formData, 'notification_sound_enabled'),
+    notification_sound_urgent_only: checkboxTrue(formData, 'notification_sound_urgent_only'),
+    notification_sound_volume: soundVolume,
     updated_at: new Date().toISOString(),
   };
 

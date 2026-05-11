@@ -2,6 +2,7 @@ import { SectionCard } from '@/components/shared/section-card';
 import { Badge } from '@/components/ui/badge';
 import type { ClientFollowMock } from '@/data/dashboard-mock';
 import { cn } from '@/lib/utils/cn';
+import { ClientColorDot } from '@/components/shared/client-color-dot';
 import { clientFollowTagToTone, getStatusBlockSurface } from '@/lib/ui/status-block-tone';
 
 const tagLabel: Record<ClientFollowMock['tag'], string> = {
@@ -30,7 +31,10 @@ export function ClientOverview({ clients }: { clients: ClientFollowMock[] }) {
               )}
             >
               <div>
-                <p className="text-sm font-medium text-foreground">{c.name}</p>
+                <p className="flex items-center gap-2 text-sm font-medium text-foreground">
+                  {c.brandHex ? <ClientColorDot hex={c.brandHex} title={c.name} /> : null}
+                  <span>{c.name}</span>
+                </p>
                 <p className="text-xs text-muted-foreground">{c.note}</p>
               </div>
               <Badge variant="primary" className="w-fit shrink-0">

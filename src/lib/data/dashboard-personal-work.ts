@@ -7,6 +7,7 @@ import {
   fetchVideoIdsForAssignmentRole,
 } from '@/lib/data/video-assignments';
 import { fetchTaskIdsAssignedToEmployee } from '@/lib/data/task-assignments';
+import { getClientColor } from '@/lib/ui/client-colors';
 
 export interface PersonalTaskRow {
   id: string;
@@ -15,6 +16,7 @@ export interface PersonalTaskRow {
   priority: TaskPriority;
   deadline: string | null;
   clientName: string | null;
+  clientBrandHex: string | null;
   projectTitle: string | null;
 }
 
@@ -26,6 +28,7 @@ export interface PersonalVideoRow {
   client_delivery_at: string | null;
   shooting_date: string | null;
   clientName: string | null;
+  clientBrandHex: string | null;
   /** Montage seul, tournage seul, ou les deux (assignations multiples / legacy). */
   role: 'editor' | 'cameraman' | 'both';
 }
@@ -54,7 +57,7 @@ export async function getPersonalDashboardWork(
       status,
       priority,
       deadline,
-      clients:client_id ( name ),
+      clients:client_id ( name, color_hex ),
       projects:project_id ( title )
     `
     )
@@ -67,15 +70,19 @@ export async function getPersonalDashboardWork(
   if (tErr) throw new Error(tErr.message);
 
   const tasks: PersonalTaskRow[] = (taskRows ?? []).map((row: Record<string, unknown>) => {
-    const clients = row.clients as { name?: string } | null;
+    const clients = row.clients as { name?: string; color_hex?: string | null } | null;
     const projects = row.projects as { title?: string } | null;
+    const clientName = clients?.name ?? null;
     return {
       id: String(row.id),
       title: String(row.title),
       status: row.status as TaskStatus,
       priority: row.priority as TaskPriority,
       deadline: row.deadline ? String(row.deadline) : null,
-      clientName: clients?.name ?? null,
+      clientName,
+      clientBrandHex: clientName
+        ? getClientColor({ name: clientName, color_hex: clients?.color_hex ?? null })
+        : null,
       projectTitle: projects?.title ?? null,
     };
   });
@@ -95,7 +102,7 @@ export async function getPersonalDashboardWork(
         shooting_date,
         editor_id,
         cameraman_id,
-        clients:client_id ( name )
+        clients:client_id ( name, color_hex )
       `
       )
       .not('status', 'eq', 'published')
@@ -144,7 +151,7 @@ export async function getPersonalDashboardWork(
         return true;
       })
       .map((row) => {
-        const clients = row.clients as { name?: string } | null;
+        const clients = row.clients as { name?: string; color_hex?: string | null } | null;
         const id = String(row.id);
         const flags = roleMap.get(id) ?? { hasEditor: false, hasCameraman: false };
         const vRole: 'editor' | 'cameraman' | 'both' =
@@ -153,6 +160,7 @@ export async function getPersonalDashboardWork(
             : flags.hasCameraman
               ? 'cameraman'
               : 'editor';
+        const clientName = clients?.name ?? null;
         return {
           id,
           title: String(row.title),
@@ -160,7 +168,10 @@ export async function getPersonalDashboardWork(
           delivery_deadline: row.delivery_deadline ? String(row.delivery_deadline) : null,
           client_delivery_at: row.client_delivery_at ? String(row.client_delivery_at) : null,
           shooting_date: row.shooting_date ? String(row.shooting_date) : null,
-          clientName: clients?.name ?? null,
+          clientName,
+          clientBrandHex: clientName
+            ? getClientColor({ name: clientName, color_hex: clients?.color_hex ?? null })
+            : null,
           role: vRole,
         };
       });

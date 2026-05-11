@@ -20,6 +20,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { createClientAction, updateClientAction } from './actions';
 import { AGENCY_CURRENCY_SELECT_OPTIONS, normalizeAgencyCurrency } from '@/lib/money/format-money';
+import { ClientColorFields } from '@/components/clients/client-color-fields';
 
 const STATUSES = [
   { value: 'prospect', label: 'Prospect' },
@@ -50,11 +51,16 @@ export function ClientFormDialog({
   const [open, setOpen] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [nameDraft, setNameDraft] = useState(client?.name ?? '');
   const isEdit = Boolean(client);
 
   useEffect(() => {
     if (!open) setErr(null);
   }, [open]);
+
+  useEffect(() => {
+    if (open) setNameDraft(client?.name ?? '');
+  }, [open, client?.id, client?.name]);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -89,7 +95,20 @@ export function ClientFormDialog({
           <div className="grid gap-2 sm:grid-cols-2">
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="name">Nom *</Label>
-              <Input id="name" name="name" required defaultValue={client?.name} />
+              <Input
+                id="name"
+                name="name"
+                required
+                value={nameDraft}
+                onChange={(e) => setNameDraft(e.target.value)}
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <ClientColorFields
+                previewName={nameDraft.trim() || 'Client'}
+                defaultHex={client?.color_hex}
+                defaultLabel={client?.color_label}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="sector">Secteur *</Label>

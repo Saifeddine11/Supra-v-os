@@ -12,6 +12,8 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { ClientsToolbar } from './clients-toolbar';
 import { ClientRowActions } from './client-row-actions';
 import type { ClientStatus } from '@/types/database';
+import { ClientColorDot } from '@/components/shared/client-color-dot';
+import { getClientColor } from '@/lib/ui/client-colors';
 
 export const metadata: Metadata = { title: 'Clients' };
 
@@ -76,10 +78,19 @@ export default async function ClientsPage({
               <tbody className="divide-y divide-border/60">
                 {clients.map((c) => {
                   const st = CLIENT_STATUS_MAP[c.status];
+                  const brand = getClientColor({ name: c.name, color_hex: c.color_hex });
                   return (
-                    <tr key={c.id} className="bg-card/40 transition-colors hover:bg-muted/50">
+                    <tr
+                      key={c.id}
+                      className="border-l-[3px] border-l-transparent bg-card/40 transition-colors hover:bg-muted/50"
+                      style={{ borderLeftColor: `${brand}55` }}
+                    >
                       <td className="px-4 py-3">
-                        <Link href={`/clients/${c.id}`} className="font-medium text-foreground hover:text-primary">
+                        <Link
+                          href={`/clients/${c.id}`}
+                          className="inline-flex items-center gap-2 font-medium text-foreground hover:text-primary"
+                        >
+                          <ClientColorDot hex={brand} title={c.name} />
                           {c.name}
                         </Link>
                         {c.city ? (

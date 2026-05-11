@@ -63,7 +63,7 @@ export function CalendarToolbar({
   nav: CalendarNav;
   title: string;
   employees: Pick<Employee, 'id' | 'full_name'>[];
-  clients: Pick<Client, 'id' | 'name'>[];
+  clients: Pick<Client, 'id' | 'name' | 'color_hex' | 'color_label'>[];
   filters: CalendarFilterBag;
 }) {
   const dayAnchor = anchorDayForLinks(nav);

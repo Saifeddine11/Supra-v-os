@@ -23,6 +23,7 @@ export const NOTIFICATION_TYPE_LABELS: Record<NotificationType, string> = {
   morning_summary: 'Rappel matinal',
   evening_summary: 'Bilan de fin de journée',
   system: 'Système',
+  critical_alert_reminder: 'Rappel critique',
 };
 
 export const NOTIFICATION_PRIORITY_LABELS: Record<NotificationPriority, string> = {

@@ -20,7 +20,7 @@ export interface PortalVideoRow {
 }
 
 export interface PortalBundle {
-  client: Pick<Client, 'id' | 'name' | 'monthly_video_quota' | 'currency'>;
+  client: Pick<Client, 'id' | 'name' | 'monthly_video_quota' | 'currency' | 'color_hex' | 'color_label'>;
   projects: Pick<Project, 'id' | 'title' | 'status' | 'progress' | 'deadline' | 'type' | 'delivered_at'>[];
   videos: PortalVideoRow[];
   invoices: Pick<
@@ -83,7 +83,7 @@ export async function loadPortalPublicData(clientId: string): Promise<PortalBund
 
   const { data: client, error: cErr } = await admin
     .from('clients')
-    .select('id, name, monthly_video_quota, currency')
+    .select('id, name, monthly_video_quota, currency, color_hex, color_label')
     .eq('id', clientId)
     .maybeSingle();
   if (cErr || !client) return null;

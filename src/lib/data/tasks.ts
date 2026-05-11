@@ -14,6 +14,7 @@ import {
   formatTaskAssigneeSummary,
   type TaskAssigneeRef,
 } from '@/lib/data/task-assignments';
+import { getClientColor } from '@/lib/ui/client-colors';
 
 export interface TaskListFilters {
   search?: string;
@@ -44,14 +45,16 @@ async function enrichTasks(tasks: Task[]): Promise<TaskEnriched[]> {
 
   const [clientsRes, empRes] = await Promise.all([
     clientIds.length
-      ? supabase.from('clients').select('id, name').in('id', clientIds)
-      : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+      ? supabase.from('clients').select('id, name, color_hex, color_label').in('id', clientIds)
+      : Promise.resolve({
+          data: [] as { id: string; name: string; color_hex: string | null; color_label: string | null }[],
+        }),
     allEmpIds.size
       ? supabase.from('employees').select('id, full_name').in('id', [...allEmpIds])
       : Promise.resolve({ data: [] as { id: string; full_name: string }[] }),
   ]);
 
-  const clientMap = new Map((clientsRes.data ?? []).map((c) => [c.id, c.name]));
+  const clientRowMap = new Map((clientsRes.data ?? []).map((c) => [c.id, c]));
   const empMap = new Map((empRes.data ?? []).map((e) => [e.id, e.full_name]));
 
   return tasks.map((t) => {
@@ -60,11 +63,13 @@ async function enrichTasks(tasks: Task[]): Promise<TaskEnriched[]> {
       assignees = [{ id: t.assignee_id, full_name: empMap.get(t.assignee_id) ?? '—' }];
     }
     const assignee_name = assignees.length ? formatTaskAssigneeSummary(assignees) : null;
+    const crow = t.client_id ? clientRowMap.get(t.client_id) : undefined;
     return {
       ...t,
       assignees,
       assignee_name,
-      client_name: t.client_id ? (clientMap.get(t.client_id) ?? null) : null,
+      client_name: crow?.name ?? null,
+      client_brand_hex: crow ? getClientColor(crow) : null,
     };
   });
 }

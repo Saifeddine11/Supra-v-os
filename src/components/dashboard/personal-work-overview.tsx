@@ -8,6 +8,7 @@ import type { PersonalTaskRow, PersonalVideoRow } from '@/lib/data/dashboard-per
 import { effectiveClientDeliveryIso } from '@/lib/videos/video-schedule';
 import type { UserRole } from '@/types/database';
 import { cn } from '@/lib/utils/cn';
+import { ClientColorDot } from '@/components/shared/client-color-dot';
 import { getStatusBlockSurface } from '@/lib/ui/status-block-tone';
 
 function roleLabel(role: UserRole | undefined): string {
@@ -57,8 +58,18 @@ export function PersonalWorkOverview({
               >
                 <div className="min-w-0">
                   <p className="font-medium text-foreground">{t.title}</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    {[t.clientName, t.projectTitle].filter(Boolean).join(' · ') || '—'}
+                  <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                    {t.clientBrandHex && t.clientName ? (
+                      <span className="inline-flex items-center gap-1">
+                        <ClientColorDot hex={t.clientBrandHex} size="sm" title={t.clientName} />
+                        <span>{t.clientName}</span>
+                      </span>
+                    ) : t.clientName ? (
+                      <span>{t.clientName}</span>
+                    ) : null}
+                    {t.clientName && t.projectTitle ? <span aria-hidden>·</span> : null}
+                    {t.projectTitle ? <span>{t.projectTitle}</span> : null}
+                    {!t.clientName && !t.projectTitle ? <span>—</span> : null}
                   </p>
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     <Badge variant="outline" className="text-[10px] font-normal">
@@ -119,13 +130,23 @@ export function PersonalWorkOverview({
                 >
                   <div className="min-w-0">
                     <p className="font-medium text-foreground">{v.title}</p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {v.clientName ?? '—'} ·{' '}
-                      {v.role === 'both'
-                        ? 'Monteur + Caméraman'
-                        : v.role === 'cameraman'
-                          ? 'Tournage'
-                          : 'Montage'}
+                    <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                      {v.clientBrandHex && v.clientName ? (
+                        <span className="inline-flex items-center gap-1">
+                          <ClientColorDot hex={v.clientBrandHex} size="sm" title={v.clientName} />
+                          <span>{v.clientName}</span>
+                        </span>
+                      ) : (
+                        <span>{v.clientName ?? '—'}</span>
+                      )}
+                      <span aria-hidden>·</span>
+                      <span>
+                        {v.role === 'both'
+                          ? 'Monteur + Caméraman'
+                          : v.role === 'cameraman'
+                            ? 'Tournage'
+                            : 'Montage'}
+                      </span>
                     </p>
                     <Badge variant="outline" className="mt-2 text-[10px] font-normal">
                       {VIDEO_STATUS_MAP[v.status].label}

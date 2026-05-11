@@ -177,7 +177,8 @@ create type notification_type as enum (
   'document_uploaded',
   'morning_summary',
   'evening_summary',
-  'system'
+  'system',
+  'critical_alert_reminder'
 );
 
 create type notification_priority as enum ('low', 'normal', 'high', 'urgent');
@@ -269,6 +270,8 @@ create table clients (
   logo_url            text,
   avatar_initials     text,
   avatar_color        text,
+  color_hex           text,
+  color_label         text,
 
   -- Business
   services            text[] default '{}',           -- ["Vidéo","SEO",...]
@@ -287,7 +290,9 @@ create table clients (
   -- Audit
   created_at          timestamptz not null default now(),
   updated_at          timestamptz not null default now(),
-  created_by          uuid references auth.users(id) on delete set null
+  created_by          uuid references auth.users(id) on delete set null,
+  constraint clients_color_hex_format_check
+    check (color_hex is null or color_hex ~ '^#[0-9A-Fa-f]{6}$')
 );
 
 create index idx_clients_status on clients(status);
@@ -892,6 +897,9 @@ create table user_notification_preferences (
   morning_reminder_enabled  boolean not null default true,
   evening_summary_enabled   boolean not null default true,
   deadline_alerts_enabled   boolean not null default true,
+  notification_sound_enabled boolean not null default true,
+  notification_sound_urgent_only boolean not null default false,
+  notification_sound_volume text not null default 'medium' check (notification_sound_volume in ('low','medium','high')),
   updated_at                timestamptz not null default now()
 );
 

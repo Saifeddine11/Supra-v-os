@@ -145,14 +145,9 @@ export function videoWorkflowToStatusTone(
     });
   if (od) return 'danger';
   if (v.priority === 'urgent') return 'danger';
-  if (v.status === 'client_revision' || v.status === 'internal_review') return 'review';
+  if (v.status === 'client_revision' || v.status === 'internal_review' || v.status === 'editing') return 'review';
   if (v.status === 'sent_to_client' || v.status === 'rushes_received') return 'warning';
-  if (
-    v.status === 'editing' ||
-    v.status === 'shooting_done' ||
-    v.status === 'shooting_planned' ||
-    v.status === 'brief_validated'
-  )
+  if (v.status === 'shooting_done' || v.status === 'shooting_planned' || v.status === 'brief_validated')
     return 'info';
   return 'neutral';
 }

@@ -19,6 +19,7 @@ import {
 } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { getAuthContext } from '@/lib/auth/permissions';
+import type { AuthContext } from '@/lib/auth/permissions';
 import { listTasksEnriched, type TaskListFilters } from '@/lib/data/tasks';
 import { listClients } from '@/lib/data/clients';
 import { listEmployeesForSelect } from '@/lib/data/employees';
@@ -135,7 +136,9 @@ export default async function TasksCalendarPage({
     listTasksEnriched(filters, calCtx),
     listEmployeesForSelect(calCtx),
     listClients({}, calCtx),
-    calCtx ? listCalendarVideoEvents(calCtx, filterStart, filterEnd) : Promise.resolve([]),
+    calCtx?.role
+      ? listCalendarVideoEvents(calCtx as AuthContext, filterStart, filterEnd)
+      : Promise.resolve([]),
   ]);
 
   const filterBag = {
@@ -169,7 +172,7 @@ export default async function TasksCalendarPage({
 
       <SectionCard
         title={sectionTitle}
-        description={`${tasks.length} tâche(s) avec échéance · ${videoEvents.length} événement(s) vidéo (tournage / livraison) sur la période · couleur selon le critère choisi.`}
+        description={`${tasks.length} tâche(s) avec échéance sur la période · couleur selon le critère choisi.`}
       >
         <TasksCalendarExperience
           view={view}
@@ -178,13 +181,17 @@ export default async function TasksCalendarPage({
           displayDayISOs={displayDays.map((d) => d.toISOString())}
           tasks={tasks}
           videoEvents={videoEvents}
-          clients={clients.map((c) => ({ id: c.id, name: c.name }))}
+          clients={clients.map((c) => ({
+            id: c.id,
+            name: c.name,
+            color_hex: c.color_hex,
+            color_label: c.color_label,
+          }))}
           employees={employees}
           colorBy={colorBy}
         />
         <p className="mt-4 text-xs text-muted-foreground">
-          Les tâches sans échéance n&apos;apparaissent pas ici — les vidéos archivées / annulées sont exclues. Utilisez
-          le board pour la liste complète des tâches.
+          Les tâches sans échéance n&apos;apparaissent pas ici — utilisez le board pour la liste complète.
         </p>
       </SectionCard>
     </div>

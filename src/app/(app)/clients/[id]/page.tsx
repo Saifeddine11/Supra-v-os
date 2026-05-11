@@ -24,6 +24,8 @@ import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { getAgencyDisplayCurrency } from '@/lib/data/agency-settings-db';
 import { formatAgencyMoneyCompact } from '@/lib/money/format-money';
+import { getClientAccent, getSoftBackgroundColor } from '@/lib/ui/client-colors';
+import { ClientColorDot } from '@/components/shared/client-color-dot';
 
 export async function generateMetadata({
   params,
@@ -60,6 +62,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   const canPortal = canManageClientPortal(ctx?.role ?? null);
   const st = CLIENT_STATUS_MAP[client.status];
 
+  const clientAccent = getClientAccent({ name: client.name, color_hex: client.color_hex });
   const roadmaps = bundle.documents
     .filter((d) => d.type === 'roadmap')
     .sort((a, b) => {
@@ -71,12 +74,20 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div
+        className="rounded-2xl border border-border/70 px-4 py-4 sm:px-5"
+        style={{
+          borderColor: `${clientAccent.color}40`,
+          background: getSoftBackgroundColor(clientAccent.color, 0.08),
+        }}
+      >
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <Link href="/clients" className="text-xs font-medium text-primary hover:underline">
             ← Clients
           </Link>
-          <h1 className="mt-2 font-sans text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+          <h1 className="mt-2 flex flex-wrap items-center gap-2 font-sans text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+            <ClientColorDot hex={clientAccent.color} size="md" className="h-3 w-3 sm:h-3.5 sm:w-3.5" title={client.name} />
             {client.name}
           </h1>
           <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -95,6 +106,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             canEdit={canEdit}
             canDelete={canDelete}
           />
+        </div>
         </div>
       </div>
 
