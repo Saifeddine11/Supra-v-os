@@ -8,6 +8,8 @@ import {
   projectRowAccessible,
 } from '@/lib/auth/data-scope';
 import type { DocumentRecord, Invoice, Project, ProjectStatus, Task, TaskPriority } from '@/types/database';
+import { clampSearchInput, parseEnumParam, parseUuidParam } from '@/lib/security/input-validation';
+import { ALLOWED_PROJECT_STATUSES, ALLOWED_TASK_PRIORITIES } from '@/lib/security/query-whitelist';
 
 export type ProjectListRow = Project & {
   clients: { id: string; name: string } | null;
@@ -57,10 +59,18 @@ export async function listProjectsWithStats(
     if (er === 'seo') q = q.ilike('type', '%seo%');
   }
 
-  if (filters.status && filters.status !== 'all') q = q.eq('status', filters.status);
-  if (filters.type && filters.type !== 'all') q = q.eq('type', filters.type);
-  if (filters.clientId && filters.clientId !== 'all') q = q.eq('client_id', filters.clientId);
-  if (filters.priority && filters.priority !== 'all') q = q.eq('priority', filters.priority);
+  const statusEq = parseEnumParam(filters.status, ALLOWED_PROJECT_STATUSES, 'all');
+  if (statusEq !== 'all') q = q.eq('status', statusEq);
+  if (filters.type && filters.type !== 'all') {
+    const typeVal = filters.type.trim().slice(0, 160);
+    if (typeVal) q = q.eq('type', typeVal);
+  }
+  if (filters.clientId && filters.clientId !== 'all') {
+    const cid = parseUuidParam(filters.clientId);
+    if (cid) q = q.eq('client_id', cid);
+  }
+  const pri = parseEnumParam(filters.priority, ALLOWED_TASK_PRIORITIES, 'all');
+  if (pri !== 'all') q = q.eq('priority', pri);
 
   const { data: rows, error } = await q;
   if (error) throw new Error(error.message);
@@ -116,7 +126,7 @@ export async function listProjectsWithStats(
     videos_for_client: videoCountByClient.get(p.client_id) ?? 0,
   }));
 
-  const s = filters.search?.trim().toLowerCase();
+  const s = clampSearchInput(filters.search, 200).toLowerCase();
   if (s) {
     result = result.filter(
       (p) =>
@@ -148,6 +158,7 @@ export async function getProjectDetail(
   projectId: string,
   ctx: AuthContext | null = null
 ): Promise<ProjectDetailBundle | null> {
+  if (!parseUuidParam(projectId)) return null;
   const auth = ctx ?? (await getAuthContext());
   const supabase = await createClient();
   if (!auth?.role || !isProjectRouteRole(auth.role)) return null;

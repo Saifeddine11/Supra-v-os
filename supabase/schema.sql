@@ -1007,7 +1007,7 @@ declare
   jwt_role text;
 begin
   jwt_role := coalesce(auth.jwt() ->> 'role', '');
-  if jwt_role = 'service_role' then
+  if jwt_role = 'service_role' or auth.role() = 'service_role' then
     return new;
   end if;
 
@@ -1035,6 +1035,7 @@ begin
      or new.hire_date is distinct from old.hire_date
      or new.manager_id is distinct from old.manager_id
      or new.operational_skills is distinct from old.operational_skills
+     or new.must_change_password is distinct from old.must_change_password
   then
     raise exception 'Seuls les administrateurs peuvent modifier ces champs.' using errcode = '42501';
   end if;
@@ -1175,6 +1176,502 @@ begin
   return auth_user_role() in ('admin', 'project_manager');
 end;
 $$ language plpgsql stable security definer;
+
+-- ---------------------------------------------------------------------------
+-- RLS SELECT scope helpers (SECURITY DEFINER + row_security off). Full source
+-- of truth also in migration 20260528120000_harden_rls_select_scope.sql.
+-- ---------------------------------------------------------------------------
+
+create or replace function public.auth_is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select auth_user_role() = 'admin'::public.user_role;
+$$;
+
+create or replace function public.auth_is_finance()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select auth_user_role() = 'finance'::public.user_role;
+$$;
+
+create or replace function public.auth_is_commercial()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select auth_user_role() = 'commercial'::public.user_role;
+$$;
+
+create or replace function public.auth_can_view_global_finance()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select auth_user_role() in ('admin'::public.user_role, 'finance'::public.user_role);
+$$;
+
+create or replace function public.auth_staff_client_visible(p_client_id uuid)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = public
+set row_security = off
+as $$
+declare
+  r public.user_role;
+  ae uuid;
+begin
+  if p_client_id is null then
+    return false;
+  end if;
+
+  select e.role, e.id into r, ae
+  from public.employees e
+  where e.user_id = auth.uid()
+  limit 1;
+
+  if r is null or ae is null then
+    return false;
+  end if;
+
+  if r in ('admin'::public.user_role, 'project_manager'::public.user_role) then
+    return true;
+  end if;
+
+  if r = 'finance'::public.user_role then
+    return exists (select 1 from public.invoices i where i.client_id = p_client_id)
+      or exists (select 1 from public.quotes q where q.client_id = p_client_id)
+      or exists (select 1 from public.payments p where p.client_id = p_client_id);
+  end if;
+
+  if r = 'commercial'::public.user_role then
+    return exists (
+      select 1 from public.clients c
+      where c.id = p_client_id and c.account_manager_id = ae
+    );
+  end if;
+
+  if r in ('editor'::public.user_role, 'cameraman'::public.user_role, 'community_manager'::public.user_role) then
+    return exists (
+      select 1 from public.videos v
+      where v.client_id = p_client_id
+        and (
+          v.editor_id = ae or v.cameraman_id = ae
+          or exists (
+            select 1 from public.video_assignments va
+            where va.video_id = v.id and va.employee_id = ae
+          )
+        )
+    )
+    or exists (
+      select 1 from public.tasks t
+      where t.client_id = p_client_id
+        and (
+          t.assignee_id = ae or ae = any (t.watcher_ids)
+          or exists (
+            select 1 from public.task_assignments ta
+            where ta.task_id = t.id and ta.employee_id = ae
+          )
+        )
+    );
+  end if;
+
+  if r in ('developer'::public.user_role, 'designer'::public.user_role, 'seo'::public.user_role) then
+    if r = 'seo'::public.user_role then
+      return exists (
+        select 1 from public.projects p
+        where p.client_id = p_client_id
+          and p.type ilike '%seo%'
+          and (p.lead_id = ae or ae = any (p.team_ids))
+      );
+    end if;
+    return exists (
+      select 1 from public.projects p
+      where p.client_id = p_client_id
+        and (p.lead_id = ae or ae = any (p.team_ids))
+    );
+  end if;
+
+  return false;
+end;
+$$;
+
+create or replace function public.auth_staff_project_visible(p_project_id uuid)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = public
+set row_security = off
+as $$
+declare
+  r public.user_role;
+  ae uuid;
+  cid uuid;
+begin
+  select e.role, e.id into r, ae
+  from public.employees e
+  where e.user_id = auth.uid()
+  limit 1;
+
+  if r is null or ae is null then
+    return false;
+  end if;
+
+  select p.client_id into cid
+  from public.projects p
+  where p.id = p_project_id;
+
+  if cid is null then
+    return false;
+  end if;
+
+  if r in ('admin'::public.user_role, 'project_manager'::public.user_role) then
+    return true;
+  end if;
+
+  if r = 'commercial'::public.user_role then
+    return exists (
+      select 1 from public.clients c
+      where c.id = cid and c.account_manager_id = ae
+    );
+  end if;
+
+  if r in ('developer'::public.user_role, 'designer'::public.user_role, 'seo'::public.user_role) then
+    if not exists (
+      select 1 from public.projects p
+      where p.id = p_project_id
+        and (p.lead_id = ae or ae = any (p.team_ids))
+    ) then
+      return false;
+    end if;
+    if r = 'seo'::public.user_role then
+      return exists (
+        select 1 from public.projects p
+        where p.id = p_project_id and p.type ilike '%seo%'
+      );
+    end if;
+    return true;
+  end if;
+
+  return false;
+end;
+$$;
+
+create or replace function public.auth_staff_internal_project_visible(p_ip_id uuid)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = public
+set row_security = off
+as $$
+declare
+  ae uuid;
+begin
+  if auth_is_admin_or_pm() then
+    return true;
+  end if;
+
+  select e.id into ae
+  from public.employees e
+  where e.user_id = auth.uid()
+  limit 1;
+
+  if ae is null then
+    return false;
+  end if;
+
+  return exists (
+    select 1 from public.internal_projects ip
+    where ip.id = p_ip_id
+      and (ip.owner_id = ae or ae = any (ip.team_ids))
+  );
+end;
+$$;
+
+create or replace function public.auth_staff_video_visible(p_video_id uuid)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = public
+set row_security = off
+as $$
+declare
+  r public.user_role;
+  ae uuid;
+  v record;
+begin
+  select e.role, e.id into r, ae
+  from public.employees e
+  where e.user_id = auth.uid()
+  limit 1;
+
+  if r is null or ae is null then
+    return false;
+  end if;
+
+  select * into v from public.videos where id = p_video_id;
+  if not found then
+    return false;
+  end if;
+
+  if r in ('admin'::public.user_role, 'project_manager'::public.user_role) then
+    return true;
+  end if;
+
+  if r in ('finance'::public.user_role) then
+    return false;
+  end if;
+
+  if r = 'commercial'::public.user_role then
+    return exists (
+      select 1 from public.clients c
+      where c.id = v.client_id and c.account_manager_id = ae
+    );
+  end if;
+
+  if r = 'editor'::public.user_role then
+    return v.editor_id = ae or v.cameraman_id = ae
+      or exists (
+        select 1 from public.video_assignments va
+        where va.video_id = v.id and va.employee_id = ae
+      );
+  end if;
+
+  if r = 'cameraman'::public.user_role then
+    return v.cameraman_id = ae
+      or exists (
+        select 1 from public.video_assignments va
+        where va.video_id = v.id and va.employee_id = ae and va.assignment_role = 'cameraman'::public.video_assignment_role
+      );
+  end if;
+
+  if r = 'community_manager'::public.user_role then
+    return v.editor_id = ae or v.cameraman_id = ae
+      or exists (
+        select 1 from public.video_assignments va
+        where va.video_id = v.id and va.employee_id = ae
+      );
+  end if;
+
+  return false;
+end;
+$$;
+
+create or replace function public.auth_staff_task_visible(p_task_id uuid)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = public
+set row_security = off
+as $$
+declare
+  r public.user_role;
+  ae uuid;
+  t record;
+begin
+  select e.role, e.id into r, ae
+  from public.employees e
+  where e.user_id = auth.uid()
+  limit 1;
+
+  if r is null or ae is null then
+    return false;
+  end if;
+
+  select * into t from public.tasks where id = p_task_id;
+  if not found then
+    return false;
+  end if;
+
+  if r in ('admin'::public.user_role, 'project_manager'::public.user_role) then
+    return true;
+  end if;
+
+  if r in ('finance'::public.user_role, 'commercial'::public.user_role) then
+    return false;
+  end if;
+
+  if t.assignee_id = ae or ae = any (t.watcher_ids) then
+    return true;
+  end if;
+
+  if exists (
+    select 1 from public.task_assignments ta
+    where ta.task_id = t.id and ta.employee_id = ae
+  ) then
+    return true;
+  end if;
+
+  if t.video_id is not null and public.auth_staff_video_visible(t.video_id) then
+    if r in ('editor'::public.user_role, 'cameraman'::public.user_role, 'community_manager'::public.user_role) then
+      return true;
+    end if;
+  end if;
+
+  if t.project_id is not null and public.auth_staff_project_visible(t.project_id) then
+    if r in ('developer'::public.user_role, 'designer'::public.user_role, 'seo'::public.user_role) then
+      return true;
+    end if;
+  end if;
+
+  if t.internal_project_id is not null and public.auth_staff_internal_project_visible(t.internal_project_id) then
+    if r in ('developer'::public.user_role, 'designer'::public.user_role, 'seo'::public.user_role) then
+      return true;
+    end if;
+  end if;
+
+  return false;
+end;
+$$;
+
+create or replace function public.auth_staff_document_visible_by_id(p_doc_id uuid)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = public
+set row_security = off
+as $$
+declare
+  r public.user_role;
+  ae uuid;
+  d record;
+begin
+  select e.role, e.id into r, ae
+  from public.employees e
+  where e.user_id = auth.uid()
+  limit 1;
+
+  if r is null or ae is null then
+    return false;
+  end if;
+
+  select * into d from public.documents where id = p_doc_id;
+  if not found then
+    return false;
+  end if;
+
+  if r in ('admin'::public.user_role, 'project_manager'::public.user_role) then
+    return true;
+  end if;
+
+  if r = 'finance'::public.user_role then
+    return false;
+  end if;
+
+  if r = 'commercial'::public.user_role then
+    if d.client_id is not null then
+      return exists (
+        select 1 from public.clients c
+        where c.id = d.client_id and c.account_manager_id = ae
+      );
+    end if;
+    if d.project_id is not null then
+      return exists (
+        select 1 from public.projects p
+        join public.clients c on c.id = p.client_id
+        where p.id = d.project_id and c.account_manager_id = ae
+      );
+    end if;
+    if d.video_id is not null then
+      return exists (
+        select 1 from public.videos v
+        join public.clients c on c.id = v.client_id
+        where v.id = d.video_id and c.account_manager_id = ae
+      );
+    end if;
+    return false;
+  end if;
+
+  if d.video_id is not null
+     and r in ('editor'::public.user_role, 'cameraman'::public.user_role, 'community_manager'::public.user_role) then
+    return public.auth_staff_video_visible(d.video_id);
+  end if;
+
+  if d.project_id is not null and r in ('developer'::public.user_role, 'designer'::public.user_role, 'seo'::public.user_role) then
+    return public.auth_staff_project_visible(d.project_id);
+  end if;
+
+  if d.client_id is not null
+     and r in ('editor'::public.user_role, 'cameraman'::public.user_role, 'community_manager'::public.user_role) then
+    return public.auth_staff_client_visible(d.client_id);
+  end if;
+
+  return false;
+end;
+$$;
+
+create or replace function public.auth_staff_report_visible(p_report_id uuid)
+returns boolean
+language plpgsql
+stable
+security definer
+set search_path = public
+set row_security = off
+as $$
+declare
+  r public.user_role;
+  rep record;
+begin
+  select e.role into r
+  from public.employees e
+  where e.user_id = auth.uid()
+  limit 1;
+
+  if r is null then
+    return false;
+  end if;
+
+  select * into rep from public.reports where id = p_report_id;
+  if not found then
+    return false;
+  end if;
+
+  if r in ('admin'::public.user_role, 'project_manager'::public.user_role, 'finance'::public.user_role) then
+    return true;
+  end if;
+
+  if not public.auth_staff_client_visible(rep.client_id) then
+    return false;
+  end if;
+
+  if r = 'commercial'::public.user_role then
+    return true;
+  end if;
+
+  if r = 'seo'::public.user_role or r = 'designer'::public.user_role then
+    return rep.type = 'seo'::public.report_type;
+  end if;
+
+  if r = 'community_manager'::public.user_role then
+    return rep.type in (
+      'social_media'::public.report_type,
+      'video_production'::public.report_type,
+      'monthly'::public.report_type,
+      'weekly'::public.report_type
+    );
+  end if;
+
+  return false;
+end;
+$$;
 
 -- Auto-generate next invoice ref
 create or replace function next_invoice_ref()

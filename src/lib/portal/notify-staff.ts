@@ -1,3 +1,5 @@
+import 'server-only';
+
 import { createAdminClient } from '@/lib/supabase/admin';
 
 export { notifyAdminsAndPMs } from '@/lib/notifications/notify';

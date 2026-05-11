@@ -1,7 +1,11 @@
+import 'server-only';
+
 /**
  * Supabase ADMIN client (service role)
  * --------------------------------------------------------------------------
  * ⚠️  SERVER-ONLY. Bypasses Row Level Security.
+ * The `import 'server-only'` guard above makes the build fail if any client
+ * component (directly or transitively) imports this module.
  *
  * Use ONLY for:
  *   - Portal token validation (clients have no auth session)

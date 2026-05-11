@@ -10,6 +10,7 @@ import { createServerClient } from '@supabase/ssr';
 import type { CookieOptions } from '@supabase/ssr';
 import type { Database, Employee } from '@/types/database';
 import { normalizeSupabaseProjectUrl } from '@/lib/supabase/normalize-url';
+import { clientIpFrom, rateLimit } from '@/lib/security/rate-limit';
 
 const NO_EMPLOYEE_MSG =
   'Compte connecté mais aucun profil employé trouvé.';
@@ -97,6 +98,18 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  // Best-effort rate-limit (10 tentatives par 60s par IP). Empêche le bruteforce
+  // séquentiel ; un attaquant distribué nécessitera une couche Upstash/KV pour
+  // un blocage strict — à brancher au moment du go-live.
+  const ip = clientIpFrom(request);
+  const rl = rateLimit({ key: `login:${ip}`, max: 10, windowMs: 60_000 });
+  if (!rl.ok) {
+    return NextResponse.json(
+      { error: 'Trop de tentatives. Réessayez dans un instant.', code: 'RATE_LIMITED' },
+      { status: 429, headers: { 'Retry-After': String(rl.retryAfterSec) } }
+    );
+  }
+
   let body: unknown;
   try {
     body = await request.json();

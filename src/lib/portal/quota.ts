@@ -1,3 +1,5 @@
+import 'server-only';
+
 import { createAdminClient } from '@/lib/supabase/admin';
 import { endOfMonth, format, startOfMonth } from 'date-fns';
 

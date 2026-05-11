@@ -121,14 +121,80 @@ function playOscillatorPattern(level: NotificationSoundLevel, masterGain: number
   }
 }
 
+/** Synthèse ~3,5 s — secours si fichiers critiques indisponibles ou autoplay bloqué. */
+function playOscillatorCriticalMandatory(): void {
+  if (typeof window === 'undefined') return;
+  const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!Ctx) return;
+  if (!audioContext) audioContext = new Ctx();
+  const ac = audioContext;
+  if (ac.state === 'suspended') void ac.resume();
+
+  const t0 = ac.currentTime;
+  const g = ac.createGain();
+  g.gain.value = 0;
+  g.connect(ac.destination);
+
+  const tone = (freq: number, start: number, dur: number, peak: number) => {
+    const o = ac.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(freq, start);
+    o.connect(g);
+    o.start(start);
+    o.stop(start + dur);
+    g.gain.linearRampToValueAtTime(0, start);
+    g.gain.linearRampToValueAtTime(peak * 0.95, start + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.001, start + dur);
+  };
+
+  let t = t0;
+  for (let i = 0; i < 6; i++) {
+    tone(i % 2 === 0 ? 1320 : 880, t, 0.28, 0.92);
+    t += 0.42;
+    tone(660, t, 0.22, 0.75);
+    t += 0.38;
+  }
+}
+
+const CRITICAL_SOUND_URLS = ['/sounds/notification-critical.mp3', '/sounds/notification-critical.wav'] as const;
+
+/**
+ * Fichier critique : MP3 si présent, sinon WAV (~3,5 s), sinon synthèse longue.
+ */
+export async function playCriticalAlarmFiles(volume = 1.0): Promise<'mp3' | 'wav' | 'osc'> {
+  for (const url of CRITICAL_SOUND_URLS) {
+    try {
+      const audio = new Audio(url);
+      audio.volume = Math.min(1, volume);
+      await audio.play();
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[critical-sound] playing critical sound', url);
+      }
+      return url.endsWith('.mp3') ? 'mp3' : 'wav';
+    } catch (err) {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[critical-sound] play blocked', url, err);
+      }
+    }
+  }
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[critical-sound] playing critical sound (oscillator fallback)');
+  }
+  playOscillatorCriticalMandatory();
+  return 'osc';
+}
+
 async function tryPlayMp3ThenOsc(level: NotificationSoundLevel, masterGain: number): Promise<void> {
-  const files: Record<Exclude<NotificationSoundLevel, 'silent'>, string> = {
+  if (level === 'silent') return;
+  if (level === 'critical') {
+    void playCriticalAlarmFiles(Math.min(1, masterGain * 2.2));
+    return;
+  }
+  const files: Record<Exclude<NotificationSoundLevel, 'silent' | 'critical'>, string> = {
     soft: '/sounds/notification-soft.mp3',
     important: '/sounds/notification-important.mp3',
     urgent: '/sounds/notification-urgent.mp3',
-    critical: '/sounds/notification-critical.mp3',
   };
-  if (level === 'silent') return;
   const url = files[level];
   try {
     const audio = new Audio(url);
@@ -166,65 +232,33 @@ export function playNotificationSound(level: NotificationSoundLevel, prefs: Noti
   playRaw(level, prefs);
 }
 
-/** Synthèse ~3,5 s — secours si MP3 critique indisponible ou autoplay bloqué. */
-function playOscillatorCriticalMandatory(): void {
-  if (typeof window === 'undefined') return;
-  const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-  if (!Ctx) return;
-  if (!audioContext) audioContext = new Ctx();
-  const ac = audioContext;
-  if (ac.state === 'suspended') void ac.resume();
-
-  const t0 = ac.currentTime;
-  const g = ac.createGain();
-  g.gain.value = 0;
-  g.connect(ac.destination);
-
-  const tone = (freq: number, start: number, dur: number, peak: number) => {
-    const o = ac.createOscillator();
-    o.type = 'sine';
-    o.frequency.setValueAtTime(freq, start);
-    o.connect(g);
-    o.start(start);
-    o.stop(start + dur);
-    g.gain.linearRampToValueAtTime(0, start);
-    g.gain.linearRampToValueAtTime(peak * 0.95, start + 0.02);
-    g.gain.exponentialRampToValueAtTime(0.001, start + dur);
-  };
-
-  let t = t0;
-  for (let i = 0; i < 6; i++) {
-    tone(i % 2 === 0 ? 1320 : 880, t, 0.28, 0.92);
-    t += 0.42;
-    tone(660, t, 0.22, 0.75);
-    t += 0.38;
-  }
-}
-
 /**
  * Son critique obligatoire : ignore les préférences « désactiver les sons » / urgent only.
  * Tente de débloquer AudioContext ; volume fichier à 1.0.
  */
 const MANDATORY_LS_KEY = 'supra_mandatory_critical_sound_ms';
 
+export type MandatoryCriticalAlarmOptions = {
+  /** Bouton test admin : ignore le délai anti-chevauchement 4 s. */
+  skipMinGapForTest?: boolean;
+};
+
 /** Retourne false si rejeté par anti-chevauchement (quelques secondes). */
-export function playMandatoryCriticalAlarm(): boolean {
+export function playMandatoryCriticalAlarm(opts?: MandatoryCriticalAlarmOptions): boolean {
   const now = Date.now();
-  if (now - lastMandatoryCriticalAt < MANDATORY_CRITICAL_MIN_GAP_MS) return false;
+  if (!opts?.skipMinGapForTest && now - lastMandatoryCriticalAt < MANDATORY_CRITICAL_MIN_GAP_MS) return false;
   lastMandatoryCriticalAt = now;
   if (typeof window !== 'undefined') {
     localStorage.setItem(MANDATORY_LS_KEY, String(now));
   }
   markNotificationSoundUserGesture();
   if (typeof window === 'undefined') return true;
-  void (async () => {
-    try {
-      const audio = new Audio('/sounds/notification-critical.mp3');
-      audio.volume = 1.0;
-      await audio.play();
-    } catch {
-      playOscillatorCriticalMandatory();
-    }
-  })();
+  void playCriticalAlarmFiles(1.0);
   return true;
+}
+
+/** Test admin : lecture forcée MP3/WAV/osc (ignore délai 4 s entre alarmes). */
+export function playCriticalSoundAdminTest(): void {
+  markNotificationSoundUserGesture();
+  playMandatoryCriticalAlarm({ skipMinGapForTest: true });
 }

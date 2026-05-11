@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { SUPRA_AUDIO_UNLOCK_EVENT } from '@/lib/notifications/critical-sound-events';
 import { markNotificationSoundUserGesture } from '@/lib/notifications/notification-sound';
 
 /**
@@ -10,6 +11,12 @@ export function NotificationSoundBootstrap() {
   useEffect(() => {
     const onFirst = () => {
       markNotificationSoundUserGesture();
+      try {
+        sessionStorage.setItem('supra_audio_gesture', '1');
+      } catch {
+        /* private mode */
+      }
+      window.dispatchEvent(new CustomEvent(SUPRA_AUDIO_UNLOCK_EVENT));
     };
     window.addEventListener('pointerdown', onFirst, { once: true, passive: true });
     window.addEventListener('keydown', onFirst, { once: true, passive: true });

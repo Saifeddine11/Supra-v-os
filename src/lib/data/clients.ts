@@ -3,6 +3,7 @@ import type { AuthContext } from '@/lib/auth/permissions';
 import { getAuthContext } from '@/lib/auth/permissions';
 import { resolveVisibleClientIds } from '@/lib/auth/data-scope';
 import type { Client, ClientStatus } from '@/types/database';
+import { clampSearchInput, parseUuidParam } from '@/lib/security/input-validation';
 
 export interface ClientFilters {
   search?: string;
@@ -31,7 +32,7 @@ export async function listClients(
   if (error) throw new Error(error.message);
 
   let rows = data ?? [];
-  const s = filters.search?.trim().toLowerCase();
+  const s = clampSearchInput(filters.search, 200).toLowerCase();
   if (s) {
     rows = rows.filter(
       (c) =>
@@ -48,6 +49,7 @@ export async function getClientById(
   id: string,
   ctx: AuthContext | null = null
 ): Promise<Client | null> {
+  if (!parseUuidParam(id)) return null;
   const auth = ctx ?? (await getAuthContext());
   const supabase = await createClient();
   const { data, error } = await supabase.from('clients').select('*').eq('id', id).maybeSingle();

@@ -11,6 +11,9 @@
 
 @layer base {
   :root {
+    /* Toaster critique : repli si pas de `StickyAppHeader` (ex. écran mot de passe) */
+    --critical-toast-top-offset: 1rem;
+
     /* Palette marque (référence hex → HSL pour variables shadcn) */
     --supra-orange: #ff450f;
     --supra-orange-alt: #ff3d0a;
@@ -193,5 +196,20 @@
     box-shadow:
       0 24px 48px -12px rgba(0, 0, 0, 0.55),
       0 18px 40px -16px color-mix(in srgb, var(--supra-orange) 22%, transparent);
+  }
+}
+
+/* ─── Sonner : toast critique compact, largeur max premium (desktop) ───────── */
+.supra-sonner-toaster[data-sonner-toaster][data-x-position='right'] {
+  --width: min(480px, calc(100vw - 2rem));
+}
+
+@media (max-width: 640px) {
+  /* Sonner force width 100% <600px ; on garde des marges latérales lisibles */
+  .supra-sonner-toaster[data-sonner-toaster][data-y-position='top'][data-x-position='right'] {
+    left: 12px;
+    right: 12px;
+    width: auto;
+    transform: none !important;
   }
 }

@@ -28,6 +28,10 @@ type TemplateId = (typeof TEMPLATES)[number];
  * Does not expose RESEND_API_KEY. Requires Resend + EMAIL_FROM for real delivery.
  */
 export async function POST(request: Request) {
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+
   const ctx = await getAuthContext();
   if (!ctx) {
     return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });

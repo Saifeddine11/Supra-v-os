@@ -2,7 +2,7 @@ import 'server-only';
 
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import type { ServiceRoleClient } from '@/lib/supabase/admin';
 import type { AuthContext } from '@/lib/auth/permissions';
 import { canViewGlobalFinanceStats } from '@/lib/auth/capabilities';
@@ -73,7 +73,9 @@ function scopeRole(role: UserRole): UserRole {
 
 /**
  * Alertes visibles en haut du dashboard — respecte le périmètre du rôle (pas de finance globale hors droits).
- * `supabase` : client session (RLS) ou admin (cron) avec les mêmes filtres explicites dans le corps.
+ * `supabase` : passer **`createAdminClient()`** depuis routes/cron authentifiés : le périmètre est
+ * appliqué ici (OR assignations, rôle finance, etc.). Un client session RLS masquait des lignes
+ * déjà comptées par le dashboard.
  */
 export async function fetchCriticalAlertsWithClient(
   supabase: ServiceRoleClient,
@@ -99,7 +101,8 @@ export async function fetchCriticalAlertsWithClient(
     let q = supabase
       .from('tasks')
       .select('id,title,deadline,clients:client_id(name,color_hex)')
-      .not('status', 'in', '(done,archived)')
+      .neq('status', 'done')
+      .neq('status', 'archived')
       .not('deadline', 'is', null)
       .lt('deadline', now.toISOString())
       .order('deadline', { ascending: true })
@@ -396,6 +399,5 @@ export async function fetchCriticalAlertsWithClient(
 }
 
 export async function fetchCriticalAlertsForDashboard(ctx: AuthContext): Promise<CriticalAlertItem[]> {
-  const supabase = await createClient();
-  return fetchCriticalAlertsWithClient(supabase as unknown as ServiceRoleClient, ctx);
+  return fetchCriticalAlertsWithClient(createAdminClient(), ctx);
 }

@@ -5,6 +5,8 @@ import type {
   ProjectStatus,
   Task,
 } from '@/types/database';
+import { clampSearchInput, parseEnumParam, parseUuidParam } from '@/lib/security/input-validation';
+import { ALLOWED_PROJECT_STATUSES, ALLOWED_INTERNAL_PRIORITIES } from '@/lib/security/query-whitelist';
 
 export type InternalProjectListRow = InternalProject & {
   owner_name: string | null;
@@ -24,9 +26,14 @@ export async function listInternalProjectsWithStats(
   const supabase = await createClient();
   let q = supabase.from('internal_projects').select('*').order('updated_at', { ascending: false });
 
-  if (filters.status && filters.status !== 'all') q = q.eq('status', filters.status);
-  if (filters.ownerId && filters.ownerId !== 'all') q = q.eq('owner_id', filters.ownerId);
-  if (filters.priority && filters.priority !== 'all') q = q.eq('priority', filters.priority);
+  const st = parseEnumParam(filters.status, ALLOWED_PROJECT_STATUSES, 'all');
+  if (st !== 'all') q = q.eq('status', st);
+  if (filters.ownerId && filters.ownerId !== 'all') {
+    const oid = parseUuidParam(filters.ownerId);
+    if (oid) q = q.eq('owner_id', oid);
+  }
+  const pr = parseEnumParam(filters.priority, ALLOWED_INTERNAL_PRIORITIES, 'all');
+  if (pr !== 'all') q = q.eq('priority', pr);
 
   const { data: rows, error } = await q;
   if (error) throw new Error(error.message);
@@ -55,7 +62,7 @@ export async function listInternalProjectsWithStats(
     task_count: taskCount.get(p.id) ?? 0,
   }));
 
-  const s = filters.search?.trim().toLowerCase();
+  const s = clampSearchInput(filters.search, 200).toLowerCase();
   if (s) {
     result = result.filter(
       (p) =>
@@ -74,6 +81,7 @@ export type InternalProjectDetail = {
 };
 
 export async function getInternalProjectDetail(id: string): Promise<InternalProjectDetail | null> {
+  if (!parseUuidParam(id)) return null;
   const supabase = await createClient();
   const { data: row, error } = await supabase.from('internal_projects').select('*').eq('id', id).maybeSingle();
   if (error) throw new Error(error.message);

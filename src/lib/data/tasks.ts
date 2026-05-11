@@ -15,6 +15,13 @@ import {
   type TaskAssigneeRef,
 } from '@/lib/data/task-assignments';
 import { getClientColor } from '@/lib/ui/client-colors';
+import {
+  clampSearchInput,
+  parseEnumParam,
+  parseSafeIsoDate,
+  parseUuidParam,
+} from '@/lib/security/input-validation';
+import { ALLOWED_TASK_PRIORITIES, ALLOWED_TASK_STATUSES } from '@/lib/security/query-whitelist';
 
 export interface TaskListFilters {
   search?: string;
@@ -100,31 +107,35 @@ export async function listTasks(
     const fromPivot = await fetchTaskIdsAssignedToEmployee(supabase, eid);
     q = q.or(orAssigneeAndPivot(eid, fromPivot));
   } else if (filters.assigneeId && filters.assigneeId !== 'all') {
-    const fromPivot = await fetchTaskIdsAssignedToEmployee(supabase, filters.assigneeId);
-    q = q.or(orAssigneeAndPivot(filters.assigneeId, fromPivot));
+    const assigneeUuid = parseUuidParam(filters.assigneeId);
+    if (assigneeUuid) {
+      const fromPivot = await fetchTaskIdsAssignedToEmployee(supabase, assigneeUuid);
+      q = q.or(orAssigneeAndPivot(assigneeUuid, fromPivot));
+    }
   }
 
-  if (filters.priority && filters.priority !== 'all') {
-    q = q.eq('priority', filters.priority);
+  const priorityFilter = parseEnumParam(filters.priority, ALLOWED_TASK_PRIORITIES, 'all');
+  if (priorityFilter !== 'all') {
+    q = q.eq('priority', priorityFilter);
   }
-  if (filters.status && filters.status !== 'all') {
-    q = q.eq('status', filters.status);
+  const statusFilter = parseEnumParam(filters.status, ALLOWED_TASK_STATUSES, 'all');
+  if (statusFilter !== 'all') {
+    q = q.eq('status', statusFilter);
   }
   if (filters.clientId && filters.clientId !== 'all') {
-    q = q.eq('client_id', filters.clientId);
+    const clientUuid = parseUuidParam(filters.clientId);
+    if (clientUuid) q = q.eq('client_id', clientUuid);
   }
-  if (filters.deadlineFrom) {
-    q = q.gte('deadline', filters.deadlineFrom);
-  }
-  if (filters.deadlineTo) {
-    q = q.lte('deadline', filters.deadlineTo);
-  }
+  const df = parseSafeIsoDate(filters.deadlineFrom);
+  if (df) q = q.gte('deadline', df);
+  const dt = parseSafeIsoDate(filters.deadlineTo);
+  if (dt) q = q.lte('deadline', dt);
 
   const { data, error } = await q;
   if (error) throw new Error(error.message);
   let rows = data ?? [];
 
-  const s = filters.search?.trim().toLowerCase();
+  const s = clampSearchInput(filters.search, 200).toLowerCase();
   if (s) {
     rows = rows.filter(
       (t) =>
@@ -153,6 +164,7 @@ export async function getTaskById(
   id: string,
   ctx: AuthContext | null = null
 ): Promise<TaskEnriched | null> {
+  if (!parseUuidParam(id)) return null;
   const auth = ctx ?? (await getAuthContext());
   const supabase = await createClient();
   const { data, error } = await supabase.from('tasks').select('*').eq('id', id).maybeSingle();

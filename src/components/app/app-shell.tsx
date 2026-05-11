@@ -9,6 +9,7 @@ import type { Employee, Notification } from '@/types/database';
 import type { NotificationSoundPrefs } from '@/lib/notifications/notification-sound-prefs';
 import { NotificationSoundBootstrap } from '@/components/app/notification-sound-bootstrap';
 import { GlobalCriticalAlertBar } from '@/components/app/global-critical-alert-bar';
+import { StickyAppHeader } from '@/components/app/sticky-app-header';
 
 export type AppShellMode = 'full' | 'password_gate';
 
@@ -69,7 +70,7 @@ export function AppShell({
       />
       <AppSidebar employee={employee} email={email} />
       <div className="lg:pl-[272px]">
-        <div className="sticky top-0 z-[48]">
+        <StickyAppHeader>
           <GlobalCriticalAlertBar />
           <AppTopbar
             employee={employee}
@@ -78,7 +79,7 @@ export function AppShell({
             initialBellPreview={initialBellPreview}
             notificationSoundPrefs={notificationSoundPrefs}
           />
-        </div>
+        </StickyAppHeader>
         <main className="relative z-10 mx-auto max-w-[1600px] px-4 py-6 pb-24 sm:px-6 lg:px-8 lg:py-8 lg:pb-8">
           {children}
         </main>

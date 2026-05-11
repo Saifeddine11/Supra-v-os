@@ -21,7 +21,8 @@ import { NOTIFICATION_PRIORITY_LABELS, NOTIFICATION_TYPE_LABELS } from '@/lib/no
 import { markNotificationReadAction } from '@/app/(app)/notifications/actions';
 import type { NotificationSoundPrefs } from '@/lib/notifications/notification-sound-prefs';
 import { canPlayNotificationSound } from '@/lib/notifications/notification-sound-prefs';
-import { playMandatoryCriticalAlarm, playNotificationSound } from '@/lib/notifications/notification-sound';
+import { triggerCriticalAlertFeedbackFromBellFresh } from '@/lib/notifications/critical-alert-feedback';
+import { playNotificationSound } from '@/lib/notifications/notification-sound';
 import type { NotificationSoundLevel } from '@/lib/notifications/notification-sound-level';
 import { getNotificationSoundLevel, soundLevelRank } from '@/lib/notifications/notification-sound-level';
 
@@ -79,7 +80,7 @@ export function NotificationBell({
         sinceRef.current = maxIso;
 
         if (maxLevel === 'critical') {
-          playMandatoryCriticalAlarm();
+          triggerCriticalAlertFeedbackFromBellFresh(fresh);
         } else if (maxLevel !== 'silent' && canPlayNotificationSound(maxLevel, soundPrefs)) {
           playNotificationSound(maxLevel, soundPrefs);
         }

@@ -14,8 +14,8 @@ import {
 import { fr } from 'date-fns/locale';
 import { CalendarRange } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
-import type { PortalCalendarEvent } from '@/lib/portal/calendar-events';
-import { portalEventMatchesFilter, type PortalCalendarFilterId } from '@/lib/portal/calendar-events';
+import type { PortalCalendarEvent } from '@/lib/portal/calendar-events-client';
+import { portalEventMatchesFilter, type PortalCalendarFilterId } from '@/lib/portal/calendar-events-client';
 import { Badge } from '@/components/ui/badge';
 
 const FILTERS: { id: PortalCalendarFilterId; label: string }[] = [

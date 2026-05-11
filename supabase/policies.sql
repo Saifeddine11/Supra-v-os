@@ -5,10 +5,10 @@
 --
 -- Strategy:
 --   - All tables have RLS enabled.
---   - admin / project_manager: full access (select+modify).
---   - Employees: read all internal data they need to do their job, but only
---     modify what they own/are assigned to. Some tables (invoices, quotes,
---     payments) are restricted to admin + commercial + finance.
+--   - admin / project_manager: full modify on many entities; SELECT is scoped
+--     per table via helpers (auth_staff_*) sauf périmètre global explicite.
+--   - Les lectures cross-rôles passent par des fonctions SECURITY DEFINER +
+--     row_security off (voir schema.sql + migration harden_rls_select_scope).
 --   - Clients DO NOT use Supabase Auth → portal access goes through server-
 --     side validated tokens via the service role. We therefore do NOT add
 --     "client" policies here; instead we revoke direct access for the anon
@@ -46,13 +46,60 @@ alter table user_notification_preferences enable row level security;
 -- ============================================================================
 -- EMPLOYEES
 -- ============================================================================
--- All authenticated employees can see the team roster. Only admins modify.
+-- Admin & PM : roster complet. Finance : sa ligne uniquement. Autres :
+-- soi + collègues sur mêmes tâches / vidéos (assignations + legacy).
 
 drop policy if exists "employees_select_authenticated" on employees;
-create policy "employees_select_authenticated"
+drop policy if exists "employees_select_scoped" on employees;
+create policy "employees_select_scoped"
   on employees for select
   to authenticated
-  using (true);
+  using (
+    public.auth_is_admin()
+    or public.auth_user_role() = 'project_manager'::public.user_role
+    or employees.user_id = auth.uid()
+    or employees.id = public.auth_employee_id()
+    or (
+      public.auth_user_role() = 'finance'::public.user_role
+      and employees.id = public.auth_employee_id()
+    )
+    or exists (
+      select 1 from public.task_assignments ta_o
+      join public.task_assignments ta_me
+        on ta_me.task_id = ta_o.task_id and ta_me.employee_id = public.auth_employee_id()
+      where ta_o.employee_id = employees.id
+    )
+    or exists (
+      select 1 from public.video_assignments va_o
+      join public.video_assignments va_me
+        on va_me.video_id = va_o.video_id and va_me.employee_id = public.auth_employee_id()
+      where va_o.employee_id = employees.id
+    )
+    or exists (
+      select 1 from public.tasks t
+      where t.assignee_id = employees.id
+        and (
+          t.assignee_id = public.auth_employee_id()
+          or public.auth_employee_id() = any (t.watcher_ids)
+          or exists (
+            select 1 from public.task_assignments ta
+            where ta.task_id = t.id and ta.employee_id = public.auth_employee_id()
+          )
+        )
+    )
+    or exists (
+      select 1 from public.videos v
+      where (v.editor_id = employees.id or v.cameraman_id = employees.id)
+        and (
+          v.editor_id = public.auth_employee_id()
+          or v.cameraman_id = public.auth_employee_id()
+          or exists (
+            select 1 from public.video_assignments va
+            where va.video_id = v.id and va.employee_id = public.auth_employee_id()
+          )
+        )
+    )
+  );
 
 drop policy if exists "employees_insert_admin" on employees;
 create policy "employees_insert_admin"
@@ -78,13 +125,14 @@ create policy "employees_delete_admin"
 -- ============================================================================
 -- CLIENTS
 -- ============================================================================
--- Internal staff can read all clients. Modifications: admin / PM / commercial.
+-- SELECT : périmètre auth_staff_client_visible. Modifications: admin / PM / commercial.
 
 drop policy if exists "clients_select_internal" on clients;
-create policy "clients_select_internal"
+drop policy if exists "clients_select_scoped" on clients;
+create policy "clients_select_scoped"
   on clients for select
   to authenticated
-  using (auth_user_role() is not null);
+  using (public.auth_staff_client_visible(clients.id));
 
 drop policy if exists "clients_insert_authorized" on clients;
 create policy "clients_insert_authorized"
@@ -122,10 +170,11 @@ create policy "portals_admin_pm_all"
 -- ============================================================================
 
 drop policy if exists "projects_select_internal" on projects;
-create policy "projects_select_internal"
+drop policy if exists "projects_select_scoped" on projects;
+create policy "projects_select_scoped"
   on projects for select
   to authenticated
-  using (auth_user_role() is not null);
+  using (public.auth_staff_project_visible(projects.id));
 
 drop policy if exists "projects_insert_authorized" on projects;
 create policy "projects_insert_authorized"
@@ -154,10 +203,11 @@ create policy "projects_delete_admin_pm"
 -- ============================================================================
 
 drop policy if exists "internal_projects_select" on internal_projects;
-create policy "internal_projects_select"
+drop policy if exists "internal_projects_select_scoped" on internal_projects;
+create policy "internal_projects_select_scoped"
   on internal_projects for select
   to authenticated
-  using (auth_user_role() is not null);
+  using (public.auth_staff_internal_project_visible(internal_projects.id));
 
 drop policy if exists "internal_projects_modify_admin_pm" on internal_projects;
 create policy "internal_projects_modify_admin_pm"
@@ -169,14 +219,15 @@ create policy "internal_projects_modify_admin_pm"
 -- ============================================================================
 -- TASKS
 -- ============================================================================
--- Everyone reads tasks (helpful for context / handoffs).
+-- SELECT : auth_staff_task_visible (assignations + legacy + liens vidéo/projet).
 -- Modifications: admin/PM, OR the assignee for their own tasks.
 
 drop policy if exists "tasks_select_internal" on tasks;
-create policy "tasks_select_internal"
+drop policy if exists "tasks_select_scoped" on tasks;
+create policy "tasks_select_scoped"
   on tasks for select
   to authenticated
-  using (auth_user_role() is not null);
+  using (public.auth_staff_task_visible(tasks.id));
 
 drop policy if exists "tasks_insert_authorized" on tasks;
 create policy "tasks_insert_authorized"
@@ -217,10 +268,14 @@ create policy "tasks_update_assigned_or_admin"
 -- ============================================================================
 
 drop policy if exists "task_assignments_select_internal" on task_assignments;
-create policy "task_assignments_select_internal"
+drop policy if exists "task_assignments_select_scoped" on task_assignments;
+create policy "task_assignments_select_scoped"
   on task_assignments for select
   to authenticated
-  using (auth_user_role() is not null);
+  using (
+    auth_is_admin_or_pm()
+    or public.auth_staff_task_visible(task_assignments.task_id)
+  );
 
 drop policy if exists "task_assignments_insert_authorized" on task_assignments;
 create policy "task_assignments_insert_authorized"
@@ -297,10 +352,11 @@ create policy "tasks_delete_admin_pm"
 -- ============================================================================
 
 drop policy if exists "videos_select_internal" on videos;
-create policy "videos_select_internal"
+drop policy if exists "videos_select_scoped" on videos;
+create policy "videos_select_scoped"
   on videos for select
   to authenticated
-  using (auth_user_role() is not null);
+  using (public.auth_staff_video_visible(videos.id));
 
 drop policy if exists "videos_insert_authorized" on videos;
 create policy "videos_insert_authorized"
@@ -347,10 +403,14 @@ create policy "videos_delete_admin_pm"
 -- ============================================================================
 
 drop policy if exists "video_assignments_select_internal" on video_assignments;
-create policy "video_assignments_select_internal"
+drop policy if exists "video_assignments_select_scoped" on video_assignments;
+create policy "video_assignments_select_scoped"
   on video_assignments for select
   to authenticated
-  using (auth_user_role() is not null);
+  using (
+    auth_is_admin_or_pm()
+    or public.auth_staff_video_visible(video_assignments.video_id)
+  );
 
 drop policy if exists "video_assignments_insert_authorized" on video_assignments;
 create policy "video_assignments_insert_authorized"
@@ -422,10 +482,14 @@ create policy "video_assignments_delete_assigned_or_admin"
 -- ============================================================================
 
 drop policy if exists "calendars_select_internal" on editorial_calendars;
-create policy "calendars_select_internal"
+drop policy if exists "calendars_select_scoped" on editorial_calendars;
+create policy "calendars_select_scoped"
   on editorial_calendars for select
   to authenticated
-  using (auth_user_role() is not null);
+  using (
+    auth_is_admin_or_pm()
+    or public.auth_staff_client_visible(editorial_calendars.client_id)
+  );
 
 drop policy if exists "calendars_modify_admin_pm" on editorial_calendars;
 create policy "calendars_modify_admin_pm"
@@ -469,10 +533,21 @@ create policy "ideas_modify_internal"
 -- ============================================================================
 
 drop policy if exists "invoices_select_financial" on invoices;
-create policy "invoices_select_financial"
+drop policy if exists "invoices_select_scoped" on invoices;
+create policy "invoices_select_scoped"
   on invoices for select
   to authenticated
-  using (auth_user_role() in ('admin', 'project_manager', 'commercial', 'finance'));
+  using (
+    auth_is_admin_or_pm()
+    or public.auth_is_finance()
+    or (
+      public.auth_is_commercial()
+      and exists (
+        select 1 from clients c
+        where c.id = invoices.client_id and c.account_manager_id = auth_employee_id()
+      )
+    )
+  );
 
 drop policy if exists "invoices_modify_financial" on invoices;
 create policy "invoices_modify_financial"
@@ -482,10 +557,27 @@ create policy "invoices_modify_financial"
   with check (auth_user_role() in ('admin', 'commercial', 'finance'));
 
 drop policy if exists "invoice_items_select" on invoice_items;
-create policy "invoice_items_select"
+drop policy if exists "invoice_items_select_scoped" on invoice_items;
+create policy "invoice_items_select_scoped"
   on invoice_items for select
   to authenticated
-  using (auth_user_role() in ('admin', 'project_manager', 'commercial', 'finance'));
+  using (
+    exists (
+      select 1 from invoices inv
+      where inv.id = invoice_items.invoice_id
+        and (
+          auth_is_admin_or_pm()
+          or public.auth_is_finance()
+          or (
+            public.auth_is_commercial()
+            and exists (
+              select 1 from clients c
+              where c.id = inv.client_id and c.account_manager_id = auth_employee_id()
+            )
+          )
+        )
+    )
+  );
 
 drop policy if exists "invoice_items_modify" on invoice_items;
 create policy "invoice_items_modify"
@@ -499,10 +591,22 @@ create policy "invoice_items_modify"
 -- ============================================================================
 
 drop policy if exists "quotes_select_financial" on quotes;
-create policy "quotes_select_financial"
+drop policy if exists "quotes_select_scoped" on quotes;
+create policy "quotes_select_scoped"
   on quotes for select
   to authenticated
-  using (auth_user_role() in ('admin', 'project_manager', 'commercial', 'finance'));
+  using (
+    public.auth_is_admin()
+    or auth_user_role() = 'project_manager'::user_role
+    or public.auth_is_finance()
+    or (
+      public.auth_is_commercial()
+      and exists (
+        select 1 from clients c
+        where c.id = quotes.client_id and c.account_manager_id = auth_employee_id()
+      )
+    )
+  );
 
 drop policy if exists "quotes_modify_financial" on quotes;
 create policy "quotes_modify_financial"
@@ -512,10 +616,28 @@ create policy "quotes_modify_financial"
   with check (auth_user_role() in ('admin', 'commercial', 'finance'));
 
 drop policy if exists "quote_items_select" on quote_items;
-create policy "quote_items_select"
+drop policy if exists "quote_items_select_scoped" on quote_items;
+create policy "quote_items_select_scoped"
   on quote_items for select
   to authenticated
-  using (auth_user_role() in ('admin', 'project_manager', 'commercial', 'finance'));
+  using (
+    exists (
+      select 1 from quotes q
+      where q.id = quote_items.quote_id
+        and (
+          public.auth_is_admin()
+          or auth_user_role() = 'project_manager'::user_role
+          or public.auth_is_finance()
+          or (
+            public.auth_is_commercial()
+            and exists (
+              select 1 from clients c
+              where c.id = q.client_id and c.account_manager_id = auth_employee_id()
+            )
+          )
+        )
+    )
+  );
 
 drop policy if exists "quote_items_modify" on quote_items;
 create policy "quote_items_modify"
@@ -529,10 +651,21 @@ create policy "quote_items_modify"
 -- ============================================================================
 
 drop policy if exists "payments_select_financial" on payments;
-create policy "payments_select_financial"
+drop policy if exists "payments_select_scoped" on payments;
+create policy "payments_select_scoped"
   on payments for select
   to authenticated
-  using (auth_user_role() in ('admin', 'project_manager', 'commercial', 'finance'));
+  using (
+    public.auth_is_admin()
+    or public.auth_is_finance()
+    or (
+      public.auth_is_commercial()
+      and exists (
+        select 1 from clients c
+        where c.id = payments.client_id and c.account_manager_id = auth_employee_id()
+      )
+    )
+  );
 
 drop policy if exists "payments_modify_admin_commercial" on payments;
 create policy "payments_modify_admin_commercial"
@@ -546,10 +679,11 @@ create policy "payments_modify_admin_commercial"
 -- ============================================================================
 
 drop policy if exists "reports_select_internal" on reports;
-create policy "reports_select_internal"
+drop policy if exists "reports_select_scoped" on reports;
+create policy "reports_select_scoped"
   on reports for select
   to authenticated
-  using (auth_user_role() is not null);
+  using (public.auth_staff_report_visible(reports.id));
 
 drop policy if exists "reports_modify_admin_pm" on reports;
 create policy "reports_modify_admin_pm"
@@ -561,16 +695,14 @@ create policy "reports_modify_admin_pm"
 -- ============================================================================
 -- DOCUMENTS
 -- ============================================================================
--- Lecture / modification : tout employé authentifié (périmètre métier par rôle
--- côté application : ex. documents liés à une vidéo filtrés pour editor/cameraman
--- via video_assignments + legacy). RLS client portail : non applicable ici
--- (accès portail via service role + routes serveur).
+-- SELECT : auth_staff_document_visible_by_id. Portail client : service role.
 
 drop policy if exists "documents_select_internal" on documents;
-create policy "documents_select_internal"
+drop policy if exists "documents_select_scoped" on documents;
+create policy "documents_select_scoped"
   on documents for select
   to authenticated
-  using (auth_user_role() is not null);
+  using (public.auth_staff_document_visible_by_id(documents.id));
 
 drop policy if exists "documents_modify_internal" on documents;
 create policy "documents_modify_internal"
@@ -580,14 +712,14 @@ create policy "documents_modify_internal"
   with check (auth_user_role() is not null);
 
 -- ============================================================================
--- NOTIFICATIONS — users can only see their own
+-- NOTIFICATIONS — soi + admin (support)
 -- ============================================================================
 
 drop policy if exists "notifications_select_own" on notifications;
 create policy "notifications_select_own"
   on notifications for select
   to authenticated
-  using (recipient_user_id = auth.uid() or auth_user_role() = 'admin');
+  using (recipient_user_id = auth.uid() or public.auth_is_admin());
 
 drop policy if exists "notifications_update_own" on notifications;
 create policy "notifications_update_own"
@@ -612,10 +744,26 @@ create policy "notifications_delete_own"
 -- ============================================================================
 
 drop policy if exists "comments_select_internal" on comments;
-create policy "comments_select_internal"
+drop policy if exists "comments_select_scoped" on comments;
+create policy "comments_select_scoped"
   on comments for select
   to authenticated
-  using (auth_user_role() is not null);
+  using (
+    auth_is_admin_or_pm()
+    or comments.author_id = auth.uid()
+    or (
+      comments.entity_type = 'task'
+      and public.auth_staff_task_visible(comments.entity_id::uuid)
+    )
+    or (
+      comments.entity_type = 'video'
+      and public.auth_staff_video_visible(comments.entity_id::uuid)
+    )
+    or (
+      comments.entity_type = 'project'
+      and public.auth_staff_project_visible(comments.entity_id::uuid)
+    )
+  );
 
 drop policy if exists "comments_insert_internal" on comments;
 create policy "comments_insert_internal"
@@ -641,10 +789,10 @@ create policy "comments_delete_own"
 
 drop policy if exists "logs_select_admin_pm" on activity_logs;
 drop policy if exists "logs_select_internal" on activity_logs;
-create policy "logs_select_internal"
+create policy "logs_select_admin_pm"
   on activity_logs for select
   to authenticated
-  using (auth_user_role() is not null);
+  using (auth_is_admin_or_pm());
 
 drop policy if exists "logs_insert_authenticated" on activity_logs;
 create policy "logs_insert_authenticated"
@@ -674,10 +822,13 @@ create policy "agency_settings_update_admin"
 -- ============================================================================
 
 drop policy if exists "agency_monthly_goals_select_staff" on agency_monthly_goals;
-create policy "agency_monthly_goals_select_staff"
+drop policy if exists "agency_monthly_goals_select_scoped" on agency_monthly_goals;
+create policy "agency_monthly_goals_select_scoped"
   on agency_monthly_goals for select
   to authenticated
-  using (auth_user_role() is not null);
+  using (
+    auth_user_role() in ('admin'::user_role, 'finance'::user_role, 'commercial'::user_role)
+  );
 
 drop policy if exists "agency_monthly_goals_admin_write" on agency_monthly_goals;
 create policy "agency_monthly_goals_admin_write"

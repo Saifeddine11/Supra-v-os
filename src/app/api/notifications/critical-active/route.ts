@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAuthContext } from '@/lib/auth/permissions';
-import { createClient } from '@/lib/supabase/server';
-import type { ServiceRoleClient } from '@/lib/supabase/admin';
+import { createAdminClient } from '@/lib/supabase/admin';
 import {
   fetchCriticalAlertsWithClient,
   mapCriticalAlertsToActiveApi,
@@ -11,6 +10,10 @@ export const dynamic = 'force-dynamic';
 
 /**
  * Alertes actives basées sur l’état métier (retards, livraisons, etc.) — pas sur is_read.
+ *
+ * Client **service role** après contrôle `getAuthContext` : les requêtes appliquent le
+ * périmètre métier dans `fetchCriticalAlertsWithClient` (assignations, rôle, etc.). La RLS
+ * session ne doit pas masquer des lignes que le dashboard compte déjà via les mêmes règles.
  */
 export async function GET() {
   const ctx = await getAuthContext();
@@ -19,9 +22,16 @@ export async function GET() {
   }
 
   try {
-    const supabase = await createClient();
-    const items = await fetchCriticalAlertsWithClient(supabase as unknown as ServiceRoleClient, ctx);
-    return NextResponse.json(mapCriticalAlertsToActiveApi(items));
+    const admin = createAdminClient();
+    const items = await fetchCriticalAlertsWithClient(admin, ctx);
+    const body = mapCriticalAlertsToActiveApi(items);
+
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[critical-active] user', ctx.employee.id, ctx.role);
+      console.log('[critical-active] alerts', body.alerts.length, 'critical', body.criticalCount);
+    }
+
+    return NextResponse.json(body);
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Erreur';
     return NextResponse.json({ error: msg }, { status: 500 });

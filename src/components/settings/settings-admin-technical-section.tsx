@@ -1,3 +1,5 @@
+import { CriticalSoundTestAdminButton } from '@/components/settings/critical-sound-test-admin-button';
+
 /**
  * Intégrations et crons — réservé admin (données issues des variables d’environnement serveur).
  */
@@ -19,6 +21,7 @@ export function SettingsAdminTechnicalSection() {
     { path: '/api/cron/overdue-invoices', label: 'Unitaire (tests / Pro)' },
     { path: '/api/cron/deadline-alerts', label: 'Unitaire — fréquent recommandé sur Pro' },
     { path: '/api/cron/evening-summary', label: 'Unitaire — 2ᵉ cron typique sur Pro' },
+    { path: '/api/cron/critical-alerts', label: 'Rappels digest alertes critiques (2 h) — CRON_SECRET' },
   ];
 
   return (
@@ -78,6 +81,8 @@ export function SettingsAdminTechnicalSection() {
           Pro.
         </p>
       </div>
+
+      <CriticalSoundTestAdminButton />
     </section>
   );
 }

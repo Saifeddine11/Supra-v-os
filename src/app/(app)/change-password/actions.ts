@@ -29,7 +29,8 @@ export async function changeStaffPasswordAction(
     return { ok: false, error: pwErr.message };
   }
 
-  const { data: empRow, error: empErr } = await supabase
+  const admin = createAdminClient();
+  const { data: empRow, error: empErr } = await admin
     .from('employees')
     .update({ must_change_password: false, updated_at: new Date().toISOString() })
     .eq('user_id', ctx.userId)
@@ -41,7 +42,6 @@ export async function changeStaffPasswordAction(
   }
   if (!empRow) {
     try {
-      const admin = createAdminClient();
       const link = await ensureEmployeeLinkedByEmail(admin, ctx.userId, ctx.email);
       if (!link.linked) {
         return {
@@ -51,7 +51,7 @@ export async function changeStaffPasswordAction(
             'Mot de passe mis à jour, mais aucun profil employé lié. Contactez un administrateur.',
         };
       }
-      const { error: retryErr } = await supabase
+      const { error: retryErr } = await admin
         .from('employees')
         .update({ must_change_password: false, updated_at: new Date().toISOString() })
         .eq('user_id', ctx.userId);

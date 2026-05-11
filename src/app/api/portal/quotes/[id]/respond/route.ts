@@ -7,6 +7,7 @@ import type { QuoteStatus } from '@/types/database';
 import { logPortalActivity } from '@/lib/portal/notify-staff';
 import { getAgencyDisplayCurrencyWithClient } from '@/lib/data/agency-settings-db';
 import { formatAgencyMoneyCompact } from '@/lib/money/format-money';
+import { clientIpFrom, rateLimit } from '@/lib/security/rate-limit';
 
 export const runtime = 'nodejs';
 
@@ -20,6 +21,16 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   if (!clientId) {
     return NextResponse.json({ ok: false, error: 'clientId requis.' }, { status: 400 });
+  }
+
+  // Anti-bruteforce / anti-replay côté portail : 15 réponses max par minute / IP.
+  const ip = clientIpFrom(request);
+  const rl = rateLimit({ key: `portal-respond:${ip}:${clientId}`, max: 15, windowMs: 60_000 });
+  if (!rl.ok) {
+    return NextResponse.json(
+      { ok: false, error: 'Trop de requêtes.', code: 'RATE_LIMITED' },
+      { status: 429, headers: { 'Retry-After': String(rl.retryAfterSec) } }
+    );
   }
 
   const validation = await validatePortalToken(clientId, token);

@@ -6,17 +6,27 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, ChevronDown, ChevronUp, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { CriticalActiveAlertDTO, CriticalActiveAlertsResponse } from '@/lib/notifications/critical-active-types';
-import { tryPlayMandatoryCriticalSound } from '@/lib/notifications/mandatory-critical-sound';
+import { CRITICAL_BAR_SNOOZE_KEY } from '@/lib/notifications/critical-bar-constants';
+import { triggerCriticalAlertFeedbackFromActiveApi } from '@/lib/notifications/critical-alert-feedback';
+import { SUPRA_AUDIO_UNLOCK_EVENT } from '@/lib/notifications/critical-sound-events';
 import { cn } from '@/lib/utils/cn';
 
 const POLL_MS = 5 * 60 * 1000;
-const SNOOZE_KEY = 'supra_critical_bar_snooze_until';
 
 async function fetchCriticalActive(): Promise<CriticalActiveAlertsResponse | null> {
   try {
     const r = await fetch('/api/notifications/critical-active', { cache: 'no-store' });
-    if (!r.ok) return null;
-    return (await r.json()) as CriticalActiveAlertsResponse;
+    if (!r.ok) {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[critical-banner] fetch failed', r.status);
+      }
+      return null;
+    }
+    const json = (await r.json()) as CriticalActiveAlertsResponse;
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[critical-banner] alerts received', json.alerts?.length ?? 0, 'critical', json.criticalCount);
+    }
+    return json;
   } catch {
     return null;
   }
@@ -24,7 +34,7 @@ async function fetchCriticalActive(): Promise<CriticalActiveAlertsResponse | nul
 
 function snoozeUntil(): number {
   if (typeof window === 'undefined') return 0;
-  const raw = localStorage.getItem(SNOOZE_KEY);
+  const raw = localStorage.getItem(CRITICAL_BAR_SNOOZE_KEY);
   if (!raw) return 0;
   const n = Number(raw);
   return Number.isFinite(n) ? n : 0;
@@ -35,7 +45,7 @@ function isSnoozed(): boolean {
 }
 
 function snoozeBarTwoHours() {
-  localStorage.setItem(SNOOZE_KEY, String(Date.now() + 2 * 60 * 60 * 1000));
+  localStorage.setItem(CRITICAL_BAR_SNOOZE_KEY, String(Date.now() + 2 * 60 * 60 * 1000));
 }
 
 export function GlobalCriticalAlertBar() {
@@ -44,11 +54,37 @@ export function GlobalCriticalAlertBar() {
   const [expanded, setExpanded] = useState(true);
   const [snoozeTick, setSnoozeTick] = useState(0);
   const hiddenAtRef = useRef<number | null>(null);
+  const payloadRef = useRef<CriticalActiveAlertsResponse | null>(null);
 
   const applyPayload = useCallback((p: CriticalActiveAlertsResponse | null, playReason: 'navigation' | 'ambient') => {
     setPayload(p);
-    if (!p || isSnoozed()) return;
-    if (p.criticalCount > 0) tryPlayMandatoryCriticalSound(true, playReason);
+    payloadRef.current = p;
+    const snoozed = isSnoozed();
+    const critical = p?.criticalCount ?? 0;
+    const alertsLen = p?.alerts?.length ?? 0;
+
+    if (process.env.NODE_ENV === 'development') {
+      let lastPlayedAt = 0;
+      let audioUnlocked = false;
+      if (typeof window !== 'undefined') {
+        lastPlayedAt = Number(localStorage.getItem('supra_mandatory_critical_sound_ms')) || 0;
+        try {
+          audioUnlocked = sessionStorage.getItem('supra_audio_gesture') === '1';
+        } catch {
+          audioUnlocked = false;
+        }
+      }
+      const shouldPlay = Boolean(p && !snoozed && critical > 0);
+      console.log('[critical-sound] alerts', alertsLen);
+      console.log('[critical-sound] shouldPlay', shouldPlay);
+      console.log('[critical-sound] audioUnlocked', audioUnlocked);
+      console.log('[critical-sound] lastPlayedAt', lastPlayedAt);
+    }
+
+    if (!p || snoozed) return;
+    if (critical > 0) {
+      triggerCriticalAlertFeedbackFromActiveApi(p, playReason === 'ambient' ? 'ambient' : 'navigation');
+    }
   }, []);
 
   const load = useCallback(
@@ -71,6 +107,16 @@ export function GlobalCriticalAlertBar() {
   }, [load]);
 
   useEffect(() => {
+    const onUnlock = () => {
+      const p = payloadRef.current;
+      if (!p || p.criticalCount === 0 || isSnoozed()) return;
+      triggerCriticalAlertFeedbackFromActiveApi(p, 'navigation', { bypassBundleThrottle: true });
+    };
+    window.addEventListener(SUPRA_AUDIO_UNLOCK_EVENT, onUnlock);
+    return () => window.removeEventListener(SUPRA_AUDIO_UNLOCK_EVENT, onUnlock);
+  }, []);
+
+  useEffect(() => {
     const onVis = () => {
       if (document.visibilityState !== 'visible') {
         hiddenAtRef.current = Date.now();
@@ -81,9 +127,10 @@ export function GlobalCriticalAlertBar() {
       void (async () => {
         const p = await fetchCriticalActive();
         setPayload(p);
+        payloadRef.current = p;
         if (!p || p.criticalCount === 0 || isSnoozed()) return;
         const away = hiddenAt != null && Date.now() - hiddenAt > 2000;
-        if (away) tryPlayMandatoryCriticalSound(true, 'navigation');
+        if (away) triggerCriticalAlertFeedbackFromActiveApi(p, 'navigation');
       })();
     };
     document.addEventListener('visibilitychange', onVis);
@@ -94,8 +141,18 @@ export function GlobalCriticalAlertBar() {
     };
   }, []);
 
-  if (!payload || payload.alerts.length === 0) return null;
-  if (isSnoozed()) return null;
+  if (!payload || payload.alerts.length === 0) {
+    if (process.env.NODE_ENV === 'development' && payload) {
+      console.log('[critical-banner] hidden: empty alerts array');
+    }
+    return null;
+  }
+  if (isSnoozed()) {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[critical-banner] hidden: snoozed 2h');
+    }
+    return null;
+  }
 
   const { alerts, criticalCount, warningCount } = payload;
   const headline =
