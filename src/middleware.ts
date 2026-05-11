@@ -73,6 +73,18 @@ export async function middleware(request: NextRequest) {
     console.error('[middleware] auth.getUser failed', e instanceof Error ? e.message : e);
   }
 
+  /**
+   * Routes API notifications : réponse JSON 401 si non connecté.
+   * Évite une redirection 307 → page /login (HTML) quand on ouvre l’URL dans l’onglet
+   * ou curl sans cookie — sinon on peut croire à un « 404 » ou à une route absente.
+   */
+  if (!user && pathname === '/api/notifications/critical-active') {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  if (!user && pathname === '/api/notifications/bell-sync') {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
   // Redirect to /login for protected routes if not authenticated
   if (!user && !isPublic(pathname) && pathname !== '/') {
     const url = request.nextUrl.clone();

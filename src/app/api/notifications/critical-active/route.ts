@@ -15,7 +15,7 @@ export const dynamic = 'force-dynamic';
  * périmètre métier dans `fetchCriticalAlertsWithClient` (assignations, rôle, etc.). La RLS
  * session ne doit pas masquer des lignes que le dashboard compte déjà via les mêmes règles.
  */
-export async function GET() {
+export async function GET(_request: Request) {
   const ctx = await getAuthContext();
   if (!ctx?.userId || !ctx.employee) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
