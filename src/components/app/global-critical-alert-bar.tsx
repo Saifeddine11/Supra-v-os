@@ -15,16 +15,26 @@ const POLL_MS = 5 * 60 * 1000;
 
 async function fetchCriticalActive(): Promise<CriticalActiveAlertsResponse | null> {
   try {
-    const r = await fetch('/api/notifications/critical-active', { cache: 'no-store' });
-    if (!r.ok) {
+    const r = await fetch('/api/notifications/critical-active', {
+      cache: 'no-store',
+      credentials: 'same-origin',
+    });
+    const ct = r.headers.get('content-type') ?? '';
+    if (!r.ok || !ct.includes('application/json')) {
       if (process.env.NODE_ENV === 'development') {
-        console.warn('[critical-banner] fetch failed', r.status);
+        console.warn('[critical-banner] fetch failed', r.status, 'redirected=', r.redirected, 'ct=', ct.slice(0, 48));
       }
       return null;
     }
     const json = (await r.json()) as CriticalActiveAlertsResponse;
+    if (!Array.isArray(json.alerts) || typeof json.criticalCount !== 'number' || typeof json.warningCount !== 'number') {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[critical-banner] invalid JSON shape', json);
+      }
+      return null;
+    }
     if (process.env.NODE_ENV === 'development') {
-      console.log('[critical-banner] alerts received', json.alerts?.length ?? 0, 'critical', json.criticalCount);
+      console.log('[critical-banner] alerts received', json.alerts.length, 'critical', json.criticalCount);
     }
     return json;
   } catch {

@@ -31,7 +31,11 @@ export async function GET() {
       console.log('[critical-active] alerts', body.alerts.length, 'critical', body.criticalCount);
     }
 
-    return NextResponse.json(body);
+    const headers = new Headers();
+    const sha = process.env.VERCEL_GIT_COMMIT_SHA?.trim();
+    if (sha) headers.set('x-deploy-commit', sha);
+
+    return NextResponse.json(body, { headers });
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Erreur';
     return NextResponse.json({ error: msg }, { status: 500 });
