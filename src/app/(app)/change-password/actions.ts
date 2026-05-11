@@ -3,6 +3,8 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { getAuthContext } from '@/lib/auth/permissions';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { ensureEmployeeLinkedByEmail } from '@/lib/employees/auth-provision';
 
 export async function changeStaffPasswordAction(
   password: string,
@@ -27,13 +29,42 @@ export async function changeStaffPasswordAction(
     return { ok: false, error: pwErr.message };
   }
 
-  const { error: empErr } = await supabase
+  const { data: empRow, error: empErr } = await supabase
     .from('employees')
     .update({ must_change_password: false, updated_at: new Date().toISOString() })
-    .eq('user_id', ctx.userId);
+    .eq('user_id', ctx.userId)
+    .select('id')
+    .maybeSingle();
 
   if (empErr) {
     return { ok: false, error: empErr.message };
+  }
+  if (!empRow) {
+    try {
+      const admin = createAdminClient();
+      const link = await ensureEmployeeLinkedByEmail(admin, ctx.userId, ctx.email);
+      if (!link.linked) {
+        return {
+          ok: false,
+          error:
+            link.error ??
+            'Mot de passe mis à jour, mais aucun profil employé lié. Contactez un administrateur.',
+        };
+      }
+      const { error: retryErr } = await supabase
+        .from('employees')
+        .update({ must_change_password: false, updated_at: new Date().toISOString() })
+        .eq('user_id', ctx.userId);
+      if (retryErr) return { ok: false, error: retryErr.message };
+    } catch (e) {
+      return {
+        ok: false,
+        error:
+          e instanceof Error
+            ? e.message
+            : 'Mot de passe mis à jour, mais liaison employé impossible.',
+      };
+    }
   }
 
   revalidatePath('/', 'layout');

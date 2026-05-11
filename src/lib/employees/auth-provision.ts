@@ -12,6 +12,13 @@ export function getAuthLoginRedirectUrl(): string {
   return `${base}/login`;
 }
 
+/** URL de callback auth : crée la session puis redirige vers `next` (par défaut /change-password). */
+export function getAuthCallbackRedirectUrl(next = '/change-password'): string {
+  const base = (process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000').replace(/\/$/, '');
+  const safeNext = next.startsWith('/') ? next : '/change-password';
+  return `${base}/auth/callback?next=${encodeURIComponent(safeNext)}`;
+}
+
 /** Page de connexion publique (même base que les redirections Auth). */
 export function getPublicLoginPageUrl(): string {
   return getAuthLoginRedirectUrl();
@@ -39,6 +46,38 @@ export async function findAuthUserIdByEmail(
     if (data.users.length < perPage) return null;
   }
   return null;
+}
+
+/**
+ * Lie un user Auth à un employee existant par e-mail (si `user_id` encore null).
+ * Utile après callback d'invitation quand la session est créée mais la liaison n'a pas été persistée.
+ */
+export async function ensureEmployeeLinkedByEmail(
+  admin: ServiceRoleClient,
+  authUserId: string,
+  email: string | null | undefined,
+): Promise<{ linked: boolean; error?: string }> {
+  const em = normalizeEmail(email ?? '');
+  if (!em || !authUserId) return { linked: false };
+
+  const { data: row, error: rowErr } = await admin
+    .from('employees')
+    .select('id, user_id')
+    .eq('email', em)
+    .maybeSingle();
+
+  if (rowErr || !row) return { linked: false };
+  if (row.user_id === authUserId) return { linked: true };
+  if (row.user_id) {
+    return {
+      linked: false,
+      error: 'Un autre compte Auth est déjà lié à ce collaborateur.',
+    };
+  }
+
+  const linked = await linkEmployeeToAuthUser(admin, row.id, authUserId, {});
+  if (!linked.ok) return { linked: false, error: linked.error };
+  return { linked: true };
 }
 
 export async function assertEmployeeUserIdAvailable(
@@ -81,6 +120,14 @@ export async function linkEmployeeToAuthUser(
   const { error } = await admin.from('employees').update(patch).eq('id', employeeId);
 
   if (error) {
+    if (/mise à jour non autorisée|seuls les administrateurs/i.test(error.message)) {
+      return {
+        ok: false,
+        error:
+          'Impossible de lier le compte Auth à ce collaborateur. ' +
+          'Vérifiez que la migration SQL must_change_password + correctif service_role est appliquée.',
+      };
+    }
     return { ok: false, error: error.message };
   }
   return { ok: true };
@@ -123,7 +170,7 @@ export async function inviteEmployeeAuth(
   const { data: row } = await admin.from('employees').select('user_id').eq('id', employeeId).maybeSingle();
   if (row?.user_id) return { ok: false, error: 'Compte Auth déjà lié.' };
 
-  const redirectTo = getAuthLoginRedirectUrl();
+  const redirectTo = getAuthCallbackRedirectUrl('/change-password');
 
   const { data: invited, error: inviteErr } = await admin.auth.admin.inviteUserByEmail(em, {
     redirectTo,
@@ -239,13 +286,13 @@ export async function createEmployeeAuthWithTempPassword(
 
 export type PasswordResetResult = { ok: true } | { ok: false; error: string };
 
-/** E-mail « mot de passe oublié » — même flux que le client, avec redirect vers /login. */
+/** E-mail « mot de passe oublié » — callback auth puis redirection vers /change-password. */
 export async function sendAuthPasswordResetEmail(email: string): Promise<PasswordResetResult> {
   const admin = createAdminClient();
   const em = normalizeEmail(email);
   if (!em) return { ok: false, error: 'Cet employé n’a pas d’e-mail.' };
 
-  const redirectTo = getAuthLoginRedirectUrl();
+  const redirectTo = getAuthCallbackRedirectUrl('/change-password');
   const { error } = await admin.auth.resetPasswordForEmail(em, { redirectTo });
   if (error) {
     return { ok: false, error: mapAuthError(error.message) || 'Impossible d’envoyer l’e-mail de réinitialisation.' };

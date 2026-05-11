@@ -80,7 +80,7 @@ export function EmployeeAuthPanel({
       setOk(
         res.data?.mode === 'linked_existing'
           ? 'Compte Auth lié (utilisateur déjà présent dans Supabase).'
-          : 'Invitation envoyée. Compte Auth lié.',
+          : 'Invitation envoyée. Le lien ouvre la définition du mot de passe.',
       );
       router.refresh();
     } finally {
@@ -201,7 +201,7 @@ export function EmployeeAuthPanel({
       <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
         Les invitations et réinitialisations utilisent l’e-mail de la fiche et le domaine{' '}
         <span className="font-mono text-[10px] text-foreground/80">NEXT_PUBLIC_APP_URL</span> pour la redirection vers
-        la page de connexion.
+        le callback Auth puis <span className="font-mono text-[10px] text-foreground/80">/change-password</span>.
       </p>
 
       <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">

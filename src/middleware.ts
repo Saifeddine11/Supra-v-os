@@ -14,6 +14,7 @@ import { normalizeSupabaseProjectUrl } from '@/lib/supabase/normalize-url';
 
 const PUBLIC_PATHS = [
   '/login',
+  '/auth/callback',
   '/portal/',          // /portal/client/[id] — token-based, no auth
   '/api/cron/',        // protected by CRON_SECRET, not by Supabase auth
   '/api/dev/',         // dev-only helpers (handlers still gate by NODE_ENV)
