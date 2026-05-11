@@ -23,6 +23,7 @@ import { requireAuth } from '@/lib/auth/permissions';
 import {
   canModifyClients,
   canModifyInvoices,
+  canViewGlobalFinanceStats,
 } from '@/lib/auth/capabilities';
 import { navItemVisible } from '@/lib/auth/nav-policy';
 import { ActionButton } from '@/components/shared/action-button';
@@ -86,6 +87,7 @@ const STAT_ICONS: Record<string, LucideIcon> = {
   'co-quotes-ok': Target,
   'co-quotes-ko': AlertCircle,
   'co-quotes-exp': Clock,
+  'pm-my-due-today': CalendarCheck,
 };
 
 const FINANCE_STAT_IDS = new Set(['rev', 'target', 'collected', 'pending', 'unpaid']);
@@ -103,6 +105,9 @@ function introForDashboard(
   scope: string,
   role: UserRole | undefined
 ): string {
+  if (scope === 'operations') {
+    return 'Pilotage production : projets, tâches, équipe et livrables — sans indicateurs financiers globaux de l’agence.';
+  }
   if (variant === 'individual' && role) {
     const rk = role === 'designer' ? 'developer' : role;
     if (rk === 'editor') {
@@ -318,7 +323,7 @@ export default async function DashboardPage() {
   ]);
 
   let operational = emptyDashboardOperational();
-  if (summary.scope === 'full') {
+  if (summary.scope === 'full' || summary.scope === 'operations') {
     try {
       operational = await fetchDashboardOperational(ctx);
     } catch {
@@ -435,7 +440,7 @@ export default async function DashboardPage() {
   }
 
   const showFinanceTargets =
-    summary.scope === 'full' ||
+    (summary.scope === 'full' && canViewGlobalFinanceStats(ctx.role)) ||
     summary.scope === 'finance' ||
     (summary.scope === 'commercial' && summary.finance != null);
 
@@ -487,6 +492,23 @@ export default async function DashboardPage() {
       ...s,
       ...(liveOverrides[s.id] ?? {}),
     }));
+  } else if (summary.scope === 'operations') {
+    const ops = baseStatCards
+      .filter((s) => !FINANCE_STAT_IDS.has(s.id))
+      .map((s) => ({
+        ...s,
+        ...(liveOverrides[s.id] ?? {}),
+      }));
+    mergedStats = [
+      ...ops,
+      {
+        id: 'pm-my-due-today',
+        title: 'Mes échéances aujourd’hui',
+        value: String(summary.personal.myTasksDueToday),
+        subtitle: 'tâches assignées à vous',
+        tone: summary.personal.myTasksDueToday > 0 ? ('warning' as const) : ('default' as const),
+      },
+    ];
   } else if (summary.scope === 'commercial' && summary.commercial) {
     const baseCommercial = baseStatCards.filter((s) => s.id === 'clients').map((s) => ({
       ...s,
@@ -510,12 +532,18 @@ export default async function DashboardPage() {
   }
 
   const showFullProduction =
-    summary.scope === 'full' && (variant === 'admin' || variant === 'manager');
-  const showUrgentToday = summary.scope === 'full' && (variant === 'admin' || variant === 'manager');
-  const showTeamBlocks = summary.scope === 'full';
-  const showFinanceBlock = summary.scope === 'full' || summary.scope === 'finance' || summary.scope === 'commercial';
-  const showClientBlock = summary.scope === 'full' || summary.scope === 'commercial';
-  const showProjectBlock = summary.scope === 'full';
+    (summary.scope === 'full' || summary.scope === 'operations') &&
+    (variant === 'admin' || variant === 'manager');
+  const showUrgentToday =
+    (summary.scope === 'full' || summary.scope === 'operations') &&
+    (variant === 'admin' || variant === 'manager');
+  const showTeamBlocks = summary.scope === 'full' || summary.scope === 'operations';
+  const showFinanceBlock =
+    (summary.scope === 'full' && canViewGlobalFinanceStats(ctx.role)) ||
+    summary.scope === 'finance' ||
+    (summary.scope === 'commercial' && summary.finance != null);
+  const showClientBlock = summary.scope === 'full' || summary.scope === 'operations' || summary.scope === 'commercial';
+  const showProjectBlock = summary.scope === 'full' || summary.scope === 'operations';
   const showPersonalWorkColumn = Boolean(
     variant === 'individual' && ctx.employee && personalWork
   );
@@ -567,7 +595,7 @@ export default async function DashboardPage() {
           </div>
         </SectionCard>
       ) : null}
-      {summary.scope === 'full' && variant === 'manager' ? (
+      {(summary.scope === 'full' || summary.scope === 'operations') && variant === 'manager' ? (
         <SectionCard
           title="Charge personnelle"
           description="Vos propres tâches et indicateurs — la vue détaillée équipe est dans les blocs ci-dessous."
@@ -596,7 +624,11 @@ export default async function DashboardPage() {
           {showUrgentToday ? (
             <SectionCard
               title="Urgent aujourd’hui"
-              description="Factures échues, tâches urgentes, validations vidéo et rapports non envoyés."
+              description={
+                summary.scope === 'operations'
+                  ? 'Tâches urgentes, validations vidéo, rapports — factures signalées sans montant (finance globale réservée Admin / Finance).'
+                  : 'Factures échues, tâches urgentes, validations vidéo et rapports non envoyés.'
+              }
               action={
                 <Link href="/notifications" className="text-xs font-semibold text-primary hover:underline">
                   Voir tout
@@ -623,6 +655,31 @@ export default async function DashboardPage() {
             <TeamTasksSection today={operational.teamTasksToday} overdue={operational.teamTasksOverdue} />
           ) : null}
           {showFinanceBlock ? <FinanceOverview snapshot={financeSnapshot} /> : null}
+          {summary.scope === 'operations' ? (
+            <SectionCard
+              title="Suivi production"
+              description="Vue opérationnelle — pas de CA, encaissements, objectifs financiers ni agrégats de paiements globaux (réservés Admin / Finance)."
+            >
+              <dl className="grid gap-3 text-sm sm:grid-cols-2">
+                <div className="rounded-lg border border-border/70 bg-muted/15 px-3 py-2">
+                  <dt className="text-xs text-muted-foreground">Projets en cours</dt>
+                  <dd className="mt-1 font-semibold tabular-nums text-foreground">{summary.projectsInProgress}</dd>
+                </div>
+                <div className="rounded-lg border border-border/70 bg-muted/15 px-3 py-2">
+                  <dt className="text-xs text-muted-foreground">Tâches ouvertes (agence)</dt>
+                  <dd className="mt-1 font-semibold tabular-nums text-foreground">{summary.openTasks}</dd>
+                </div>
+                <div className="rounded-lg border border-border/70 bg-muted/15 px-3 py-2">
+                  <dt className="text-xs text-muted-foreground">Validations client</dt>
+                  <dd className="mt-1 font-semibold tabular-nums text-foreground">{summary.clientValidationsPending}</dd>
+                </div>
+                <div className="rounded-lg border border-border/70 bg-muted/15 px-3 py-2">
+                  <dt className="text-xs text-muted-foreground">Vidéos en pipeline</dt>
+                  <dd className="mt-1 font-semibold tabular-nums text-foreground">{summary.activeVideos}</dd>
+                </div>
+              </dl>
+            </SectionCard>
+          ) : null}
           {summary.scope === 'finance' &&
           summary.finance &&
           summary.finance.paidCount === 0 &&
@@ -649,7 +706,8 @@ export default async function DashboardPage() {
           {showClientBlock ? <ClientOverview clients={operational.clientsFollow} /> : null}
           {showProjectBlock ? <ProjectOverview projects={operational.projectsOngoing} /> : null}
           <NotificationsPreview items={dashboardNotifications} />
-          {summary.scope === 'full' && (variant === 'admin' || variant === 'manager') ? (
+          {(summary.scope === 'full' || summary.scope === 'operations') &&
+          (variant === 'admin' || variant === 'manager') ? (
             <SectionCard title={activitySectionTitle} description={activitySectionDescription}>
               {dashboardActivity.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Aucune activité récente.</p>

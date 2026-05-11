@@ -13,6 +13,14 @@ export function canViewInvoices(role: UserRole | null): boolean {
   );
 }
 
+/**
+ * KPI finance agence (CA prévu, encaissements, objectifs, paiements globaux, agrégats factures).
+ * Réservé admin + finance — pas le chef de projet (pilotage prod / planning sans chiffres globaux).
+ */
+export function canViewGlobalFinanceStats(role: UserRole | null): boolean {
+  return role === 'admin' || role === 'finance';
+}
+
 export function canModifyInvoices(role: UserRole | null): boolean {
   return role === 'admin' || role === 'commercial' || role === 'finance';
 }

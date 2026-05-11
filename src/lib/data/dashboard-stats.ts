@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
-import { canViewInvoices } from '@/lib/auth/capabilities';
+import { canViewGlobalFinanceStats, canViewInvoices } from '@/lib/auth/capabilities';
 import type { AuthContext } from '@/lib/auth/permissions';
 import { resolveVisibleClientIds } from '@/lib/auth/data-scope';
 import type { FinanceSnapshot } from '@/data/dashboard-mock';
@@ -44,7 +44,7 @@ export function zeroDashboardFinanceAgg(currency: AgencyCurrencyIso): DashboardF
   };
 }
 
-export type DashboardScope = 'full' | 'finance' | 'commercial' | 'individual';
+export type DashboardScope = 'full' | 'operations' | 'finance' | 'commercial' | 'individual';
 
 export interface PersonalWorkload {
   myOpenTasks: number;
@@ -176,7 +176,13 @@ async function fetchFinanceBlock(
   agencyDisplayCurrency: AgencyCurrencyIso
 ): Promise<{ pendingInvoices: number | null; finance: DashboardFinanceAgg | null }> {
   const role = ctx.role;
-  if (!role || !canViewInvoices(role) || !ctx.employee) {
+  if (!role || !ctx.employee) {
+    return { pendingInvoices: null, finance: null };
+  }
+
+  const allowGlobal = canViewGlobalFinanceStats(role);
+  const allowCommercialScoped = role === 'commercial' && canViewInvoices(role);
+  if (!allowGlobal && !allowCommercialScoped) {
     return { pendingInvoices: null, finance: null };
   }
 
@@ -642,7 +648,21 @@ export async function getDashboardSummary(ctx: AuthContext): Promise<DashboardSu
 
   const personal = await fetchPersonalWorkload(supabase, empId, ctx.userId, role);
 
-  if (role === 'admin' || role === 'project_manager') {
+  if (role === 'project_manager') {
+    const agency = await fetchAgencyAggregates(supabase, now, monthStart);
+    return {
+      scope: 'operations',
+      ...agency,
+      pendingInvoices: null,
+      finance: null,
+      personal,
+      commercial: null,
+      agencyMonthlyGoal: null,
+      agencyDisplayCurrency,
+    };
+  }
+
+  if (role === 'admin') {
     const [agency, fin, _p, goalRes] = await Promise.all([
       fetchAgencyAggregates(supabase, now, monthStart),
       fetchFinanceBlock(supabase, ctx, today, agencyDisplayCurrency),

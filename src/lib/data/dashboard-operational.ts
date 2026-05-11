@@ -4,6 +4,7 @@ import { endOfDay, format, formatDistanceToNow, isBefore, isWithinInterval, star
 import { fr } from 'date-fns/locale';
 import { createClient } from '@/lib/supabase/server';
 import type { AuthContext } from '@/lib/auth/permissions';
+import { canViewGlobalFinanceStats } from '@/lib/auth/capabilities';
 import { fetchManagedClientIds, hasFullOrgDataAccess } from '@/lib/auth/data-scope';
 import type {
   ClientFollowMock,
@@ -143,6 +144,7 @@ export async function fetchDashboardOperational(ctx: AuthContext): Promise<Dashb
 
   const supabase = await createClient();
   const currency = await getAgencyDisplayCurrency();
+  const showInvoiceAmountsInFeed = canViewGlobalFinanceStats(ctx.role);
   const today = format(new Date(), 'yyyy-MM-dd');
   const now = new Date();
   const dayStart = startOfDay(now);
@@ -173,11 +175,17 @@ export async function fetchDashboardOperational(ctx: AuthContext): Promise<Dashb
       .select('id, title, status, public_status, client_id, updated_at, clients(name)')
       .order('updated_at', { ascending: false })
       .limit(400),
-    supabase
-      .from('invoices')
-      .select('id, client_id, due_date, status, total, clients(name)')
-      .in('status', ['overdue', 'sent', 'pending'])
-      .limit(200),
+    showInvoiceAmountsInFeed
+      ? supabase
+          .from('invoices')
+          .select('id, client_id, due_date, status, total, clients(name)')
+          .in('status', ['overdue', 'sent', 'pending'])
+          .limit(200)
+      : supabase
+          .from('invoices')
+          .select('id, client_id, due_date, status, clients(name)')
+          .in('status', ['overdue', 'sent', 'pending'])
+          .limit(200),
     supabase
       .from('projects')
       .select('id, title, progress, status, notes_internal, clients(name)')
@@ -353,17 +361,26 @@ export async function fetchDashboardOperational(ctx: AuthContext): Promise<Dashb
   const urgentAcc: UrgentItem[] = [];
 
   for (const inv of invRows) {
-    const row = inv as { id: string; due_date: string; status: InvoiceStatus; total: number; clients: { name?: string } | null };
+    const row = inv as {
+      id: string;
+      due_date: string;
+      status: InvoiceStatus;
+      total?: number;
+      clients: { name?: string } | null;
+    };
     if (!invoiceIsOpenDebt(row)) continue;
     const name = row.clients?.name ?? 'Client';
     urgentAcc.push({
       id: `inv-${row.id}`,
       type: 'Facture',
-      title: `${name} — ${formatAgencyMoneyCompact(Number(row.total), currency)}`,
-      detail:
-        row.status === 'overdue'
+      title: showInvoiceAmountsInFeed
+        ? `${name} — ${formatAgencyMoneyCompact(Number(row.total), currency)}`
+        : `${name} — facture à vérifier`,
+      detail: showInvoiceAmountsInFeed
+        ? row.status === 'overdue'
           ? `Statut ${INVOICE_STATUS_MAP.overdue.label}`
-          : `Échéance ${row.due_date} · ${INVOICE_STATUS_MAP[row.status].label}`,
+          : `Échéance ${row.due_date} · ${INVOICE_STATUS_MAP[row.status].label}`
+        : 'Suivi administratif — montant non affiché sur ce rôle',
       severity: 'high',
     });
   }
