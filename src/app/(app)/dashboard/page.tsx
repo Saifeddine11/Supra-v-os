@@ -233,7 +233,7 @@ function individualStatCards(role: UserRole, p: Awaited<ReturnType<typeof getDas
         subtitle: 'hors publié / archivé',
       });
     }
-    if (rk === 'cameraman' || rk === 'community_manager') {
+    if (rk === 'cameraman' || rk === 'community_manager' || rk === 'editor') {
       cards.push({
         id: 'my-videos-cam',
         title: 'Vidéos (tournage)',
@@ -241,7 +241,7 @@ function individualStatCards(role: UserRole, p: Awaited<ReturnType<typeof getDas
         subtitle: 'hors publié / archivé',
       });
     }
-    if (rk === 'cameraman') {
+    if (rk === 'cameraman' || rk === 'editor') {
       cards.push({
         id: 'my-shoots',
         title: 'Tournages planifiés',

@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import type { TaskPriority, TaskStatus, UserRole, VideoStatus } from '@/types/database';
+import { effectiveClientDeliveryIso } from '@/lib/videos/video-schedule';
 
 export interface PersonalTaskRow {
   id: string;
@@ -16,9 +17,11 @@ export interface PersonalVideoRow {
   title: string;
   status: VideoStatus;
   delivery_deadline: string | null;
+  client_delivery_at: string | null;
   shooting_date: string | null;
   clientName: string | null;
-  role: 'editor' | 'cameraman';
+  /** Montage seul, tournage seul, ou les deux (même employé sur editor_id et cameraman_id). */
+  role: 'editor' | 'cameraman' | 'both';
 }
 
 function scopeKey(role: UserRole): UserRole {
@@ -78,6 +81,7 @@ export async function getPersonalDashboardWork(
         title,
         status,
         delivery_deadline,
+        client_delivery_at,
         shooting_date,
         editor_id,
         cameraman_id,
@@ -91,7 +95,7 @@ export async function getPersonalDashboardWork(
       .limit(20);
 
     if (rk === 'editor') {
-      vidQ = vidQ.eq('editor_id', employeeId);
+      vidQ = vidQ.or(`editor_id.eq.${employeeId},cameraman_id.eq.${employeeId}`);
     } else if (rk === 'cameraman') {
       vidQ = vidQ.eq('cameraman_id', employeeId);
     } else {
@@ -107,17 +111,25 @@ export async function getPersonalDashboardWork(
       const cam = row.cameraman_id as string | null;
       const asEditor = ed === employeeId;
       const asCam = cam === employeeId;
-      const vRole: 'editor' | 'cameraman' =
-        rk === 'cameraman' || (asCam && !asEditor) ? 'cameraman' : 'editor';
+      const vRole: 'editor' | 'cameraman' | 'both' =
+        asEditor && asCam ? 'both' : rk === 'cameraman' || (asCam && !asEditor) ? 'cameraman' : 'editor';
       return {
         id: String(row.id),
         title: String(row.title),
         status: row.status as VideoStatus,
         delivery_deadline: row.delivery_deadline ? String(row.delivery_deadline) : null,
+        client_delivery_at: row.client_delivery_at ? String(row.client_delivery_at) : null,
         shooting_date: row.shooting_date ? String(row.shooting_date) : null,
         clientName: clients?.name ?? null,
         role: vRole,
       };
+    });
+    videos.sort((a, b) => {
+      const ta = effectiveClientDeliveryIso(a);
+      const tb = effectiveClientDeliveryIso(b);
+      const da = ta ? new Date(ta).getTime() : Infinity;
+      const db = tb ? new Date(tb).getTime() : Infinity;
+      return da - db;
     });
   }
 

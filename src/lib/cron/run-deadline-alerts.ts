@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { addDays, format } from 'date-fns';
+import { addDays, endOfDay, format, startOfDay } from 'date-fns';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { appBaseUrl } from '@/lib/cron/app-base-url';
 import { sendEmail } from '@/lib/email/send-email';
@@ -176,20 +176,37 @@ export async function runDeadlineAlerts(): Promise<DeadlineAlertsResult> {
     });
   }
 
-  // Videos: delivery_deadline is date
-  const { data: videosSoon } = await admin
+  // Vidéos : delivery_deadline (jour) et/ou client_delivery_at (timestamptz)
+  const tomorrowDay = addDays(now, 1);
+  const soonAtStart = startOfDay(now).toISOString();
+  const soonAtEnd = endOfDay(tomorrowDay).toISOString();
+  const todayStart = startOfDay(now).toISOString();
+
+  const { data: videosSoonDate } = await admin
     .from('videos')
-    .select('id,title,delivery_deadline,editor_id,client_id,clients(name)')
+    .select('id,title,delivery_deadline,client_delivery_at,editor_id,client_id,clients(name)')
     .not('status', 'in', '(published,archived,cancelled)')
     .not('delivery_deadline', 'is', null)
     .gte('delivery_deadline', todayStr)
     .lte('delivery_deadline', tomorrowStr);
 
-  for (const v of videosSoon ?? []) {
+  const { data: videosSoonAt } = await admin
+    .from('videos')
+    .select('id,title,delivery_deadline,client_delivery_at,editor_id,client_id,clients(name)')
+    .not('status', 'in', '(published,archived,cancelled)')
+    .not('client_delivery_at', 'is', null)
+    .gte('client_delivery_at', soonAtStart)
+    .lte('client_delivery_at', soonAtEnd);
+
+  const soonSeen = new Set<string>();
+  for (const v of [...(videosSoonDate ?? []), ...(videosSoonAt ?? [])]) {
+    if (soonSeen.has(v.id)) continue;
+    soonSeen.add(v.id);
     const uid = await getEmployeeUserId(v.editor_id);
     if (!uid) continue;
     const { data: emp } = await admin.from('employees').select('email,full_name').eq('id', v.editor_id!).maybeSingle();
     const clientName = joinedRelationName(v.clients);
+    const deadlineLabel = (v.client_delivery_at ?? v.delivery_deadline ?? '') as string;
     await notifyUser({
       userId: uid,
       type: 'deadline_soon',
@@ -206,25 +223,36 @@ export async function runDeadlineAlerts(): Promise<DeadlineAlertsResult> {
             entityTitle: v.title,
             entityLabel: 'Vidéo',
             clientName,
-            deadline: v.delivery_deadline ?? '',
+            deadline: deadlineLabel,
             priority: 'high',
           }
         : undefined,
     });
   }
 
-  const { data: videosOver } = await admin
+  const { data: videosOverDate } = await admin
     .from('videos')
-    .select('id,title,delivery_deadline,editor_id,client_id,clients(name)')
+    .select('id,title,delivery_deadline,client_delivery_at,editor_id,client_id,clients(name)')
     .not('status', 'in', '(published,archived,cancelled)')
     .not('delivery_deadline', 'is', null)
     .lt('delivery_deadline', todayStr);
 
-  for (const v of videosOver ?? []) {
+  const { data: videosOverAt } = await admin
+    .from('videos')
+    .select('id,title,delivery_deadline,client_delivery_at,editor_id,client_id,clients(name)')
+    .not('status', 'in', '(published,archived,cancelled)')
+    .not('client_delivery_at', 'is', null)
+    .lt('client_delivery_at', todayStart);
+
+  const overSeen = new Set<string>();
+  for (const v of [...(videosOverDate ?? []), ...(videosOverAt ?? [])]) {
+    if (overSeen.has(v.id)) continue;
+    overSeen.add(v.id);
     const uid = await getEmployeeUserId(v.editor_id);
     if (!uid) continue;
     const { data: emp } = await admin.from('employees').select('email,full_name').eq('id', v.editor_id!).maybeSingle();
     const clientName = joinedRelationName(v.clients);
+    const deadlineLabel = (v.client_delivery_at ?? v.delivery_deadline ?? '') as string;
     await notifyUser({
       userId: uid,
       type: 'deadline_soon',
@@ -241,7 +269,7 @@ export async function runDeadlineAlerts(): Promise<DeadlineAlertsResult> {
             entityTitle: v.title,
             entityLabel: 'Vidéo',
             clientName,
-            deadline: v.delivery_deadline ?? '',
+            deadline: deadlineLabel,
             priority: 'urgent',
           }
         : undefined,

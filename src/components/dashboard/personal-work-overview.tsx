@@ -5,6 +5,7 @@ import { SectionCard } from '@/components/shared/section-card';
 import { Badge } from '@/components/ui/badge';
 import { TASK_STATUS_MAP, PRIORITY_MAP, VIDEO_STATUS_MAP } from '@/types/domain';
 import type { PersonalTaskRow, PersonalVideoRow } from '@/lib/data/dashboard-personal-work';
+import { effectiveClientDeliveryIso } from '@/lib/videos/video-schedule';
 import type { UserRole } from '@/types/database';
 import { cn } from '@/lib/utils/cn';
 import { getStatusBlockSurface } from '@/lib/ui/status-block-tone';
@@ -96,7 +97,7 @@ export function PersonalWorkOverview({
             rk === 'cameraman'
               ? 'Productions où vous êtes en charge du tournage.'
               : rk === 'editor'
-                ? 'Montages qui vous sont assignés.'
+                ? 'Vidéos où vous êtes monteur et/ou caméraman (selon les assignations).'
                 : 'Vidéos où vous intervenez (montage ou tournage).'
           }
         >
@@ -119,20 +120,25 @@ export function PersonalWorkOverview({
                   <div className="min-w-0">
                     <p className="font-medium text-foreground">{v.title}</p>
                     <p className="mt-0.5 text-xs text-muted-foreground">
-                      {v.clientName ?? '—'} · {v.role === 'cameraman' ? 'Tournage' : 'Montage'}
+                      {v.clientName ?? '—'} ·{' '}
+                      {v.role === 'both'
+                        ? 'Monteur + Caméraman'
+                        : v.role === 'cameraman'
+                          ? 'Tournage'
+                          : 'Montage'}
                     </p>
                     <Badge variant="outline" className="mt-2 text-[10px] font-normal">
                       {VIDEO_STATUS_MAP[v.status].label}
                     </Badge>
                   </div>
                   <div className="flex shrink-0 flex-col items-start gap-1 sm:items-end">
-                    {v.delivery_deadline ? (
+                    {effectiveClientDeliveryIso(v) ? (
                       <span className="text-xs text-muted-foreground">
-                        Livraison{' '}
-                        {format(new Date(v.delivery_deadline), 'd MMM yyyy', { locale: fr })}
+                        Livraison client{' '}
+                        {format(new Date(effectiveClientDeliveryIso(v)!), 'd MMM yyyy · HH:mm', { locale: fr })}
                       </span>
                     ) : null}
-                    {v.shooting_date && v.role === 'cameraman' ? (
+                    {v.shooting_date && (v.role === 'cameraman' || v.role === 'both') ? (
                       <span className="text-xs text-muted-foreground">
                         Tournage{' '}
                         {format(new Date(v.shooting_date), 'd MMM yyyy · HH:mm', { locale: fr })}

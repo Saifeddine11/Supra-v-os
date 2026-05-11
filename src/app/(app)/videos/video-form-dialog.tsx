@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { format, parseISO } from 'date-fns';
 import type { Client, Video, VideoPublicStatus, VideoStatus } from '@/types/database';
 import { VIDEO_STATUS_MAP, VIDEO_PUBLIC_STATUS_MAP, PRIORITY_MAP } from '@/types/domain';
 import type { VideoAssignEmployeeRow } from '@/lib/data/employees';
@@ -23,6 +24,15 @@ const STATUSES = Object.keys(VIDEO_STATUS_MAP) as VideoStatus[];
 const PUBLIC_STATUSES = Object.keys(VIDEO_PUBLIC_STATUS_MAP) as VideoPublicStatus[];
 const PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const;
 
+function toDatetimeLocalValue(iso: string | null | undefined): string {
+  if (!iso) return '';
+  try {
+    return format(parseISO(iso), "yyyy-MM-dd'T'HH:mm");
+  } catch {
+    return '';
+  }
+}
+
 export function VideoFormDialog({
   video,
   clients,
@@ -38,13 +48,25 @@ export function VideoFormDialog({
   const [open, setOpen] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [editorSel, setEditorSel] = useState('');
+  const [camSel, setCamSel] = useState('');
   const isEdit = Boolean(video);
 
   useEffect(() => {
     if (!open) setErr(null);
   }, [open]);
 
-  const dl = video?.delivery_deadline ?? '';
+  useEffect(() => {
+    if (!open) return;
+    setEditorSel(video?.editor_id ?? '');
+    setCamSel(video?.cameraman_id ?? '');
+  }, [open, video?.id, video?.editor_id, video?.cameraman_id]);
+
+  const shootingDefault = toDatetimeLocalValue(video?.shooting_date);
+  const deliveryDefault = toDatetimeLocalValue(
+    video?.client_delivery_at ??
+      (video?.delivery_deadline ? `${video.delivery_deadline}T12:00:00` : null)
+  );
 
   const editorEmployees = employees.filter(
     (e) => employeeCanBeVideoEditor(e) || (video?.editor_id && e.id === video.editor_id),
@@ -61,13 +83,21 @@ export function VideoFormDialog({
           <DialogTitle>{isEdit ? 'Modifier la vidéo' : 'Nouvelle vidéo'}</DialogTitle>
         </DialogHeader>
         <form
-          action={async (formData) => {
+          className="grid gap-4"
+          onSubmit={async (e) => {
+            e.preventDefault();
             setErr(null);
             setPending(true);
+            const form = e.currentTarget;
+            const fd = new FormData(form);
+            const shootLocal = String(fd.get('shooting_datetime') ?? '').trim();
+            fd.delete('shooting_datetime');
+            fd.set('shooting_at', shootLocal ? new Date(shootLocal).toISOString() : '');
+            const delLocal = String(fd.get('client_delivery_datetime') ?? '').trim();
+            fd.delete('client_delivery_datetime');
+            fd.set('client_delivery_at', delLocal ? new Date(delLocal).toISOString() : '');
             try {
-              const res = isEdit
-                ? await updateVideoAction(video!.id, formData)
-                : await createVideoAction(formData);
+              const res = isEdit ? await updateVideoAction(video!.id, fd) : await createVideoAction(fd);
               if (!res.ok) {
                 setErr(res.error);
                 return;
@@ -78,7 +108,6 @@ export function VideoFormDialog({
               setPending(false);
             }
           }}
-          className="grid gap-4"
         >
           <div className="grid gap-2">
             <Label htmlFor="v-client">Client</Label>
@@ -152,7 +181,8 @@ export function VideoFormDialog({
               <select
                 id="v-editor"
                 name="editor_id"
-                defaultValue={video?.editor_id ?? ''}
+                value={editorSel}
+                onChange={(ev) => setEditorSel(ev.target.value)}
                 className="h-10 rounded-lg border border-border bg-muted px-3 text-sm"
               >
                 <option value="">—</option>
@@ -168,7 +198,8 @@ export function VideoFormDialog({
               <select
                 id="v-cam"
                 name="cameraman_id"
-                defaultValue={video?.cameraman_id ?? ''}
+                value={camSel}
+                onChange={(ev) => setCamSel(ev.target.value)}
                 className="h-10 rounded-lg border border-border bg-muted px-3 text-sm"
               >
                 <option value="">—</option>
@@ -180,6 +211,11 @@ export function VideoFormDialog({
               </select>
             </div>
           </div>
+          {editorSel && camSel && editorSel === camSel ? (
+            <p className="text-xs text-muted-foreground">
+              Cette personne est assignée comme monteur et caméraman.
+            </p>
+          ) : null}
           <div className="grid gap-2 sm:grid-cols-2">
             <div className="grid gap-2">
               <Label htmlFor="v-prio">Priorité</Label>
@@ -196,11 +232,35 @@ export function VideoFormDialog({
                 ))}
               </select>
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="v-deadline">Deadline livraison</Label>
-              <Input id="v-deadline" name="delivery_deadline" type="date" defaultValue={dl} />
-            </div>
           </div>
+
+          <div className="grid gap-2 rounded-xl border border-border/70 bg-muted/20 p-3 sm:col-span-2">
+            <Label htmlFor="v-shoot-dt">Date de tournage</Label>
+            <Input
+              id="v-shoot-dt"
+              name="shooting_datetime"
+              type="datetime-local"
+              defaultValue={shootingDefault}
+            />
+            <p className="text-xs text-muted-foreground">
+              Cette date apparaîtra dans le calendrier équipe et dans le portail client.
+            </p>
+          </div>
+
+          <div className="grid gap-2 rounded-xl border border-border/70 bg-muted/20 p-3 sm:col-span-2">
+            <Label htmlFor="v-deliver-dt">Date de livraison au client</Label>
+            <Input
+              id="v-deliver-dt"
+              name="client_delivery_datetime"
+              type="datetime-local"
+              defaultValue={deliveryDefault}
+            />
+            <p className="text-xs text-muted-foreground">
+              Cette date indique au client quand la vidéo doit être livrée ou envoyée en validation. Les heures sont
+              enregistrées en précision complète (fuseau du navigateur).
+            </p>
+          </div>
+
           {err ? <p className="text-sm text-destructive">{err}</p> : null}
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>

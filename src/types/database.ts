@@ -331,8 +331,12 @@ export interface Video {
   priority: TaskPriority;
   cameraman_id: string | null;
   editor_id: string | null;
+  /** Date/heure prévues du tournage. */
   shooting_date: string | null;
+  /** Date jour seule (legacy) — synchronisée depuis client_delivery_at lors des saves. */
   delivery_deadline: string | null;
+  /** Date/heure prévues de livraison ou envoi au client. */
+  client_delivery_at: string | null;
   publication_date: string | null;
   preview_url: string | null;
   final_url: string | null;
@@ -859,7 +863,9 @@ export interface PortalVideo {
   format: VideoFormat | null;
   platform: VideoPlatform | null;
   public_status: VideoPublicStatus;
+  shooting_date: string | null;
   delivery_deadline: string | null;
+  client_delivery_at: string | null;
   publication_date: string | null;
   preview_url: string | null;
   final_url: string | null;

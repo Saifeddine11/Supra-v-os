@@ -14,6 +14,7 @@ import type {
   VideoStatus,
 } from '@/types/database';
 import { cn } from '@/lib/utils/cn';
+import { isVideoDeliveryOverdue } from '@/lib/videos/video-schedule';
 
 export type StatusBlockTone = 'danger' | 'warning' | 'info' | 'review' | 'success' | 'muted' | 'neutral';
 
@@ -123,7 +124,9 @@ export function taskToStatusTone(task: {
 export function videoWorkflowToStatusTone(
   v: {
     status: VideoStatus;
+    public_status?: VideoPublicStatus;
     delivery_deadline?: string | null;
+    client_delivery_at?: string | null;
     priority?: TaskPriority;
   },
   opts?: { deliveryOverdue?: boolean },
@@ -134,8 +137,12 @@ export function videoWorkflowToStatusTone(
 
   const od =
     opts?.deliveryOverdue ??
-    (Boolean(v.delivery_deadline) &&
-      new Date(v.delivery_deadline!).getTime() < Date.now());
+    isVideoDeliveryOverdue({
+      status: v.status,
+      public_status: v.public_status ?? 'topic_proposed',
+      client_delivery_at: v.client_delivery_at ?? null,
+      delivery_deadline: v.delivery_deadline ?? null,
+    });
   if (od) return 'danger';
   if (v.priority === 'urgent') return 'danger';
   if (v.status === 'client_revision' || v.status === 'internal_review') return 'review';

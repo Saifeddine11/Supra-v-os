@@ -16,9 +16,18 @@ import { CalendarTaskChip } from './calendar-task-chip';
 import { DayTasksDrawer } from './day-tasks-drawer';
 import { TaskFormDialog } from '../task-form-dialog';
 import { Button } from '@/components/ui/button';
+import type { CalendarVideoEvent } from '@/lib/data/videos-calendar';
+import { CalendarVideoChip } from './calendar-video-chip';
+import { VIDEO_PUBLIC_STATUS_MAP, VIDEO_STATUS_MAP } from '@/types/domain';
 
 const MONTH_VISIBLE_DESKTOP = 3;
-const MONTH_VISIBLE_MOBILE = 1;
+
+function videosOnDay(day: Date, videoEvents: CalendarVideoEvent[]): CalendarVideoEvent[] {
+  return videoEvents
+    .filter((v) => isSameDay(new Date(v.at), day))
+    .slice()
+    .sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
+}
 
 function sortByDeadline(a: TaskEnriched, b: TaskEnriched): number {
   const ta = a.deadline ? new Date(a.deadline).getTime() : Infinity;
@@ -48,17 +57,20 @@ function dayAgendaGroups(tasks: TaskEnriched[]) {
 function DayAgendaView({
   anchorDay,
   tasks,
+  videoEvents,
   clients,
   employees,
   colorBy,
 }: {
   anchorDay: Date;
   tasks: TaskEnriched[];
+  videoEvents: CalendarVideoEvent[];
   clients: Pick<Client, 'id' | 'name'>[];
   employees: Pick<Employee, 'id' | 'full_name'>[];
   colorBy: CalendarColorBy;
 }) {
   const { overdue, active, done } = useMemo(() => dayAgendaGroups(tasks), [tasks]);
+  const dayVideos = useMemo(() => videosOnDay(anchorDay, videoEvents), [anchorDay, videoEvents]);
 
   const Section = ({
     title,
@@ -140,9 +152,44 @@ function DayAgendaView({
       <Section title="En retard" items={overdue} toneClass="text-destructive" />
       <Section title="À venir aujourd’hui" items={active} toneClass="text-primary" />
       <Section title="Terminées" items={done} toneClass="text-muted-foreground" />
-      {tasks.length === 0 ? (
+      {dayVideos.length > 0 ? (
+        <div className="space-y-3">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-primary">Vidéo (planning)</h3>
+          <ul className="space-y-3">
+            {dayVideos.map((ev) => (
+              <li key={ev.id}>
+                <div
+                  className={cn(
+                    'rounded-xl border border-border/60 border-l-[3px] p-4 shadow-sm',
+                    ev.kind === 'shoot'
+                      ? 'border-l-violet-600 bg-violet-500/[0.06]'
+                      : 'border-l-primary bg-primary/[0.06]',
+                  )}
+                >
+                  <p className="text-sm font-semibold leading-snug text-foreground">
+                    {ev.kind === 'shoot' ? 'Tournage vidéo' : 'Livraison vidéo'} — {ev.title}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">Client : {ev.clientName}</p>
+                  <p className="mt-1 text-xs tabular-nums text-muted-foreground">
+                    {format(new Date(ev.at), "EEEE d MMM yyyy · HH:mm", { locale: fr })}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {VIDEO_STATUS_MAP[ev.status].label} · {VIDEO_PUBLIC_STATUS_MAP[ev.public_status].label}
+                  </p>
+                  <div className="mt-3">
+                    <Button type="button" variant="outline" size="sm" className="min-h-11 w-full rounded-full" asChild>
+                      <a href="/videos">Ouvrir les vidéos</a>
+                    </Button>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {tasks.length === 0 && dayVideos.length === 0 ? (
         <p className="rounded-xl border border-border/60 bg-card/50 px-4 py-8 text-center text-sm text-muted-foreground">
-          Aucune tâche avec échéance ce jour.
+          Aucune tâche ni événement vidéo planifié ce jour.
         </p>
       ) : null}
     </div>
@@ -155,6 +202,7 @@ export function TasksCalendarExperience({
   filterEndISO,
   displayDayISOs,
   tasks,
+  videoEvents,
   clients,
   employees,
   colorBy,
@@ -164,6 +212,7 @@ export function TasksCalendarExperience({
   filterEndISO: string;
   displayDayISOs: string[];
   tasks: TaskEnriched[];
+  videoEvents: CalendarVideoEvent[];
   clients: Pick<Client, 'id' | 'name'>[];
   employees: Pick<Employee, 'id' | 'full_name'>[];
   colorBy: CalendarColorBy;
@@ -181,6 +230,11 @@ export function TasksCalendarExperience({
       .sort(sortByDeadline);
   }, [sheetDay, tasks]);
 
+  const sheetVideos = useMemo(() => {
+    if (!sheetDay) return [];
+    return videosOnDay(sheetDay, videoEvents);
+  }, [sheetDay, videoEvents]);
+
   const openDay = (day: Date) => setSheetDay(day);
   const closeSheet = () => setSheetDay(null);
 
@@ -190,6 +244,7 @@ export function TasksCalendarExperience({
       <DayAgendaView
         anchorDay={anchor}
         tasks={tasks}
+        videoEvents={videoEvents}
         clients={clients}
         employees={employees}
         colorBy={colorBy}
@@ -208,8 +263,10 @@ export function TasksCalendarExperience({
               .filter((t) => t.deadline && isSameDay(new Date(t.deadline), day))
               .slice()
               .sort(sortByDeadline);
+            const dayVids = videosOnDay(day, videoEvents);
             const isToday = isSameDay(day, new Date());
-            if (dayTasks.length === 0) return null;
+            if (dayTasks.length === 0 && dayVids.length === 0) return null;
+            const n = dayTasks.length + dayVids.length;
             return (
               <div key={day.toISOString()}>
                 <button
@@ -223,7 +280,9 @@ export function TasksCalendarExperience({
                   <span className="text-sm font-semibold capitalize text-foreground">
                     {format(day, 'EEEE d MMM', { locale: fr })}
                   </span>
-                  <span className="text-xs font-medium text-primary">{dayTasks.length} tâche(s)</span>
+                  <span className="text-xs font-medium text-primary">
+                    {n} élément{n > 1 ? 's' : ''}
+                  </span>
                 </button>
                 <ul className="mt-3 space-y-2">
                   {dayTasks.map((t) => (
@@ -235,6 +294,11 @@ export function TasksCalendarExperience({
                         employees={employees}
                         density="week"
                       />
+                    </li>
+                  ))}
+                  {dayVids.map((ev) => (
+                    <li key={ev.id}>
+                      <CalendarVideoChip event={ev} density="week" />
                     </li>
                   ))}
                 </ul>
@@ -263,15 +327,32 @@ export function TasksCalendarExperience({
             .filter((t) => t.deadline && isSameDay(new Date(t.deadline), day))
             .slice()
             .sort(sortByDeadline);
+          const dayVids = videosOnDay(day, videoEvents);
           const isToday = isSameDay(day, new Date());
           const mutedOutsideMonth = isMonth && (day < filterStart || day > filterEnd);
           const sheetOpen = sheetDay !== null && isSameDay(day, sheetDay);
-          const visibleDesktop = dayTasks.slice(0, MONTH_VISIBLE_DESKTOP);
-          const visibleMobile = dayTasks.slice(0, MONTH_VISIBLE_MOBILE);
-          const restDesktop = Math.max(0, dayTasks.length - MONTH_VISIBLE_DESKTOP);
-          const restMobile = Math.max(0, dayTasks.length - MONTH_VISIBLE_MOBILE);
-          const first = dayTasks[0];
-          const firstAccent = first ? getCalendarTaskTone(first, colorBy) : null;
+          const totalShownDesktop = MONTH_VISIBLE_DESKTOP;
+          const desktopTasks = dayTasks.slice(0, Math.min(dayTasks.length, 2));
+          const desktopVideos = dayVids.slice(0, Math.max(0, totalShownDesktop - desktopTasks.length));
+          const restDesktop = Math.max(0, dayTasks.length + dayVids.length - desktopTasks.length - desktopVideos.length);
+          const firstTask = dayTasks[0];
+          const firstVid = dayVids[0];
+          type FirstKind = 'task' | 'video';
+          let firstKind: FirstKind | null = null;
+          let firstTime = Infinity;
+          if (firstVid) {
+            firstKind = 'video';
+            firstTime = new Date(firstVid.at).getTime();
+          }
+          if (firstTask?.deadline) {
+            const tt = new Date(firstTask.deadline).getTime();
+            if (tt <= firstTime) {
+              firstKind = 'task';
+              firstTime = tt;
+            }
+          }
+          const restMobile = Math.max(0, dayTasks.length + dayVids.length - 1);
+          const firstAccent = firstKind === 'task' && firstTask ? getCalendarTaskTone(firstTask, colorBy) : null;
 
           return (
             <div
@@ -299,8 +380,9 @@ export function TasksCalendarExperience({
               </button>
 
               <div className="hidden min-h-0 flex-1 flex-col gap-1 overflow-y-auto md:flex">
-                {view === 'week'
-                  ? dayTasks.map((t) => (
+                {view === 'week' ? (
+                  <>
+                    {dayTasks.map((t) => (
                       <CalendarTaskChip
                         key={t.id}
                         task={t}
@@ -309,8 +391,14 @@ export function TasksCalendarExperience({
                         employees={employees}
                         density="week"
                       />
-                    ))
-                  : visibleDesktop.map((t) => (
+                    ))}
+                    {dayVids.map((ev) => (
+                      <CalendarVideoChip key={ev.id} event={ev} density="week" />
+                    ))}
+                  </>
+                ) : (
+                  <>
+                    {desktopTasks.map((t) => (
                       <CalendarTaskChip
                         key={t.id}
                         task={t}
@@ -320,6 +408,11 @@ export function TasksCalendarExperience({
                         density="month"
                       />
                     ))}
+                    {desktopVideos.map((ev) => (
+                      <CalendarVideoChip key={ev.id} event={ev} density="month" />
+                    ))}
+                  </>
+                )}
                 {isMonth && restDesktop > 0 ? (
                   <button
                     type="button"
@@ -335,7 +428,7 @@ export function TasksCalendarExperience({
               </div>
 
               <div className="flex min-h-0 flex-1 flex-col md:hidden">
-                {view === 'week' ? null : first ? (
+                {view === 'week' ? null : firstKind === 'task' && firstTask ? (
                   <>
                     <button
                       type="button"
@@ -343,7 +436,7 @@ export function TasksCalendarExperience({
                         'flex min-h-[44px] w-full flex-col items-stretch justify-center gap-1 rounded-lg border border-border/55 border-l-[3px] px-2 py-2 text-left transition-colors active:bg-muted/40',
                         firstAccent?.border,
                         firstAccent?.tint ?? 'bg-muted/35',
-                        calendarTaskOverdue(first) &&
+                        calendarTaskOverdue(firstTask) &&
                           'border-destructive/55 bg-destructive/[0.08] dark:bg-destructive/[0.1]',
                       )}
                       onClick={() => openDay(day)}
@@ -353,7 +446,7 @@ export function TasksCalendarExperience({
                           <span className={cn('h-2.5 w-2.5 shrink-0 rounded-full', firstAccent.dot)} aria-hidden />
                         ) : null}
                         <span className="truncate text-sm font-semibold leading-tight text-foreground">
-                          {getCalendarMobileTaskLabel(first)}
+                          {getCalendarMobileTaskLabel(firstTask)}
                         </span>
                       </div>
                       {restMobile > 0 ? (
@@ -361,6 +454,24 @@ export function TasksCalendarExperience({
                       ) : null}
                     </button>
                   </>
+                ) : firstKind === 'video' && firstVid ? (
+                  <button
+                    type="button"
+                    onClick={() => openDay(day)}
+                    className={cn(
+                      'flex min-h-[44px] w-full flex-col items-stretch justify-center gap-1 rounded-lg border border-l-[3px] px-2 py-2 text-left transition-colors active:bg-muted/40',
+                      firstVid.kind === 'shoot'
+                        ? 'border-border/55 border-l-violet-600 bg-violet-500/[0.08]'
+                        : 'border-border/55 border-l-primary bg-primary/[0.08]',
+                    )}
+                  >
+                    <span className="truncate text-sm font-semibold leading-tight text-foreground">
+                      {firstVid.kind === 'shoot' ? 'Tournage' : 'Livr.'} · {firstVid.clientName}
+                    </span>
+                    {restMobile > 0 ? (
+                      <span className="pl-1 text-sm font-bold tabular-nums text-primary">+{restMobile}</span>
+                    ) : null}
+                  </button>
                 ) : null}
               </div>
             </div>
@@ -373,6 +484,7 @@ export function TasksCalendarExperience({
         onOpenChange={(o) => !o && closeSheet()}
         day={sheetDay}
         tasks={sheetTasks}
+        videoEvents={sheetVideos}
         clients={clients}
         employees={employees}
         colorBy={colorBy}

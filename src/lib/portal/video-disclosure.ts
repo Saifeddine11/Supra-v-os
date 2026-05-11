@@ -54,6 +54,7 @@ export function toPortalVideoRow(row: {
   status: VideoStatus;
   shooting_date: string | null;
   delivery_deadline: string | null;
+  client_delivery_at?: string | null;
   publication_date: string | null;
   preview_url: string | null;
   final_url: string | null;
@@ -64,6 +65,7 @@ export function toPortalVideoRow(row: {
   status: VideoStatus;
   shooting_date: string | null;
   delivery_deadline: string | null;
+  client_delivery_at: string | null;
   publication_date: string | null;
   preview_url: string | null;
   final_url: string | null;
@@ -76,6 +78,7 @@ export function toPortalVideoRow(row: {
     status: row.status,
     shooting_date: row.shooting_date,
     delivery_deadline: row.delivery_deadline,
+    client_delivery_at: row.client_delivery_at ?? null,
     publication_date: row.publication_date,
     preview_url: expose ? row.preview_url : null,
     final_url: expose ? row.final_url : null,

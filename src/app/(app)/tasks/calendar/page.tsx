@@ -22,6 +22,7 @@ import { getAuthContext } from '@/lib/auth/permissions';
 import { listTasksEnriched, type TaskListFilters } from '@/lib/data/tasks';
 import { listClients } from '@/lib/data/clients';
 import { listEmployeesForSelect } from '@/lib/data/employees';
+import { listCalendarVideoEvents } from '@/lib/data/videos-calendar';
 import type { TaskPriority, TaskStatus } from '@/types/database';
 import type { CalendarColorBy } from '@/lib/tasks/calendar-visual';
 import { SectionCard } from '@/components/shared/section-card';
@@ -130,10 +131,11 @@ export default async function TasksCalendarPage({
   };
 
   const calCtx = await getAuthContext();
-  const [tasks, employees, clients] = await Promise.all([
+  const [tasks, employees, clients, videoEvents] = await Promise.all([
     listTasksEnriched(filters, calCtx),
     listEmployeesForSelect(calCtx),
     listClients({}, calCtx),
+    calCtx ? listCalendarVideoEvents(calCtx, filterStart, filterEnd) : Promise.resolve([]),
   ]);
 
   const filterBag = {
@@ -159,7 +161,6 @@ export default async function TasksCalendarPage({
         <h1 className="font-sans text-2xl font-semibold tracking-tight text-foreground">Calendrier</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Planification par échéance : vues mois, semaine et jour, codes couleur et filtres pour prioriser
-          comme sur un outil type monday.com.
         </p>
         {/* Glisser-déposer pour reprogrammer : non implémenté pour l’instant (TASK_CALENDAR_DND_TODO). */}
       </div>
@@ -168,7 +169,7 @@ export default async function TasksCalendarPage({
 
       <SectionCard
         title={sectionTitle}
-        description={`${tasks.length} tâche(s) avec échéance sur la période · couleur selon le critère choisi.`}
+        description={`${tasks.length} tâche(s) avec échéance · ${videoEvents.length} événement(s) vidéo (tournage / livraison) sur la période · couleur selon le critère choisi.`}
       >
         <TasksCalendarExperience
           view={view}
@@ -176,12 +177,14 @@ export default async function TasksCalendarPage({
           filterEndISO={filterEnd.toISOString()}
           displayDayISOs={displayDays.map((d) => d.toISOString())}
           tasks={tasks}
+          videoEvents={videoEvents}
           clients={clients.map((c) => ({ id: c.id, name: c.name }))}
           employees={employees}
           colorBy={colorBy}
         />
         <p className="mt-4 text-xs text-muted-foreground">
-          Les tâches sans échéance n&apos;apparaissent pas ici — utilisez le board pour la liste complète.
+          Les tâches sans échéance n&apos;apparaissent pas ici — les vidéos archivées / annulées sont exclues. Utilisez
+          le board pour la liste complète des tâches.
         </p>
       </SectionCard>
     </div>

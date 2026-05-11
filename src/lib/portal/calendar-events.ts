@@ -14,6 +14,7 @@ import {
 } from 'date-fns';
 import type { PortalBundle, PortalVideoRow } from '@/lib/portal/load-public-data';
 import { loadPortalPublicData } from '@/lib/portal/load-public-data';
+import { effectiveClientDeliveryIso } from '@/lib/videos/video-schedule';
 import {
   INVOICE_STATUS_MAP,
   PROJECT_STATUS_MAP,
@@ -162,6 +163,7 @@ export function buildPortalCalendarEvents(bundle: PortalBundle, now: Date = new 
   const windowEnd = endOfDay(addDays(today, 400));
   const out: PortalCalendarEvent[] = [];
   const seen = new Set<string>();
+  const clientLabel = bundle.client.name;
 
   const push = (e: Omit<PortalCalendarEvent, 'statusBlockTone'>) => {
     if (seen.has(e.id)) return;
@@ -172,6 +174,11 @@ export function buildPortalCalendarEvents(bundle: PortalBundle, now: Date = new 
   };
 
   for (const v of bundle.videos) {
+    const deliveryIso = effectiveClientDeliveryIso({
+      client_delivery_at: v.client_delivery_at,
+      delivery_deadline: v.delivery_deadline,
+    });
+
     if (v.shooting_date) {
       const d = parseEventDate(v.shooting_date);
       if (d) {
@@ -185,14 +192,14 @@ export function buildPortalCalendarEvents(bundle: PortalBundle, now: Date = new 
           status: VIDEO_PUBLIC_STATUS_MAP[v.public_status].label,
           tone: 'shooting',
           href: `#portal-video-${v.id}`,
-          description: null,
+          description: `Client : ${clientLabel}`,
           sortKey: toSortKey(d),
         });
       }
     }
 
-    if (v.public_status === 'revision_requested' && v.delivery_deadline) {
-      const d = parseEventDate(v.delivery_deadline);
+    if (v.public_status === 'revision_requested' && deliveryIso) {
+      const d = parseEventDate(deliveryIso);
       if (d) {
         push({
           id: `revision__${v.id}`,
@@ -208,43 +215,43 @@ export function buildPortalCalendarEvents(bundle: PortalBundle, now: Date = new 
           sortKey: toSortKey(d),
         });
       }
-    } else if (needsClientValidationVideo(v) && v.delivery_deadline) {
-      const d = parseEventDate(v.delivery_deadline);
+    } else if (needsClientValidationVideo(v) && deliveryIso) {
+      const d = parseEventDate(deliveryIso);
       if (d) {
         push({
           id: `validation__${v.id}`,
           type: 'video_validation',
-          typeLabel: 'Vidéo à valider',
+          typeLabel: 'Vidéo en validation',
           title: `Validation — ${v.title}`,
           date: d.toISOString(),
           endDate: null,
           status: VIDEO_PUBLIC_STATUS_MAP[v.public_status].label,
           tone: 'validation',
           href: `#portal-video-${v.id}`,
-          description: null,
+          description: `Client : ${clientLabel}`,
           sortKey: toSortKey(d),
         });
       }
     } else if (
-      v.delivery_deadline &&
+      deliveryIso &&
       v.public_status !== 'published' &&
       v.public_status !== 'validated' &&
       v.status !== 'published' &&
       v.status !== 'validated'
     ) {
-      const d = parseEventDate(v.delivery_deadline);
+      const d = parseEventDate(deliveryIso);
       if (d) {
         push({
           id: `delivery__${v.id}`,
           type: 'video_delivery',
-          typeLabel: 'Livraison vidéo',
-          title: `Livraison prévue — ${v.title}`,
+          typeLabel: 'Livraison vidéo prévue',
+          title: `Livraison — ${v.title}`,
           date: d.toISOString(),
           endDate: null,
           status: VIDEO_PUBLIC_STATUS_MAP[v.public_status].label,
           tone: 'video_flow',
           href: `#portal-video-${v.id}`,
-          description: null,
+          description: `Client : ${clientLabel}`,
           sortKey: toSortKey(d),
         });
       }
@@ -431,6 +438,7 @@ export async function loadPortalCalendarEvents(clientId: string, now?: Date): Pr
 export type PortalCalendarFilterId =
   | 'all'
   | 'shooting'
+  | 'delivery'
   | 'video'
   | 'publication'
   | 'payment'
@@ -440,7 +448,8 @@ export type PortalCalendarFilterId =
 export function portalEventMatchesFilter(e: PortalCalendarEvent, filter: PortalCalendarFilterId): boolean {
   if (filter === 'all') return true;
   if (filter === 'shooting') return e.type === 'shoot';
-  if (filter === 'video') return e.type === 'video_delivery' || e.type === 'video_validation' || e.type === 'revision';
+  if (filter === 'delivery') return e.type === 'video_delivery';
+  if (filter === 'video') return e.type === 'video_validation' || e.type === 'revision';
   if (filter === 'publication') return e.type === 'publication';
   if (filter === 'payment')
     return e.type === 'payment_due' || e.type === 'invoice_overdue' || e.type === 'invoice_paid' || e.type === 'quote_validity';

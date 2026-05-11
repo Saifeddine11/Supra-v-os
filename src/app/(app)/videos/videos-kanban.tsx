@@ -9,6 +9,7 @@ import type { VideoAssignEmployeeRow } from '@/lib/data/employees';
 import { VIDEO_KANBAN_COLUMNS, VIDEO_STATUS_MAP, VIDEO_PUBLIC_STATUS_MAP, PRIORITY_MAP } from '@/types/domain';
 import type { VideoWithClient } from '@/lib/data/videos';
 import type { VideoStatus } from '@/types/database';
+import { effectiveClientDeliveryIso, isVideoDeliveryOverdue } from '@/lib/videos/video-schedule';
 import { cn } from '@/lib/utils/cn';
 import { getStatusBlockSurface, videoWorkflowToStatusTone } from '@/lib/ui/status-block-tone';
 import { Badge } from '@/components/ui/badge';
@@ -71,13 +72,9 @@ export function VideosKanban({
                 <p className="px-1 py-6 text-center text-xs text-muted-foreground">Aucune vidéo</p>
               ) : (
                 items.map((v) => {
-                  const od =
-                    v.delivery_deadline &&
-                    v.status !== 'published' &&
-                    v.status !== 'archived' &&
-                    v.status !== 'cancelled' &&
-                    new Date(v.delivery_deadline) < new Date();
+                  const od = isVideoDeliveryOverdue(v);
                   const tone = videoWorkflowToStatusTone(v, { deliveryOverdue: Boolean(od) });
+                  const deliveryIso = effectiveClientDeliveryIso(v);
                   return (
                     <article
                       key={v.id}
@@ -97,16 +94,25 @@ export function VideosKanban({
                         {v.editor_name ? `Monteur : ${v.editor_name}` : null}
                         {v.cameraman_name ? ` · Cam : ${v.cameraman_name}` : null}
                       </p>
-                      {v.delivery_deadline ? (
+                      {v.shooting_date ? (
+                        <p className="mt-1 text-[11px] tabular-nums text-muted-foreground">
+                          Tournage {format(new Date(v.shooting_date), 'd MMM yyyy · HH:mm', { locale: fr })}
+                        </p>
+                      ) : (
+                        <p className="mt-1 text-[11px] text-muted-foreground">Tournage : non planifié</p>
+                      )}
+                      {deliveryIso ? (
                         <p
                           className={cn(
-                            'mt-1 text-[11px] tabular-nums',
+                            'mt-0.5 text-[11px] tabular-nums',
                             od ? 'font-semibold text-destructive' : 'text-muted-foreground'
                           )}
                         >
-                          Livraison {format(new Date(v.delivery_deadline), 'd MMM yyyy', { locale: fr })}
+                          Livraison client {format(new Date(deliveryIso), 'd MMM yyyy · HH:mm', { locale: fr })}
                         </p>
-                      ) : null}
+                      ) : (
+                        <p className="mt-0.5 text-[11px] text-muted-foreground">Livraison client : non planifié</p>
+                      )}
                       <div className="mt-2 flex flex-wrap gap-1 border-t border-border/60 pt-2">
                         <select
                           className="h-8 max-w-[160px] flex-1 rounded-md border border-border bg-muted px-2 text-xs"

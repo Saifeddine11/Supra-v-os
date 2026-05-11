@@ -19,6 +19,7 @@ import { PortalClientCalendar } from './portal-client-calendar';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getAgencyDisplayCurrencyWithClient } from '@/lib/data/agency-settings-db';
 import { formatAgencyMoney, formatAgencyMoneyCompact } from '@/lib/money/format-money';
+import { effectiveClientDeliveryIso } from '@/lib/videos/video-schedule';
 
 export const metadata: Metadata = {
   title: 'Espace client',
@@ -185,9 +186,15 @@ export default async function ClientPortalPage({
                   <div>
                     <p className="font-medium text-foreground">{v.title}</p>
                     <p className="text-xs text-muted-foreground">{VIDEO_PUBLIC_STATUS_MAP[v.public_status].label}</p>
-                    {v.delivery_deadline ? (
+                    {v.shooting_date ? (
                       <p className="mt-1 text-xs text-muted-foreground">
-                        Échéance {format(new Date(v.delivery_deadline), 'd MMMM yyyy', { locale: fr })}
+                        Tournage prévu · {format(new Date(v.shooting_date), "d MMMM yyyy 'à' HH:mm", { locale: fr })}
+                      </p>
+                    ) : null}
+                    {effectiveClientDeliveryIso(v) ? (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Livraison prévue ·{' '}
+                        {format(new Date(effectiveClientDeliveryIso(v)!), "d MMMM yyyy 'à' HH:mm", { locale: fr })}
                       </p>
                     ) : null}
                   </div>

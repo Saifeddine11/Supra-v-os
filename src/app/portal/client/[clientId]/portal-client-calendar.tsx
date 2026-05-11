@@ -21,7 +21,8 @@ import { Badge } from '@/components/ui/badge';
 const FILTERS: { id: PortalCalendarFilterId; label: string }[] = [
   { id: 'all', label: 'Tout' },
   { id: 'shooting', label: 'Tournages' },
-  { id: 'video', label: 'Vidéos' },
+  { id: 'delivery', label: 'Livraisons' },
+  { id: 'video', label: 'Validations' },
   { id: 'publication', label: 'Publications' },
   { id: 'payment', label: 'Paiements' },
   { id: 'project', label: 'Projets' },
@@ -75,7 +76,7 @@ function eventToAccent(e: PortalCalendarEvent, now: Date): { key: AccentKey; pri
     return { key: 'purple', priority: 58 };
   }
   if (e.type === 'video_delivery') {
-    return { key: 'green', priority: 50 };
+    return { key: 'orange', priority: 52 };
   }
   if (e.type === 'project_delivery') {
     return { key: 'orange', priority: 48 };
@@ -148,11 +149,12 @@ type DayMeta = {
   dots: AccentKey[];
   extraCount: number;
   hasUrgent: boolean;
+  eventCount: number;
 };
 
 function computeDayMeta(dayEvents: PortalCalendarEvent[], now: Date): DayMeta {
   if (dayEvents.length === 0) {
-    return { hasEvent: false, dominant: 'muted', dots: [], extraCount: 0, hasUrgent: false };
+    return { hasEvent: false, dominant: 'muted', dots: [], extraCount: 0, hasUrgent: false, eventCount: 0 };
   }
   let maxP = -1;
   let dominant: AccentKey = 'muted';
@@ -181,7 +183,7 @@ function computeDayMeta(dayEvents: PortalCalendarEvent[], now: Date): DayMeta {
   const hasUrgent = dayEvents.some(
     (e) => eventToAccent(e, now).key === 'red' || e.type === 'invoice_overdue',
   );
-  return { hasEvent: true, dominant, dots, extraCount, hasUrgent };
+  return { hasEvent: true, dominant, dots, extraCount, hasUrgent, eventCount: dayEvents.length };
 }
 
 function eventsOnDay(events: PortalCalendarEvent[], day: Date): PortalCalendarEvent[] {
@@ -380,7 +382,10 @@ function DayChip({
           'border-border/55 bg-card/85 text-muted-foreground hover:border-border hover:bg-card',
         meta.hasEvent &&
           !isSelected &&
-          cn(CHIP_BORDER_BG[meta.dominant], 'text-foreground shadow-sm'),
+          cn(
+            CHIP_BORDER_BG[meta.dominant],
+            'text-foreground shadow-sm ring-1 ring-primary/35 dark:ring-primary/30',
+          ),
         isSelected &&
           cn(
             'border-primary bg-primary/[0.14] text-foreground shadow-md ring-2 ring-primary/35 dark:bg-primary/[0.18]',
@@ -403,15 +408,22 @@ function DayChip({
           />
         ) : null}
       </span>
-      <span
-        className={cn(
-          'mt-0.5 text-base font-bold tabular-nums leading-none',
-          meta.hasEvent && 'text-foreground',
-          !meta.hasEvent && 'text-muted-foreground',
-          isSelected && 'text-foreground',
-        )}
-      >
-        {num}
+      <span className="relative mt-0.5 inline-flex items-center justify-center">
+        <span
+          className={cn(
+            'text-base font-bold tabular-nums leading-none',
+            meta.hasEvent && 'text-foreground',
+            !meta.hasEvent && 'text-muted-foreground',
+            isSelected && 'text-foreground',
+          )}
+        >
+          {num}
+        </span>
+        {meta.eventCount > 1 ? (
+          <span className="absolute -right-2 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground">
+            {meta.eventCount > 9 ? '9+' : meta.eventCount}
+          </span>
+        ) : null}
       </span>
       {isToday && !isSelected ? (
         <span className="mt-0.5 text-[9px] font-bold uppercase leading-none text-primary">Auj.</span>

@@ -20,6 +20,23 @@ import {
   requireAssignableAsVideoEditor,
 } from '@/lib/data/employee-guards';
 
+function parseOptionalIsoTimestamp(raw: unknown): string | null {
+  const s = String(raw ?? '').trim();
+  if (!s) return null;
+  const ms = Date.parse(s);
+  if (Number.isNaN(ms)) return null;
+  return new Date(ms).toISOString();
+}
+
+function deliveryDeadlineDateFromClientAt(clientDeliveryAt: string | null): string | null {
+  if (!clientDeliveryAt) return null;
+  return clientDeliveryAt.slice(0, 10);
+}
+
+/**
+ * Contrôle qui peut attribuer quels rôles (permissions), pas la validité métier des compétences.
+ * `editor_id` et `cameraman_id` peuvent être le même employé si les gardes compétences le permettent.
+ */
 function enforceVideoAssigneeScope(
   ctx: NonNullable<Awaited<ReturnType<typeof getAuthContext>>>,
   editorId: string,
@@ -91,7 +108,9 @@ export async function createVideoAction(formData: FormData): Promise<ActionResul
 
   let editorId = String(formData.get('editor_id') ?? '').trim();
   let cameramanId = String(formData.get('cameraman_id') ?? '').trim();
-  const deliveryDeadline = String(formData.get('delivery_deadline') ?? '').trim();
+  const shootingAt = parseOptionalIsoTimestamp(formData.get('shooting_at'));
+  const clientDeliveryAt = parseOptionalIsoTimestamp(formData.get('client_delivery_at'));
+  const deliveryDeadline = deliveryDeadlineDateFromClientAt(clientDeliveryAt);
 
   const scoped = enforceVideoAssigneeScope(ctx, editorId, cameramanId);
   if (!scoped.ok) return actionError(scoped.message);
@@ -115,7 +134,9 @@ export async function createVideoAction(formData: FormData): Promise<ActionResul
     priority: (String(formData.get('priority') ?? 'normal') || 'normal') as TaskPriority,
     editor_id: editorId || null,
     cameraman_id: cameramanId || null,
-    delivery_deadline: deliveryDeadline || null,
+    shooting_date: shootingAt,
+    client_delivery_at: clientDeliveryAt,
+    delivery_deadline: deliveryDeadline,
     created_by: user.id,
   };
 
@@ -131,6 +152,7 @@ export async function createVideoAction(formData: FormData): Promise<ActionResul
 
   revalidatePath('/videos');
   revalidatePath('/dashboard');
+  revalidatePath('/tasks/calendar');
   return actionOk({ id: data.id });
 }
 
@@ -156,7 +178,9 @@ export async function updateVideoAction(id: string, formData: FormData): Promise
 
   let editorId = String(formData.get('editor_id') ?? '').trim();
   let cameramanId = String(formData.get('cameraman_id') ?? '').trim();
-  const deliveryDeadline = String(formData.get('delivery_deadline') ?? '').trim();
+  const shootingAt = parseOptionalIsoTimestamp(formData.get('shooting_at'));
+  const clientDeliveryAt = parseOptionalIsoTimestamp(formData.get('client_delivery_at'));
+  const deliveryDeadline = deliveryDeadlineDateFromClientAt(clientDeliveryAt);
 
   const scoped = enforceVideoAssigneeScope(ctx, editorId, cameramanId);
   if (!scoped.ok) return actionError(scoped.message);
@@ -181,7 +205,9 @@ export async function updateVideoAction(id: string, formData: FormData): Promise
       priority: String(formData.get('priority') ?? 'normal') as TaskPriority,
       editor_id: editorId || null,
       cameraman_id: cameramanId || null,
-      delivery_deadline: deliveryDeadline || null,
+      shooting_date: shootingAt,
+      client_delivery_at: clientDeliveryAt,
+      delivery_deadline: deliveryDeadline,
       updated_at: new Date().toISOString(),
     })
     .eq('id', id);
@@ -197,6 +223,7 @@ export async function updateVideoAction(id: string, formData: FormData): Promise
 
   revalidatePath('/videos');
   revalidatePath('/dashboard');
+  revalidatePath('/tasks/calendar');
   return actionOk();
 }
 
@@ -252,6 +279,7 @@ export async function updateVideoStatusAction(
 
   revalidatePath('/videos');
   revalidatePath('/dashboard');
+  revalidatePath('/tasks/calendar');
   return actionOk();
 }
 
@@ -279,5 +307,6 @@ export async function deleteVideoAction(id: string): Promise<ActionResult> {
 
   revalidatePath('/videos');
   revalidatePath('/dashboard');
+  revalidatePath('/tasks/calendar');
   return actionOk();
 }

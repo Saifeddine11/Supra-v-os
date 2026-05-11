@@ -54,6 +54,8 @@ export interface PersonalWorkload {
   myBlockedTasks: number;
   myVideosAsEditor: number;
   myVideosAsCameraman: number;
+  /** Vidéos distinctes où l’employé est monteur et/ou caméraman (sans double compter). */
+  myVideosAssignedDistinct: number;
   myShootsPlanned: number;
   myVideosInRevision: number;
   myClientValidations: number;
@@ -100,6 +102,7 @@ function emptyPersonal(): PersonalWorkload {
     myBlockedTasks: 0,
     myVideosAsEditor: 0,
     myVideosAsCameraman: 0,
+    myVideosAssignedDistinct: 0,
     myShootsPlanned: 0,
     myVideosInRevision: 0,
     myClientValidations: 0,
@@ -479,6 +482,14 @@ async function fetchPersonalWorkload(
     .eq('editor_id', employeeId)
     .or('public_status.eq.in_validation,status.eq.sent_to_client');
 
+  const myVideosAssignedDistinctQ = supabase
+    .from('videos')
+    .select('id', { count: 'exact', head: true })
+    .or(`editor_id.eq.${employeeId},cameraman_id.eq.${employeeId}`)
+    .neq('status', 'published')
+    .neq('status', 'archived')
+    .neq('status', 'cancelled');
+
   const activeProjectStatuses = ['in_progress', 'waiting_client', 'waiting_content', 'review'] as const;
 
   const myProjectsQ = supabase
@@ -508,6 +519,7 @@ async function fetchPersonalWorkload(
     shootR,
     revR,
     valR,
+    distinctR,
     projR,
     reportsR,
   ] = await Promise.all([
@@ -521,6 +533,7 @@ async function fetchPersonalWorkload(
     myShootsQ,
     myRevisionQ,
     myValQ,
+    myVideosAssignedDistinctQ,
     myProjectsQ,
     reportsQ,
   ]);
@@ -535,6 +548,7 @@ async function fetchPersonalWorkload(
     myBlockedTasks: blockedR.count ?? 0,
     myVideosAsEditor: edR.count ?? 0,
     myVideosAsCameraman: camR.count ?? 0,
+    myVideosAssignedDistinct: distinctR.count ?? 0,
     myShootsPlanned: shootR.count ?? 0,
     myVideosInRevision: revR.count ?? 0,
     myClientValidations: valR.count ?? 0,
@@ -747,8 +761,8 @@ export async function getDashboardSummary(ctx: AuthContext): Promise<DashboardSu
       goalPromise,
     ]);
     const myVids =
-      rk === 'editor'
-        ? personal.myVideosAsEditor
+      rk === 'editor' || rk === 'community_manager'
+        ? personal.myVideosAssignedDistinct
         : rk === 'cameraman'
           ? personal.myVideosAsCameraman
           : personal.myVideosAsEditor + personal.myVideosAsCameraman;

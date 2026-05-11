@@ -298,7 +298,7 @@ export async function assertVideoRecordVisible(
   const er = effectiveRole(ctx.role);
   const empId = ctx.employee?.id;
   if (!empId) return false;
-  if (er === 'editor') return v.editor_id === empId;
+  if (er === 'editor') return v.editor_id === empId || v.cameraman_id === empId;
   if (er === 'cameraman') return v.cameraman_id === empId;
   if (er === 'community_manager') return v.editor_id === empId || v.cameraman_id === empId;
   return false;

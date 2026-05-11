@@ -7,6 +7,7 @@ import {
   hasFullOrgDataAccess,
 } from '@/lib/auth/data-scope';
 import type { Video } from '@/types/database';
+import { effectiveClientDeliveryIso } from '@/lib/videos/video-schedule';
 
 export type VideoWithClient = Video & {
   clients: { name: string } | null;
@@ -55,7 +56,7 @@ export async function listVideosWithClients(
     const er = effectiveRole(auth.role);
     const eid = auth.employee?.id;
     if (!eid) return [];
-    if (er === 'editor') q = q.eq('editor_id', eid);
+    if (er === 'editor') q = q.or(`editor_id.eq.${eid},cameraman_id.eq.${eid}`);
     else if (er === 'cameraman') q = q.eq('cameraman_id', eid);
     else if (er === 'community_manager') q = q.or(`editor_id.eq.${eid},cameraman_id.eq.${eid}`);
     else return [];
@@ -63,7 +64,15 @@ export async function listVideosWithClients(
 
   const { data, error } = await q;
   if (error) throw new Error(error.message);
-  return enrichVideoRows((data ?? []) as (Video & { clients: { name: string } | null })[]);
+  const enriched = await enrichVideoRows((data ?? []) as (Video & { clients: { name: string } | null })[]);
+  enriched.sort((a, b) => {
+    const ta = effectiveClientDeliveryIso(a);
+    const tb = effectiveClientDeliveryIso(b);
+    const da = ta ? new Date(ta).getTime() : Infinity;
+    const db = tb ? new Date(tb).getTime() : Infinity;
+    return da - db;
+  });
+  return enriched;
 }
 
 export async function getVideoById(

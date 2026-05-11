@@ -465,9 +465,10 @@ create table videos (
   editor_id           uuid references employees(id) on delete set null,
 
   -- Dates
-  shooting_date       timestamptz,
-  delivery_deadline   date,
-  publication_date    timestamptz,
+  shooting_date         timestamptz,  -- tournage (équipe + portail)
+  delivery_deadline     date,         -- legacy jour seul ; sync avec client_delivery_at côté app
+  client_delivery_at    timestamptz,  -- livraison / envoi client (précision heure)
+  publication_date      timestamptz,
 
   -- Files & links
   preview_url         text,
@@ -489,6 +490,8 @@ create index idx_videos_editor on videos(editor_id);
 create index idx_videos_cameraman on videos(cameraman_id);
 create index idx_videos_status on videos(status);
 create index idx_videos_deadline on videos(delivery_deadline);
+create index idx_videos_client_delivery_at on videos(client_delivery_at);
+create index idx_videos_shooting_date on videos(shooting_date);
 create index idx_videos_calendar on videos(editorial_calendar_id);
 
 -- Add FK on tasks now that videos exists
