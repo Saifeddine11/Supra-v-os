@@ -23,7 +23,9 @@ alter table client_portals       enable row level security;
 alter table projects             enable row level security;
 alter table internal_projects    enable row level security;
 alter table tasks                enable row level security;
+alter table task_assignments     enable row level security;
 alter table videos               enable row level security;
+alter table video_assignments    enable row level security;
 alter table editorial_calendars  enable row level security;
 alter table video_templates      enable row level security;
 alter table content_ideas        enable row level security;
@@ -183,6 +185,7 @@ create policy "tasks_insert_authorized"
   with check (auth_user_role() is not null);
 
 drop policy if exists "tasks_update_assigned_or_admin" on tasks;
+-- Pivot task_assignments + legacy assignee_id / watchers.
 create policy "tasks_update_assigned_or_admin"
   on tasks for update
   to authenticated
@@ -190,6 +193,97 @@ create policy "tasks_update_assigned_or_admin"
     auth_is_admin_or_pm()
     or assignee_id = auth_employee_id()
     or auth_employee_id() = any(watcher_ids)
+    or exists (
+      select 1
+      from task_assignments ta
+      where ta.task_id = tasks.id
+        and ta.employee_id = auth_employee_id()
+    )
+  )
+  with check (
+    auth_is_admin_or_pm()
+    or assignee_id = auth_employee_id()
+    or auth_employee_id() = any(watcher_ids)
+    or exists (
+      select 1
+      from task_assignments ta
+      where ta.task_id = tasks.id
+        and ta.employee_id = auth_employee_id()
+    )
+  );
+
+-- ============================================================================
+-- TASK ASSIGNMENTS (multi-assignés)
+-- ============================================================================
+
+drop policy if exists "task_assignments_select_internal" on task_assignments;
+create policy "task_assignments_select_internal"
+  on task_assignments for select
+  to authenticated
+  using (auth_user_role() is not null);
+
+drop policy if exists "task_assignments_insert_authorized" on task_assignments;
+create policy "task_assignments_insert_authorized"
+  on task_assignments for insert
+  to authenticated
+  with check (
+    auth_user_role() is not null
+    and exists (select 1 from tasks t where t.id = task_assignments.task_id)
+  );
+
+drop policy if exists "task_assignments_update_assigned_or_admin" on task_assignments;
+create policy "task_assignments_update_assigned_or_admin"
+  on task_assignments for update
+  to authenticated
+  using (
+    auth_is_admin_or_pm()
+    or exists (
+      select 1
+      from task_assignments ta_peer
+      where ta_peer.task_id = task_assignments.task_id
+        and ta_peer.employee_id = auth_employee_id()
+    )
+    or exists (
+      select 1
+      from tasks t
+      where t.id = task_assignments.task_id
+        and t.assignee_id = auth_employee_id()
+    )
+  )
+  with check (
+    auth_is_admin_or_pm()
+    or exists (
+      select 1
+      from task_assignments ta_peer
+      where ta_peer.task_id = task_assignments.task_id
+        and ta_peer.employee_id = auth_employee_id()
+    )
+    or exists (
+      select 1
+      from tasks t
+      where t.id = task_assignments.task_id
+        and t.assignee_id = auth_employee_id()
+    )
+  );
+
+drop policy if exists "task_assignments_delete_assigned_or_admin" on task_assignments;
+create policy "task_assignments_delete_assigned_or_admin"
+  on task_assignments for delete
+  to authenticated
+  using (
+    auth_is_admin_or_pm()
+    or exists (
+      select 1
+      from task_assignments ta_peer
+      where ta_peer.task_id = task_assignments.task_id
+        and ta_peer.employee_id = auth_employee_id()
+    )
+    or exists (
+      select 1
+      from tasks t
+      where t.id = task_assignments.task_id
+        and t.assignee_id = auth_employee_id()
+    )
   );
 
 drop policy if exists "tasks_delete_admin_pm" on tasks;
@@ -215,11 +309,29 @@ create policy "videos_insert_authorized"
   with check (auth_user_role() in ('admin', 'project_manager', 'editor', 'cameraman', 'commercial'));
 
 drop policy if exists "videos_update_assigned_or_admin" on videos;
+-- Pivot video_assignments = source principale ; legacy editor_id / cameraman_id = secours.
 create policy "videos_update_assigned_or_admin"
   on videos for update
   to authenticated
   using (
     auth_is_admin_or_pm()
+    or exists (
+      select 1
+      from video_assignments va
+      where va.video_id = videos.id
+        and va.employee_id = auth_employee_id()
+    )
+    or editor_id = auth_employee_id()
+    or cameraman_id = auth_employee_id()
+  )
+  with check (
+    auth_is_admin_or_pm()
+    or exists (
+      select 1
+      from video_assignments va
+      where va.video_id = videos.id
+        and va.employee_id = auth_employee_id()
+    )
     or editor_id = auth_employee_id()
     or cameraman_id = auth_employee_id()
   );
@@ -229,6 +341,81 @@ create policy "videos_delete_admin_pm"
   on videos for delete
   to authenticated
   using (auth_is_admin_or_pm());
+
+-- ============================================================================
+-- VIDEO ASSIGNMENTS (multi monteurs / cadreurs)
+-- ============================================================================
+
+drop policy if exists "video_assignments_select_internal" on video_assignments;
+create policy "video_assignments_select_internal"
+  on video_assignments for select
+  to authenticated
+  using (auth_user_role() is not null);
+
+drop policy if exists "video_assignments_insert_authorized" on video_assignments;
+create policy "video_assignments_insert_authorized"
+  on video_assignments for insert
+  to authenticated
+  with check (
+    auth_user_role() in ('admin', 'project_manager', 'editor', 'cameraman', 'commercial')
+    and exists (select 1 from videos v where v.id = video_assignments.video_id)
+  );
+
+drop policy if exists "video_assignments_update_assigned_or_admin" on video_assignments;
+-- Même employé sur une autre ligne d’assignation = accès ; legacy en secours.
+create policy "video_assignments_update_assigned_or_admin"
+  on video_assignments for update
+  to authenticated
+  using (
+    auth_is_admin_or_pm()
+    or exists (
+      select 1
+      from video_assignments va_peer
+      where va_peer.video_id = video_assignments.video_id
+        and va_peer.employee_id = auth_employee_id()
+    )
+    or exists (
+      select 1
+      from videos v
+      where v.id = video_assignments.video_id
+        and (v.editor_id = auth_employee_id() or v.cameraman_id = auth_employee_id())
+    )
+  )
+  with check (
+    auth_is_admin_or_pm()
+    or exists (
+      select 1
+      from video_assignments va_peer
+      where va_peer.video_id = video_assignments.video_id
+        and va_peer.employee_id = auth_employee_id()
+    )
+    or exists (
+      select 1
+      from videos v
+      where v.id = video_assignments.video_id
+        and (v.editor_id = auth_employee_id() or v.cameraman_id = auth_employee_id())
+    )
+  );
+
+drop policy if exists "video_assignments_delete_assigned_or_admin" on video_assignments;
+create policy "video_assignments_delete_assigned_or_admin"
+  on video_assignments for delete
+  to authenticated
+  using (
+    auth_is_admin_or_pm()
+    or exists (
+      select 1
+      from video_assignments va_peer
+      where va_peer.video_id = video_assignments.video_id
+        and va_peer.employee_id = auth_employee_id()
+    )
+    or exists (
+      select 1
+      from videos v
+      where v.id = video_assignments.video_id
+        and (v.editor_id = auth_employee_id() or v.cameraman_id = auth_employee_id())
+    )
+  );
 
 -- ============================================================================
 -- EDITORIAL CALENDARS
@@ -374,6 +561,10 @@ create policy "reports_modify_admin_pm"
 -- ============================================================================
 -- DOCUMENTS
 -- ============================================================================
+-- Lecture / modification : tout employé authentifié (périmètre métier par rôle
+-- côté application : ex. documents liés à une vidéo filtrés pour editor/cameraman
+-- via video_assignments + legacy). RLS client portail : non applicable ici
+-- (accès portail via service role + routes serveur).
 
 drop policy if exists "documents_select_internal" on documents;
 create policy "documents_select_internal"

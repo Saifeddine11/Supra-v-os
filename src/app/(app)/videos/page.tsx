@@ -18,6 +18,7 @@ import { VideoFormDialog } from './video-form-dialog';
 import { VideosKanban } from './videos-kanban';
 import { VideoRowActions } from './video-row-actions';
 import { effectiveClientDeliveryIso, isVideoDeliveryOverdue } from '@/lib/videos/video-schedule';
+import { videoCadreurTableCell, videoMonteurTableCell } from '@/lib/videos/video-assignee-labels';
 
 export const metadata: Metadata = { title: 'Production vidéo' };
 
@@ -207,8 +208,19 @@ export default async function VideosPage({
                           {VIDEO_PUBLIC_STATUS_MAP[v.public_status].label}
                         </Badge>
                       </td>
-                      <td className="px-4 py-3 text-xs text-muted-foreground">{v.editor_name ?? '—'}</td>
-                      <td className="px-4 py-3 text-xs text-muted-foreground">{v.cameraman_name ?? '—'}</td>
+                      <td className="max-w-[220px] px-4 py-3 text-xs text-muted-foreground">
+                        {videoMonteurTableCell(v)}
+                      </td>
+                      <td
+                        className="max-w-[200px] px-4 py-3 text-xs text-muted-foreground"
+                        title={
+                          v.editors.some((e) => v.cameramen.some((c) => c.id === e.id))
+                            ? 'Certaines personnes sont à la fois monteurs et caméramans sur cette vidéo.'
+                            : undefined
+                        }
+                      >
+                        {videoCadreurTableCell(v)}
+                      </td>
                       <td className="px-4 py-3 text-right">
                         <VideoRowActions video={v} clients={clientOpts} employees={employees} canDelete={canDelete} />
                       </td>

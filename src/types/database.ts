@@ -315,6 +315,26 @@ export interface Task {
   created_by: string | null;
 }
 
+/** Rôle dans `video_assignments` (monteur vs cadreur). */
+export type VideoAssignmentRole = 'editor' | 'cameraman';
+
+export interface VideoAssignment {
+  id: string;
+  video_id: string;
+  employee_id: string;
+  assignment_role: VideoAssignmentRole;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TaskAssignment {
+  id: string;
+  task_id: string;
+  employee_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Video {
   id: string;
   client_id: string;
@@ -671,7 +691,19 @@ export type Database = {
         Relationships: [];
       };
       tasks: { Row: Task; Insert: Partial<Task>; Update: Partial<Task>; Relationships: [] };
+      task_assignments: {
+        Row: TaskAssignment;
+        Insert: Partial<TaskAssignment> & { task_id: string; employee_id: string };
+        Update: Partial<TaskAssignment>;
+        Relationships: [];
+      };
       videos: { Row: Video; Insert: Partial<Video>; Update: Partial<Video>; Relationships: [] };
+      video_assignments: {
+        Row: VideoAssignment;
+        Insert: Partial<VideoAssignment> & { video_id: string; employee_id: string; assignment_role: VideoAssignmentRole };
+        Update: Partial<VideoAssignment>;
+        Relationships: [];
+      };
       editorial_calendars: {
         Row: EditorialCalendar;
         Insert: Partial<EditorialCalendar>;
@@ -844,7 +876,10 @@ export interface TaskWithRelations extends Task {
 
 /** Task list row / kanban card (denormalized names) */
 export interface TaskEnriched extends Task {
+  /** Libellé court pour listes (ex. « Julien + 2 autres »). */
   assignee_name: string | null;
+  /** Assignés effectifs (pivot + repli legacy assignee_id). */
+  assignees: { id: string; full_name: string }[];
   client_name: string | null;
 }
 

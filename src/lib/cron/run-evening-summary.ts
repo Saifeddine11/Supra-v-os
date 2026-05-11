@@ -10,6 +10,7 @@ import {
 } from '@/lib/email/templates/evening-summary';
 import { createNotificationOnce } from '@/lib/notifications/notify';
 import { getCronEmailPrefs } from '@/lib/cron/user-notification-prefs';
+import { fetchTaskIdsAssignedToEmployee } from '@/lib/data/task-assignments';
 
 export type EveningSummaryResult = {
   success: boolean;
@@ -64,10 +65,14 @@ export async function runEveningSummary(): Promise<EveningSummaryResult> {
 
     employeesProcessed += 1;
 
+    const fromPivot = await fetchTaskIdsAssignedToEmployee(admin, emp.id as string);
+    const taskOrParts = [`assignee_id.eq.${emp.id}`];
+    if (fromPivot.length) taskOrParts.push(`id.in.(${fromPivot.join(',')})`);
+
     const { data: allAssigned } = await admin
       .from('tasks')
       .select('id,title,status,deadline,completed_at')
-      .eq('assignee_id', emp.id);
+      .or(taskOrParts.join(','));
 
     const tasks = allAssigned ?? [];
     const completedToday = tasks.filter(

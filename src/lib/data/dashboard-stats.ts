@@ -12,6 +12,11 @@ import {
   expectedMonthlyRevenueFromClients,
   type ClientContractRow,
 } from '@/lib/data/expected-monthly-revenue';
+import {
+  fetchVideoIdsAssignedToEmployee,
+  fetchVideoIdsForAssignmentRole,
+} from '@/lib/data/video-assignments';
+import { fetchTaskIdsAssignedToEmployee } from '@/lib/data/task-assignments';
 
 export interface DashboardFinanceAgg {
   currency: AgencyCurrencyIso;
@@ -408,11 +413,16 @@ async function fetchPersonalWorkload(
   const now = new Date().toISOString();
   const { start, end } = todayBoundsIso();
 
+  const taskPivotIds = await fetchTaskIdsAssignedToEmployee(supabase, employeeId);
+  const taskOrParts = [`assignee_id.eq.${employeeId}`];
+  if (taskPivotIds.length) taskOrParts.push(`id.in.(${taskPivotIds.join(',')})`);
+  const taskScopeOr = taskOrParts.join(',');
+
   const baseTask = () =>
     supabase
       .from('tasks')
       .select('id', { count: 'exact', head: true })
-      .eq('assignee_id', employeeId)
+      .or(taskScopeOr)
       .neq('status', 'done')
       .neq('status', 'archived');
 
@@ -420,7 +430,7 @@ async function fetchPersonalWorkload(
   const myOverdueQ = supabase
     .from('tasks')
     .select('id', { count: 'exact', head: true })
-    .eq('assignee_id', employeeId)
+    .or(taskScopeOr)
     .neq('status', 'done')
     .neq('status', 'archived')
     .lt('deadline', now);
@@ -428,7 +438,7 @@ async function fetchPersonalWorkload(
   const myUrgentQ = supabase
     .from('tasks')
     .select('id', { count: 'exact', head: true })
-    .eq('assignee_id', employeeId)
+    .or(taskScopeOr)
     .eq('priority', 'urgent')
     .neq('status', 'done')
     .neq('status', 'archived');
@@ -436,7 +446,7 @@ async function fetchPersonalWorkload(
   const myDueTodayQ = supabase
     .from('tasks')
     .select('id', { count: 'exact', head: true })
-    .eq('assignee_id', employeeId)
+    .or(taskScopeOr)
     .neq('status', 'done')
     .neq('status', 'archived')
     .gte('deadline', start)
@@ -445,13 +455,25 @@ async function fetchPersonalWorkload(
   const myBlockedQ = supabase
     .from('tasks')
     .select('id', { count: 'exact', head: true })
-    .eq('assignee_id', employeeId)
+    .or(taskScopeOr)
     .eq('status', 'blocked');
+
+  const [vaEditorIds, vaCamIds, vaAnyIds] = await Promise.all([
+    fetchVideoIdsForAssignmentRole(supabase, employeeId, 'editor'),
+    fetchVideoIdsForAssignmentRole(supabase, employeeId, 'cameraman'),
+    fetchVideoIdsAssignedToEmployee(supabase, employeeId),
+  ]);
+
+  const orLegacyAndVaIds = (legacyCol: 'editor_id' | 'cameraman_id', vaIds: string[]) => {
+    const parts = [`${legacyCol}.eq.${employeeId}`];
+    if (vaIds.length) parts.push(`id.in.(${vaIds.join(',')})`);
+    return parts.join(',');
+  };
 
   const myVideosEditorQ = supabase
     .from('videos')
     .select('id', { count: 'exact', head: true })
-    .eq('editor_id', employeeId)
+    .or(orLegacyAndVaIds('editor_id', vaEditorIds))
     .neq('status', 'published')
     .neq('status', 'archived')
     .neq('status', 'cancelled');
@@ -459,7 +481,7 @@ async function fetchPersonalWorkload(
   const myVideosCamQ = supabase
     .from('videos')
     .select('id', { count: 'exact', head: true })
-    .eq('cameraman_id', employeeId)
+    .or(orLegacyAndVaIds('cameraman_id', vaCamIds))
     .neq('status', 'published')
     .neq('status', 'archived')
     .neq('status', 'cancelled');
@@ -467,25 +489,27 @@ async function fetchPersonalWorkload(
   const myShootsQ = supabase
     .from('videos')
     .select('id', { count: 'exact', head: true })
-    .eq('cameraman_id', employeeId)
+    .or(orLegacyAndVaIds('cameraman_id', vaCamIds))
     .eq('status', 'shooting_planned');
 
   const myRevisionQ = supabase
     .from('videos')
     .select('id', { count: 'exact', head: true })
-    .eq('editor_id', employeeId)
+    .or(orLegacyAndVaIds('editor_id', vaEditorIds))
     .eq('status', 'client_revision');
 
   const myValQ = supabase
     .from('videos')
     .select('id', { count: 'exact', head: true })
-    .eq('editor_id', employeeId)
+    .or(orLegacyAndVaIds('editor_id', vaEditorIds))
     .or('public_status.eq.in_validation,status.eq.sent_to_client');
 
+  const distinctOrParts = [`editor_id.eq.${employeeId}`, `cameraman_id.eq.${employeeId}`];
+  if (vaAnyIds.length) distinctOrParts.push(`id.in.(${vaAnyIds.join(',')})`);
   const myVideosAssignedDistinctQ = supabase
     .from('videos')
     .select('id', { count: 'exact', head: true })
-    .or(`editor_id.eq.${employeeId},cameraman_id.eq.${employeeId}`)
+    .or(distinctOrParts.join(','))
     .neq('status', 'published')
     .neq('status', 'archived')
     .neq('status', 'cancelled');

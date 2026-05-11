@@ -1,6 +1,12 @@
 import { createClient } from '@/lib/supabase/server';
 import type { TaskPriority, TaskStatus, UserRole, VideoStatus } from '@/types/database';
 import { effectiveClientDeliveryIso } from '@/lib/videos/video-schedule';
+import {
+  fetchMyVideoRoleFlagsForVideos,
+  fetchVideoIdsAssignedToEmployee,
+  fetchVideoIdsForAssignmentRole,
+} from '@/lib/data/video-assignments';
+import { fetchTaskIdsAssignedToEmployee } from '@/lib/data/task-assignments';
 
 export interface PersonalTaskRow {
   id: string;
@@ -20,7 +26,7 @@ export interface PersonalVideoRow {
   client_delivery_at: string | null;
   shooting_date: string | null;
   clientName: string | null;
-  /** Montage seul, tournage seul, ou les deux (même employé sur editor_id et cameraman_id). */
+  /** Montage seul, tournage seul, ou les deux (assignations multiples / legacy). */
   role: 'editor' | 'cameraman' | 'both';
 }
 
@@ -35,6 +41,10 @@ export async function getPersonalDashboardWork(
   const supabase = await createClient();
   const rk = scopeKey(role);
 
+  const fromTaskPivot = await fetchTaskIdsAssignedToEmployee(supabase, employeeId);
+  const taskOrParts = [`assignee_id.eq.${employeeId}`];
+  if (fromTaskPivot.length) taskOrParts.push(`id.in.(${fromTaskPivot.join(',')})`);
+
   const { data: taskRows, error: tErr } = await supabase
     .from('tasks')
     .select(
@@ -48,7 +58,7 @@ export async function getPersonalDashboardWork(
       projects:project_id ( title )
     `
     )
-    .eq('assignee_id', employeeId)
+    .or(taskOrParts.join(','))
     .neq('status', 'done')
     .neq('status', 'archived')
     .order('deadline', { ascending: true, nullsFirst: false })
@@ -95,35 +105,65 @@ export async function getPersonalDashboardWork(
       .limit(20);
 
     if (rk === 'editor') {
-      vidQ = vidQ.or(`editor_id.eq.${employeeId},cameraman_id.eq.${employeeId}`);
+      const fromVa = await fetchVideoIdsAssignedToEmployee(supabase, employeeId);
+      const parts = [`editor_id.eq.${employeeId}`, `cameraman_id.eq.${employeeId}`];
+      if (fromVa.length) parts.push(`id.in.(${fromVa.join(',')})`);
+      vidQ = vidQ.or(parts.join(','));
     } else if (rk === 'cameraman') {
-      vidQ = vidQ.eq('cameraman_id', employeeId);
+      const fromVa = await fetchVideoIdsForAssignmentRole(supabase, employeeId, 'cameraman');
+      const parts = [`cameraman_id.eq.${employeeId}`];
+      if (fromVa.length) parts.push(`id.in.(${fromVa.join(',')})`);
+      vidQ = vidQ.or(parts.join(','));
     } else {
-      vidQ = vidQ.or(`editor_id.eq.${employeeId},cameraman_id.eq.${employeeId}`);
+      const fromVa = await fetchVideoIdsAssignedToEmployee(supabase, employeeId);
+      const parts = [`editor_id.eq.${employeeId}`, `cameraman_id.eq.${employeeId}`];
+      if (fromVa.length) parts.push(`id.in.(${fromVa.join(',')})`);
+      vidQ = vidQ.or(parts.join(','));
     }
 
     const { data: vidRows, error: vErr } = await vidQ;
     if (vErr) throw new Error(vErr.message);
 
-    videos = (vidRows ?? []).map((row: Record<string, unknown>) => {
-      const clients = row.clients as { name?: string } | null;
-      const ed = row.editor_id as string | null;
-      const cam = row.cameraman_id as string | null;
-      const asEditor = ed === employeeId;
-      const asCam = cam === employeeId;
-      const vRole: 'editor' | 'cameraman' | 'both' =
-        asEditor && asCam ? 'both' : rk === 'cameraman' || (asCam && !asEditor) ? 'cameraman' : 'editor';
-      return {
+    const rawRows = (vidRows ?? []) as Record<string, unknown>[];
+    const roleMap = await fetchMyVideoRoleFlagsForVideos(
+      supabase,
+      employeeId,
+      rawRows.map((row) => ({
         id: String(row.id),
-        title: String(row.title),
-        status: row.status as VideoStatus,
-        delivery_deadline: row.delivery_deadline ? String(row.delivery_deadline) : null,
-        client_delivery_at: row.client_delivery_at ? String(row.client_delivery_at) : null,
-        shooting_date: row.shooting_date ? String(row.shooting_date) : null,
-        clientName: clients?.name ?? null,
-        role: vRole,
-      };
-    });
+        editor_id: row.editor_id as string | null | undefined,
+        cameraman_id: row.cameraman_id as string | null | undefined,
+      })),
+    );
+
+    const seenVid = new Set<string>();
+    videos = rawRows
+      .filter((row) => {
+        const id = String(row.id);
+        if (seenVid.has(id)) return false;
+        seenVid.add(id);
+        return true;
+      })
+      .map((row) => {
+        const clients = row.clients as { name?: string } | null;
+        const id = String(row.id);
+        const flags = roleMap.get(id) ?? { hasEditor: false, hasCameraman: false };
+        const vRole: 'editor' | 'cameraman' | 'both' =
+          flags.hasEditor && flags.hasCameraman
+            ? 'both'
+            : flags.hasCameraman
+              ? 'cameraman'
+              : 'editor';
+        return {
+          id,
+          title: String(row.title),
+          status: row.status as VideoStatus,
+          delivery_deadline: row.delivery_deadline ? String(row.delivery_deadline) : null,
+          client_delivery_at: row.client_delivery_at ? String(row.client_delivery_at) : null,
+          shooting_date: row.shooting_date ? String(row.shooting_date) : null,
+          clientName: clients?.name ?? null,
+          role: vRole,
+        };
+      });
     videos.sort((a, b) => {
       const ta = effectiveClientDeliveryIso(a);
       const tb = effectiveClientDeliveryIso(b);

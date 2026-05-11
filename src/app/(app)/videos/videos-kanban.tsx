@@ -10,6 +10,7 @@ import { VIDEO_KANBAN_COLUMNS, VIDEO_STATUS_MAP, VIDEO_PUBLIC_STATUS_MAP, PRIORI
 import type { VideoWithClient } from '@/lib/data/videos';
 import type { VideoStatus } from '@/types/database';
 import { effectiveClientDeliveryIso, isVideoDeliveryOverdue } from '@/lib/videos/video-schedule';
+import { videoKanbanAssigneeSummary } from '@/lib/videos/video-assignee-labels';
 import { cn } from '@/lib/utils/cn';
 import { getStatusBlockSurface, videoWorkflowToStatusTone } from '@/lib/ui/status-block-tone';
 import { Badge } from '@/components/ui/badge';
@@ -90,10 +91,7 @@ export function VideosKanban({
                           {PRIORITY_MAP[v.priority].label}
                         </Badge>
                       </div>
-                      <p className="mt-2 text-[11px] text-muted-foreground">
-                        {v.editor_name ? `Monteur : ${v.editor_name}` : null}
-                        {v.cameraman_name ? ` · Cam : ${v.cameraman_name}` : null}
-                      </p>
+                      <p className="mt-2 text-[11px] text-muted-foreground">{videoKanbanAssigneeSummary(v)}</p>
                       {v.shooting_date ? (
                         <p className="mt-1 text-[11px] tabular-nums text-muted-foreground">
                           Tournage {format(new Date(v.shooting_date), 'd MMM yyyy · HH:mm', { locale: fr })}

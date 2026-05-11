@@ -6,6 +6,7 @@ import {
   fetchManagedClientIds,
   hasFullOrgDataAccess,
 } from '@/lib/auth/data-scope';
+import { fetchVideoIdsAssignedToEmployee, fetchVideoIdsForAssignmentRole } from '@/lib/data/video-assignments';
 import type { DocumentRecord, DocumentType } from '@/types/database';
 
 export type DocumentWithRelations = DocumentRecord & {
@@ -41,11 +42,19 @@ async function buildDocumentsOrFilter(sb: SB, auth: AuthContext): Promise<string
   const er = effectiveRole(auth.role);
 
   if (er === 'editor' || er === 'cameraman' || er === 'community_manager') {
-    const { data: vids } = await sb
-      .from('videos')
-      .select('id')
-      .or(`editor_id.eq.${eid},cameraman_id.eq.${eid}`);
-    const vidIds = [...new Set((vids ?? []).map((v) => v.id))];
+    const idSet = new Set<string>();
+    if (er === 'cameraman') {
+      const { data: leg } = await sb.from('videos').select('id').or(`cameraman_id.eq.${eid}`);
+      for (const r of leg ?? []) idSet.add(r.id as string);
+      const va = await fetchVideoIdsForAssignmentRole(sb, eid, 'cameraman');
+      va.forEach((id) => idSet.add(id));
+    } else {
+      const { data: leg } = await sb.from('videos').select('id').or(`editor_id.eq.${eid},cameraman_id.eq.${eid}`);
+      for (const r of leg ?? []) idSet.add(r.id as string);
+      const va = await fetchVideoIdsAssignedToEmployee(sb, eid);
+      va.forEach((id) => idSet.add(id));
+    }
+    const vidIds = [...idSet];
     if (!vidIds.length) return '__none__';
     return `video_id.in.(${vidIds.join(',')})`;
   }

@@ -3,8 +3,13 @@ import type { AuthContext } from '@/lib/auth/permissions';
 import { getAuthContext } from '@/lib/auth/permissions';
 import { canManageAllTasks } from '@/lib/auth/capabilities';
 import { hasFullOrgDataAccess, taskListingDenied, shouldScopeTasksToAssignee } from '@/lib/auth/data-scope';
+import { fetchVideoIdsAssignedToEmployee } from '@/lib/data/video-assignments';
 import type { Employee, UserRole } from '@/types/database';
-import { coerceOperationalSkills } from '@/lib/employees/operational-skills';
+import {
+  coerceOperationalSkills,
+  employeeCanBeVideoCameraman,
+  employeeCanBeVideoEditor,
+} from '@/lib/employees/operational-skills';
 
 export type VideoAssignEmployeeRow = Pick<Employee, 'id' | 'full_name' | 'role' | 'operational_skills'>;
 
@@ -12,7 +17,7 @@ function mapVideoAssignRow(row: {
   id: string;
   full_name: string;
   role: UserRole;
-  operational_skills?: UserRole[] | null;
+  operational_skills?: unknown;
 }): VideoAssignEmployeeRow {
   return {
     id: row.id,
@@ -80,6 +85,29 @@ export async function listEmployeesForVideoAssign(
   for (const v of vids ?? []) {
     if (v.editor_id) ids.add(v.editor_id);
     if (v.cameraman_id) ids.add(v.cameraman_id);
+  }
+
+  const vaVideoIds = await fetchVideoIdsAssignedToEmployee(supabase, eid);
+  if (vaVideoIds.length) {
+    const { data: co, error: eVa } = await supabase
+      .from('video_assignments')
+      .select('employee_id')
+      .in('video_id', vaVideoIds);
+    if (eVa) throw new Error(eVa.message);
+    for (const r of co ?? []) {
+      if (r.employee_id) ids.add(r.employee_id as string);
+    }
+  }
+
+  const { data: skillRows, error: eSkill } = await supabase
+    .from('employees')
+    .select('id, full_name, role, operational_skills')
+    .eq('is_active', true)
+    .is('archived_at', null);
+  if (eSkill) throw new Error(eSkill.message);
+  for (const r of skillRows ?? []) {
+    const row = mapVideoAssignRow(r);
+    if (employeeCanBeVideoEditor(row) || employeeCanBeVideoCameraman(row)) ids.add(row.id);
   }
 
   const { data, error } = await supabase

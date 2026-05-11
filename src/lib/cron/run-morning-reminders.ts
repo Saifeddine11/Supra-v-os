@@ -10,6 +10,7 @@ import {
 } from '@/lib/email/templates/morning-reminder';
 import { createNotificationOnce } from '@/lib/notifications/notify';
 import { getCronEmailPrefs } from '@/lib/cron/user-notification-prefs';
+import { fetchTaskIdsAssignedToEmployee } from '@/lib/data/task-assignments';
 
 export type MorningRemindersResult = {
   success: boolean;
@@ -63,10 +64,14 @@ export async function runMorningReminders(): Promise<MorningRemindersResult> {
 
     employeesProcessed += 1;
 
+    const fromPivot = await fetchTaskIdsAssignedToEmployee(admin, emp.id as string);
+    const taskOrParts = [`assignee_id.eq.${emp.id}`];
+    if (fromPivot.length) taskOrParts.push(`id.in.(${fromPivot.join(',')})`);
+
     const { data: tasks } = await admin
       .from('tasks')
       .select('id,title,deadline,priority,status')
-      .eq('assignee_id', emp.id)
+      .or(taskOrParts.join(','))
       .not('status', 'in', '(done,archived)');
 
     const open = tasks ?? [];

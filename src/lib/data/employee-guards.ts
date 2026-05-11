@@ -143,18 +143,22 @@ export async function assertLastActiveAdminNotRemoved(
 
 /** Returns true if employee has FK-related history (block hard delete). */
 export async function employeeHasBlockingRelations(supabase: SB, employeeId: string): Promise<boolean> {
-  const [tasks, vEd, vCam, proj, int, clients] = await Promise.all([
+  const [tasks, ta, vEd, vCam, va, proj, int, clients] = await Promise.all([
     supabase.from('tasks').select('id').eq('assignee_id', employeeId).limit(1),
+    supabase.from('task_assignments').select('id').eq('employee_id', employeeId).limit(1),
     supabase.from('videos').select('id').eq('editor_id', employeeId).limit(1),
     supabase.from('videos').select('id').eq('cameraman_id', employeeId).limit(1),
+    supabase.from('video_assignments').select('id').eq('employee_id', employeeId).limit(1),
     supabase.from('projects').select('id').eq('lead_id', employeeId).limit(1),
     supabase.from('internal_projects').select('id').eq('owner_id', employeeId).limit(1),
     supabase.from('clients').select('id').eq('account_manager_id', employeeId).limit(1),
   ]);
   const has =
     (tasks.data?.length ?? 0) > 0 ||
+    (ta.data?.length ?? 0) > 0 ||
     (vEd.data?.length ?? 0) > 0 ||
     (vCam.data?.length ?? 0) > 0 ||
+    (va.data?.length ?? 0) > 0 ||
     (proj.data?.length ?? 0) > 0 ||
     (int.data?.length ?? 0) > 0 ||
     (clients.data?.length ?? 0) > 0;

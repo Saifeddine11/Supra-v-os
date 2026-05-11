@@ -18,6 +18,7 @@ import type { InvoiceStatus, TaskPriority, UserRole, VideoStatus } from '@/types
 import { INVOICE_STATUS_MAP, ROLE_LABELS, VIDEO_STATUS_MAP } from '@/types/domain';
 import { formatAgencyMoneyCompact } from '@/lib/money/format-money';
 import { getAgencyDisplayCurrency } from '@/lib/data/agency-settings-db';
+import { fetchAssignmentsForTasks, formatTaskAssigneeSummary } from '@/lib/data/task-assignments';
 
 const ACTIVE_PROJECT_STATUSES = ['in_progress', 'waiting_client', 'waiting_content', 'review'] as const;
 
@@ -25,6 +26,21 @@ function videoTone(status: VideoStatus): VideoRowMock['tone'] {
   if (status === 'client_revision' || status === 'sent_to_client') return 'warning';
   if (status === 'validated' || status === 'published') return 'success';
   return 'default';
+}
+
+function labelTaskAssignees(
+  taskId: string,
+  legacyAssigneeId: string | null,
+  assignMap: Map<string, { id: string; full_name: string }[]>,
+  empName: Map<string, string>,
+): string {
+  const people = assignMap.get(taskId) ?? [];
+  if (people.length > 0) {
+    const s = formatTaskAssigneeSummary(people);
+    return s || 'Non assigné';
+  }
+  if (legacyAssigneeId) return empName.get(legacyAssigneeId) ?? 'Non assigné';
+  return 'Non assigné';
 }
 
 function invoiceIsOpenDebt(row: { status: InvoiceStatus; due_date: string }): boolean {
@@ -205,6 +221,12 @@ export async function fetchDashboardOperational(ctx: AuthContext): Promise<Dashb
   const employees = employeesR.data ?? [];
   const empName = new Map(employees.map((e) => [e.id as string, e.full_name as string]));
 
+  const openTasks = tasksOpenR.data ?? [];
+  const taskAssignMap = await fetchAssignmentsForTasks(
+    supabase,
+    openTasks.map((t) => t.id as string),
+  );
+
   /** --- Vidéos : compteurs + pipeline --- */
   const videoRows = videosR.data ?? [];
   const validationClients = new Set<string>();
@@ -245,7 +267,6 @@ export async function fetchDashboardOperational(ctx: AuthContext): Promise<Dashb
     });
 
   /** --- Tâches équipe --- */
-  const openTasks = tasksOpenR.data ?? [];
   const todayTasks: TaskRowMock[] = [];
   const overdueTasks: TaskRowMock[] = [];
 
@@ -253,7 +274,12 @@ export async function fetchDashboardOperational(ctx: AuthContext): Promise<Dashb
     const dl = t.deadline as string | null;
     if (!dl) continue;
     const d = new Date(dl);
-    const assignee = t.assignee_id ? (empName.get(t.assignee_id as string) ?? '—') : 'Non assigné';
+    const assignee = labelTaskAssignees(
+      t.id as string,
+      (t.assignee_id as string | null) ?? null,
+      taskAssignMap,
+      empName,
+    );
     const pr = t.priority as TaskPriority;
     const overdue = isBefore(d, dayStart);
 
@@ -285,11 +311,16 @@ export async function fetchDashboardOperational(ctx: AuthContext): Promise<Dashb
   /** --- Charge équipe --- */
   const hoursByAssignee = new Map<string, number>();
   for (const t of openTasks) {
-    const aid = t.assignee_id as string | null;
-    if (!aid) continue;
+    const pivot = taskAssignMap.get(t.id as string) ?? [];
+    const assigneeIds =
+      pivot.length > 0 ? pivot.map((p) => p.id) : t.assignee_id ? [t.assignee_id as string] : [];
+    if (assigneeIds.length === 0) continue;
     const h = Number(t.estimated_hours);
-    const add = Number.isFinite(h) && h > 0 ? h : 4;
-    hoursByAssignee.set(aid, (hoursByAssignee.get(aid) ?? 0) + add);
+    const base = Number.isFinite(h) && h > 0 ? h : 4;
+    const split = base / assigneeIds.length;
+    for (const aid of assigneeIds) {
+      hoursByAssignee.set(aid, (hoursByAssignee.get(aid) ?? 0) + split);
+    }
   }
 
   const teamWorkload: WorkloadMember[] = employees.map((e) => {
@@ -389,12 +420,22 @@ export async function fetchDashboardOperational(ctx: AuthContext): Promise<Dashb
     if (t.priority !== 'urgent') continue;
     const dl = t.deadline as string | null;
     const overdue = dl ? isBefore(new Date(dl), dayStart) : false;
-    const assignee = t.assignee_id ? (empName.get(t.assignee_id as string) ?? '') : '';
+    const assignee = labelTaskAssignees(
+      t.id as string,
+      (t.assignee_id as string | null) ?? null,
+      taskAssignMap,
+      empName,
+    );
     urgentAcc.push({
       id: `task-${t.id}`,
       type: 'Tâche',
       title: t.title as string,
-      detail: [assignee && `Assignée à ${assignee}`, dl ? taskDueLabel(dl, overdue) : null].filter(Boolean).join(' · '),
+      detail: [
+        assignee !== 'Non assigné' ? `Assignés : ${assignee}` : null,
+        dl ? taskDueLabel(dl, overdue) : null,
+      ]
+        .filter(Boolean)
+        .join(' · '),
       severity: 'high',
     });
   }

@@ -12,9 +12,40 @@ import {
 } from '@/lib/auth/data-scope';
 import { actionError, actionOk, getPostgrestError, type ActionResult } from '@/lib/actions/types';
 import type { TaskPriority, TaskStatus } from '@/types/database';
-import { notifyTaskAssigned, notifyTaskBlocked } from '@/lib/notifications/task-events';
+import { notifyTaskAssignees, notifyTaskBlocked } from '@/lib/notifications/task-events';
 import { logStaffActivity } from '@/lib/activity/log-activity';
 import { requireAssignableEmployee } from '@/lib/data/employee-guards';
+import {
+  fetchAssignmentsForTasks,
+  legacyPrimaryAssignee,
+  replaceTaskAssignments,
+} from '@/lib/data/task-assignments';
+
+function dedupeIds(ids: string[]): string[] {
+  return [...new Set(ids.map((x) => x.trim()).filter(Boolean))];
+}
+
+function parseJsonIdArray(raw: unknown): string[] {
+  if (typeof raw !== 'string') return [];
+  const t = raw.trim();
+  if (!t) return [];
+  try {
+    const arr = JSON.parse(t) as unknown;
+    if (!Array.isArray(arr)) return [];
+    return arr.map((x) => String(x).trim()).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function parseAssigneeIdsFromForm(formData: FormData): string[] {
+  let ids = dedupeIds(parseJsonIdArray(formData.get('assignee_ids')));
+  if (ids.length === 0) {
+    const leg = String(formData.get('assignee_id') ?? '').trim();
+    if (leg) ids = [leg];
+  }
+  return ids;
+}
 
 export async function createTaskAction(formData: FormData): Promise<ActionResult<{ id: string }>> {
   const ctx = await getAuthContext();
@@ -31,7 +62,7 @@ export async function createTaskAction(formData: FormData): Promise<ActionResult
   if (!title) return actionError('Le titre est requis.');
 
   const clientId = String(formData.get('client_id') ?? '').trim();
-  let assigneeId = String(formData.get('assignee_id') ?? '').trim();
+  let assigneeIds = parseAssigneeIdsFromForm(formData);
   const deadlineRaw = String(formData.get('deadline') ?? '').trim();
 
   if (clientId && !(await assertClientRecordVisible(supabase, ctx, clientId))) {
@@ -39,20 +70,25 @@ export async function createTaskAction(formData: FormData): Promise<ActionResult
   }
 
   if (shouldScopeTasksToAssignee(ctx) && ctx.employee) {
-    if (assigneeId && assigneeId !== ctx.employee.id) {
+    const eid = ctx.employee.id;
+    if (assigneeIds.some((id) => id && id !== eid)) {
       return actionError('Vous ne pouvez vous assigner des tâches qu’à vous-même.');
     }
-    assigneeId = ctx.employee.id;
+    if (assigneeIds.length === 0) assigneeIds = [eid];
   }
 
-  const assignCheck = await requireAssignableEmployee(supabase, assigneeId || null);
-  if (!assignCheck.ok) return assignCheck;
+  for (const aid of assigneeIds) {
+    const assignCheck = await requireAssignableEmployee(supabase, aid);
+    if (!assignCheck.ok) return assignCheck;
+  }
+
+  const primary = legacyPrimaryAssignee(assigneeIds);
 
   const row = {
     title,
     description: String(formData.get('description') ?? '').trim() || null,
     client_id: clientId || null,
-    assignee_id: assigneeId || null,
+    assignee_id: primary.assignee_id,
     status: (String(formData.get('status') ?? 'todo') || 'todo') as TaskStatus,
     priority: (String(formData.get('priority') ?? 'normal') || 'normal') as TaskPriority,
     deadline: deadlineRaw ? new Date(deadlineRaw).toISOString() : null,
@@ -62,6 +98,13 @@ export async function createTaskAction(formData: FormData): Promise<ActionResult
   const { data, error } = await supabase.from('tasks').insert(row).select('id').single();
   if (error) return actionError(getPostgrestError(error));
 
+  try {
+    await replaceTaskAssignments(supabase, data.id, assigneeIds);
+  } catch (e) {
+    await supabase.from('tasks').delete().eq('id', data.id);
+    return actionError(e instanceof Error ? e.message : 'Assignations invalides.');
+  }
+
   await logStaffActivity(ctx, {
     action: 'created',
     entityType: 'task',
@@ -69,9 +112,7 @@ export async function createTaskAction(formData: FormData): Promise<ActionResult
     metadata: { title },
   });
 
-  if (row.assignee_id) {
-    await notifyTaskAssigned(row.assignee_id, data.id, title);
-  }
+  await notifyTaskAssignees(assigneeIds, data.id, title);
 
   revalidatePath('/tasks');
   revalidatePath('/tasks/calendar');
@@ -92,24 +133,40 @@ export async function updateTaskAction(id: string, formData: FormData): Promise<
   if (!title) return actionError('Le titre est requis.');
 
   const clientId = String(formData.get('client_id') ?? '').trim();
-  let assigneeId = String(formData.get('assignee_id') ?? '').trim();
+  let assigneeIds = parseAssigneeIdsFromForm(formData);
   const deadlineRaw = String(formData.get('deadline') ?? '').trim();
 
   if (clientId && !(await assertClientRecordVisible(supabase, ctx, clientId))) {
     return actionError('Client non autorisé pour cette tâche.');
   }
 
-  if (!canManageAllTasks(ctx.role) && ctx.employee) {
-    if (assigneeId && assigneeId !== ctx.employee.id) {
-      return actionError('Vous ne pouvez pas réattribuer cette tâche.');
+  const { data: taskMeta } = await supabase.from('tasks').select('video_id').eq('id', id).maybeSingle();
+  if (taskMeta?.video_id) {
+    const vid = taskMeta.video_id as string;
+    const { data: va } = await supabase.from('video_assignments').select('employee_id').eq('video_id', vid);
+    const { data: vrow } = await supabase.from('videos').select('editor_id,cameraman_id').eq('id', vid).maybeSingle();
+    const s = new Set<string>();
+    for (const r of va ?? []) {
+      if (r.employee_id) s.add(r.employee_id as string);
     }
-    assigneeId = ctx.employee.id;
+    if (vrow?.editor_id) s.add(vrow.editor_id as string);
+    if (vrow?.cameraman_id) s.add(vrow.cameraman_id as string);
+    assigneeIds = [...s];
+  } else if (!canManageAllTasks(ctx.role) && ctx.employee) {
+    assigneeIds = [ctx.employee.id];
   }
 
-  const assignCheck = await requireAssignableEmployee(supabase, assigneeId || null);
-  if (!assignCheck.ok) return assignCheck;
+  for (const aid of assigneeIds) {
+    const assignCheck = await requireAssignableEmployee(supabase, aid);
+    if (!assignCheck.ok) return assignCheck;
+  }
 
-  const { data: prev } = await supabase.from('tasks').select('assignee_id').eq('id', id).maybeSingle();
+  const prevMap = await fetchAssignmentsForTasks(supabase, [id]);
+  const prevSet = new Set((prevMap.get(id) ?? []).map((a) => a.id));
+  const { data: curTask } = await supabase.from('tasks').select('assignee_id').eq('id', id).maybeSingle();
+  if (curTask?.assignee_id) prevSet.add(curTask.assignee_id as string);
+
+  const primary = legacyPrimaryAssignee(assigneeIds);
 
   const { error } = await supabase
     .from('tasks')
@@ -117,7 +174,7 @@ export async function updateTaskAction(id: string, formData: FormData): Promise<
       title,
       description: String(formData.get('description') ?? '').trim() || null,
       client_id: clientId || null,
-      assignee_id: assigneeId || null,
+      assignee_id: primary.assignee_id,
       status: String(formData.get('status') ?? 'todo') as TaskStatus,
       priority: String(formData.get('priority') ?? 'normal') as TaskPriority,
       deadline: deadlineRaw ? new Date(deadlineRaw).toISOString() : null,
@@ -127,6 +184,12 @@ export async function updateTaskAction(id: string, formData: FormData): Promise<
 
   if (error) return actionError(getPostgrestError(error));
 
+  try {
+    await replaceTaskAssignments(supabase, id, assigneeIds);
+  } catch (e) {
+    return actionError(e instanceof Error ? e.message : 'Échec mise à jour des assignations.');
+  }
+
   await logStaffActivity(ctx, {
     action: 'updated',
     entityType: 'task',
@@ -134,9 +197,10 @@ export async function updateTaskAction(id: string, formData: FormData): Promise<
     metadata: { title },
   });
 
-  const nextAssignee = assigneeId || null;
-  if (nextAssignee && nextAssignee !== (prev?.assignee_id ?? '')) {
-    await notifyTaskAssigned(nextAssignee, id, title);
+  const nextSet = new Set(assigneeIds);
+  const newly = assigneeIds.filter((eid) => !prevSet.has(eid));
+  if (newly.length) {
+    await notifyTaskAssignees(newly, id, title);
   }
 
   revalidatePath('/tasks');
@@ -173,8 +237,13 @@ export async function updateTaskStatusAction(id: string, status: TaskStatus): Pr
   });
 
   if (status === 'blocked') {
-    const { data: t } = await supabase.from('tasks').select('assignee_id,title').eq('id', id).maybeSingle();
-    if (t) await notifyTaskBlocked(t.assignee_id, id, t.title);
+    const { data: t } = await supabase.from('tasks').select('title').eq('id', id).maybeSingle();
+    const am = await fetchAssignmentsForTasks(supabase, [id]);
+    const ids = (am.get(id) ?? []).map((a) => a.id);
+    const { data: row } = await supabase.from('tasks').select('assignee_id').eq('id', id).maybeSingle();
+    const all = new Set(ids);
+    if (row?.assignee_id) all.add(row.assignee_id as string);
+    await notifyTaskBlocked([...all], id, t?.title ?? 'Tâche');
   }
 
   revalidatePath('/tasks');

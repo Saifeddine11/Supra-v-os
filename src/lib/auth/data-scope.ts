@@ -6,6 +6,11 @@
 import 'server-only';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
+import {
+  employeeHasVideoAssignment,
+  fetchVideoIdsAssignedToEmployee,
+} from '@/lib/data/video-assignments';
+import { employeeHasTaskAssignment } from '@/lib/data/task-assignments';
 import type { AuthContext } from '@/lib/auth/permissions';
 import { canModifyQuotes, canViewInvoices } from '@/lib/auth/capabilities';
 import type { Project, UserRole } from '@/types/database';
@@ -75,7 +80,16 @@ export async function resolveVisibleClientIds(
       .select('client_id')
       .or(`editor_id.eq.${eid},cameraman_id.eq.${eid}`);
     if (error) throw new Error(error.message);
-    return [...new Set((data ?? []).map((r) => r.client_id).filter(Boolean))] as string[];
+    const out = new Set<string>((data ?? []).map((r) => r.client_id).filter(Boolean) as string[]);
+    const vaIds = await fetchVideoIdsAssignedToEmployee(sb, eid);
+    if (vaIds.length) {
+      const { data: v2, error: e2 } = await sb.from('videos').select('client_id').in('id', vaIds);
+      if (e2) throw new Error(e2.message);
+      for (const r of v2 ?? []) {
+        if (r.client_id) out.add(r.client_id as string);
+      }
+    }
+    return [...out];
   }
 
   if (er === 'developer') {
@@ -235,9 +249,16 @@ export async function assertDocumentRecordVisible(
       .eq('id', doc.video_id)
       .maybeSingle();
     if (!v) return false;
-    if (er === 'editor') return v.editor_id === empId;
-    if (er === 'cameraman') return v.cameraman_id === empId;
-    return v.editor_id === empId || v.cameraman_id === empId;
+    if (er === 'editor') {
+      if (v.editor_id === empId || v.cameraman_id === empId) return true;
+      return employeeHasVideoAssignment(sb, doc.video_id, empId, 'any');
+    }
+    if (er === 'cameraman') {
+      if (v.cameraman_id === empId) return true;
+      return employeeHasVideoAssignment(sb, doc.video_id, empId, 'cameraman');
+    }
+    if (v.editor_id === empId || v.cameraman_id === empId) return true;
+    return employeeHasVideoAssignment(sb, doc.video_id, empId, 'any');
   }
 
   if (doc.project_id && (er === 'developer' || er === 'seo')) {
@@ -274,7 +295,12 @@ export async function assertTaskRecordVisible(
   if (!t) return false;
   if (hasFullOrgDataAccess(ctx)) return true;
   if (taskListingDenied(ctx)) return false;
-  if (shouldScopeTasksToAssignee(ctx)) return t.assignee_id === ctx.employee?.id;
+  if (shouldScopeTasksToAssignee(ctx)) {
+    const eid = ctx.employee?.id;
+    if (!eid) return false;
+    if (t.assignee_id === eid) return true;
+    return employeeHasTaskAssignment(sb, taskId, eid);
+  }
   return true;
 }
 
@@ -298,8 +324,17 @@ export async function assertVideoRecordVisible(
   const er = effectiveRole(ctx.role);
   const empId = ctx.employee?.id;
   if (!empId) return false;
-  if (er === 'editor') return v.editor_id === empId || v.cameraman_id === empId;
-  if (er === 'cameraman') return v.cameraman_id === empId;
-  if (er === 'community_manager') return v.editor_id === empId || v.cameraman_id === empId;
+  if (er === 'editor') {
+    if (v.editor_id === empId || v.cameraman_id === empId) return true;
+    return employeeHasVideoAssignment(sb, videoId, empId, 'any');
+  }
+  if (er === 'cameraman') {
+    if (v.cameraman_id === empId) return true;
+    return employeeHasVideoAssignment(sb, videoId, empId, 'cameraman');
+  }
+  if (er === 'community_manager') {
+    if (v.editor_id === empId || v.cameraman_id === empId) return true;
+    return employeeHasVideoAssignment(sb, videoId, empId, 'any');
+  }
   return false;
 }

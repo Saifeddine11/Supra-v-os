@@ -155,14 +155,15 @@ function clientScopeAccent(task: TaskEnriched, overdue: boolean): CalendarTaskAc
 }
 
 function assigneeAccent(task: TaskEnriched, overdue: boolean): CalendarTaskAccent {
-  if (!task.assignee_id) {
+  const accentId = task.assignees?.[0]?.id ?? task.assignee_id ?? '';
+  if (!accentId) {
     return {
       border: 'border-l-muted-foreground/45',
       dot: 'bg-muted-foreground/45',
       tint: 'bg-muted/35',
     };
   }
-  const i = assigneeAccentIndex(task.assignee_id);
+  const i = assigneeAccentIndex(accentId);
   const dot = ASSIGNEE_DOT[i];
   const borders = [
     'border-l-blue-600/80 dark:border-l-blue-400/65',

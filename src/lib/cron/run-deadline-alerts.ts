@@ -101,6 +101,17 @@ export async function runDeadlineAlerts(): Promise<DeadlineAlertsResult> {
     }
   }
 
+  async function taskRecipientEmployeeIds(taskId: string, legacyAssigneeId: string | null): Promise<string[]> {
+    const ids = new Set<string>();
+    const { data: rows } = await admin.from('task_assignments').select('employee_id').eq('task_id', taskId);
+    for (const r of rows ?? []) {
+      const eid = r.employee_id as string | undefined;
+      if (eid) ids.add(eid);
+    }
+    if (legacyAssigneeId) ids.add(legacyAssigneeId);
+    return [...ids];
+  }
+
   // Tasks due in 24h (not overdue yet)
   const { data: tasksSoon } = await admin
     .from('tasks')
@@ -111,32 +122,35 @@ export async function runDeadlineAlerts(): Promise<DeadlineAlertsResult> {
     .lte('deadline', in24h.toISOString());
 
   for (const t of tasksSoon ?? []) {
-    const uid = await getEmployeeUserId(t.assignee_id);
-    if (!uid) continue;
-    const { data: emp } = await admin.from('employees').select('email,full_name').eq('id', t.assignee_id!).maybeSingle();
+    const recipients = await taskRecipientEmployeeIds(t.id as string, (t.assignee_id as string | null) ?? null);
     const clientName = joinedRelationName(t.clients);
     const dl = format(new Date(t.deadline!), "d MMM yyyy HH:mm");
-    await notifyUser({
-      userId: uid,
-      type: 'task_deadline_approaching',
-      priority: t.priority === 'urgent' ? 'urgent' : 'normal',
-      title: 'Tâche à échéance sous 24h',
-      message: t.title,
-      entityType: 'task',
-      entityId: t.id,
-      linkUrl: `${base}/tasks`,
-      email: emp
-        ? {
-            to: emp.email,
-            name: emp.full_name.split(/\s+/)[0] ?? emp.full_name,
-            entityTitle: t.title,
-            entityLabel: 'Tâche',
-            clientName,
-            deadline: dl,
-            priority: t.priority,
-          }
-        : undefined,
-    });
+    for (const empId of recipients) {
+      const uid = await getEmployeeUserId(empId);
+      if (!uid) continue;
+      const { data: emp } = await admin.from('employees').select('email,full_name').eq('id', empId).maybeSingle();
+      await notifyUser({
+        userId: uid,
+        type: 'task_deadline_approaching',
+        priority: t.priority === 'urgent' ? 'urgent' : 'normal',
+        title: 'Tâche à échéance sous 24h',
+        message: t.title,
+        entityType: 'task',
+        entityId: t.id,
+        linkUrl: `${base}/tasks`,
+        email: emp
+          ? {
+              to: emp.email,
+              name: emp.full_name.split(/\s+/)[0] ?? emp.full_name,
+              entityTitle: t.title,
+              entityLabel: 'Tâche',
+              clientName,
+              deadline: dl,
+              priority: t.priority,
+            }
+          : undefined,
+      });
+    }
   }
 
   // Overdue tasks
@@ -148,32 +162,62 @@ export async function runDeadlineAlerts(): Promise<DeadlineAlertsResult> {
     .lt('deadline', now.toISOString());
 
   for (const t of tasksOver ?? []) {
-    const uid = await getEmployeeUserId(t.assignee_id);
-    if (!uid) continue;
-    const { data: emp } = await admin.from('employees').select('email,full_name').eq('id', t.assignee_id!).maybeSingle();
+    const recipients = await taskRecipientEmployeeIds(t.id as string, (t.assignee_id as string | null) ?? null);
     const clientName = joinedRelationName(t.clients);
     const dl = format(new Date(t.deadline!), "d MMM yyyy HH:mm");
-    await notifyUser({
-      userId: uid,
-      type: 'task_overdue',
-      priority: 'urgent',
-      title: 'Tâche en retard',
-      message: t.title,
-      entityType: 'task',
-      entityId: t.id,
-      linkUrl: `${base}/tasks`,
-      email: emp
-        ? {
-            to: emp.email,
-            name: emp.full_name.split(/\s+/)[0] ?? emp.full_name,
-            entityTitle: t.title,
-            entityLabel: 'Tâche',
-            clientName,
-            deadline: dl,
-            priority: t.priority,
-          }
-        : undefined,
-    });
+    for (const empId of recipients) {
+      const uid = await getEmployeeUserId(empId);
+      if (!uid) continue;
+      const { data: emp } = await admin.from('employees').select('email,full_name').eq('id', empId).maybeSingle();
+      await notifyUser({
+        userId: uid,
+        type: 'task_overdue',
+        priority: 'urgent',
+        title: 'Tâche en retard',
+        message: t.title,
+        entityType: 'task',
+        entityId: t.id,
+        linkUrl: `${base}/tasks`,
+        email: emp
+          ? {
+              to: emp.email,
+              name: emp.full_name.split(/\s+/)[0] ?? emp.full_name,
+              entityTitle: t.title,
+              entityLabel: 'Tâche',
+              clientName,
+              deadline: dl,
+              priority: t.priority,
+            }
+          : undefined,
+      });
+    }
+  }
+
+  async function videoEditorRecipientEmployeeIds(
+    videoRows: { id: string; editor_id?: string | null }[],
+  ): Promise<Map<string, string[]>> {
+    const ids = [...new Set(videoRows.map((v) => v.id))];
+    const map = new Map<string, Set<string>>();
+    for (const id of ids) map.set(id, new Set());
+    if (ids.length === 0) return new Map();
+    const { data: assigns, error } = await admin
+      .from('video_assignments')
+      .select('video_id, employee_id')
+      .in('video_id', ids)
+      .eq('assignment_role', 'editor');
+    if (error) {
+      errors.push(`video_assignments (editors): ${error.message}`);
+      return new Map(ids.map((id) => [id, []]));
+    }
+    for (const a of assigns ?? []) {
+      const s = map.get(a.video_id as string);
+      if (s && a.employee_id) s.add(a.employee_id as string);
+    }
+    for (const v of videoRows) {
+      const s = map.get(v.id);
+      if (s && v.editor_id) s.add(v.editor_id as string);
+    }
+    return new Map([...map].map(([k, v]) => [k, [...v]]));
   }
 
   // Vidéos : delivery_deadline (jour) et/ou client_delivery_at (timestamptz)
@@ -198,36 +242,53 @@ export async function runDeadlineAlerts(): Promise<DeadlineAlertsResult> {
     .gte('client_delivery_at', soonAtStart)
     .lte('client_delivery_at', soonAtEnd);
 
-  const soonSeen = new Set<string>();
+  type VideoDeadlineAlertRow = {
+    id: string;
+    title: string;
+    delivery_deadline?: string | null;
+    client_delivery_at?: string | null;
+    editor_id?: string | null;
+    clients: unknown;
+  };
+  const soonMerged: VideoDeadlineAlertRow[] = [];
+  const soonPre = new Set<string>();
   for (const v of [...(videosSoonDate ?? []), ...(videosSoonAt ?? [])]) {
-    if (soonSeen.has(v.id)) continue;
-    soonSeen.add(v.id);
-    const uid = await getEmployeeUserId(v.editor_id);
-    if (!uid) continue;
-    const { data: emp } = await admin.from('employees').select('email,full_name').eq('id', v.editor_id!).maybeSingle();
+    if (soonPre.has(v.id)) continue;
+    soonPre.add(v.id);
+    soonMerged.push(v as VideoDeadlineAlertRow);
+  }
+  const soonEditorsByVideo = await videoEditorRecipientEmployeeIds(soonMerged);
+
+  for (const v of soonMerged) {
+    const recipients = soonEditorsByVideo.get(v.id as string) ?? [];
     const clientName = joinedRelationName(v.clients);
     const deadlineLabel = (v.client_delivery_at ?? v.delivery_deadline ?? '') as string;
-    await notifyUser({
-      userId: uid,
-      type: 'deadline_soon',
-      priority: 'high',
-      title: 'Échéance vidéo imminente',
-      message: v.title,
-      entityType: 'video',
-      entityId: v.id,
-      linkUrl: `${base}/videos`,
-      email: emp
-        ? {
-            to: emp.email,
-            name: emp.full_name.split(/\s+/)[0] ?? emp.full_name,
-            entityTitle: v.title,
-            entityLabel: 'Vidéo',
-            clientName,
-            deadline: deadlineLabel,
-            priority: 'high',
-          }
-        : undefined,
-    });
+    for (const empId of recipients) {
+      const uid = await getEmployeeUserId(empId);
+      if (!uid) continue;
+      const { data: emp } = await admin.from('employees').select('email,full_name').eq('id', empId).maybeSingle();
+      await notifyUser({
+        userId: uid,
+        type: 'deadline_soon',
+        priority: 'high',
+        title: 'Échéance vidéo imminente',
+        message: v.title as string,
+        entityType: 'video',
+        entityId: v.id as string,
+        linkUrl: `${base}/videos`,
+        email: emp
+          ? {
+              to: emp.email,
+              name: emp.full_name.split(/\s+/)[0] ?? emp.full_name,
+              entityTitle: v.title as string,
+              entityLabel: 'Vidéo',
+              clientName,
+              deadline: deadlineLabel,
+              priority: 'high',
+            }
+          : undefined,
+      });
+    }
   }
 
   const { data: videosOverDate } = await admin
@@ -244,36 +305,45 @@ export async function runDeadlineAlerts(): Promise<DeadlineAlertsResult> {
     .not('client_delivery_at', 'is', null)
     .lt('client_delivery_at', todayStart);
 
-  const overSeen = new Set<string>();
+  const overMerged: VideoDeadlineAlertRow[] = [];
+  const overPre = new Set<string>();
   for (const v of [...(videosOverDate ?? []), ...(videosOverAt ?? [])]) {
-    if (overSeen.has(v.id)) continue;
-    overSeen.add(v.id);
-    const uid = await getEmployeeUserId(v.editor_id);
-    if (!uid) continue;
-    const { data: emp } = await admin.from('employees').select('email,full_name').eq('id', v.editor_id!).maybeSingle();
+    if (overPre.has(v.id)) continue;
+    overPre.add(v.id);
+    overMerged.push(v as VideoDeadlineAlertRow);
+  }
+  const overEditorsByVideo = await videoEditorRecipientEmployeeIds(overMerged);
+
+  for (const v of overMerged) {
+    const recipients = overEditorsByVideo.get(v.id as string) ?? [];
     const clientName = joinedRelationName(v.clients);
     const deadlineLabel = (v.client_delivery_at ?? v.delivery_deadline ?? '') as string;
-    await notifyUser({
-      userId: uid,
-      type: 'deadline_soon',
-      priority: 'urgent',
-      title: 'Livraison vidéo en retard',
-      message: v.title,
-      entityType: 'video',
-      entityId: v.id,
-      linkUrl: `${base}/videos`,
-      email: emp
-        ? {
-            to: emp.email,
-            name: emp.full_name.split(/\s+/)[0] ?? emp.full_name,
-            entityTitle: v.title,
-            entityLabel: 'Vidéo',
-            clientName,
-            deadline: deadlineLabel,
-            priority: 'urgent',
-          }
-        : undefined,
-    });
+    for (const empId of recipients) {
+      const uid = await getEmployeeUserId(empId);
+      if (!uid) continue;
+      const { data: emp } = await admin.from('employees').select('email,full_name').eq('id', empId).maybeSingle();
+      await notifyUser({
+        userId: uid,
+        type: 'deadline_soon',
+        priority: 'urgent',
+        title: 'Livraison vidéo en retard',
+        message: v.title as string,
+        entityType: 'video',
+        entityId: v.id as string,
+        linkUrl: `${base}/videos`,
+        email: emp
+          ? {
+              to: emp.email,
+              name: emp.full_name.split(/\s+/)[0] ?? emp.full_name,
+              entityTitle: v.title as string,
+              entityLabel: 'Vidéo',
+              clientName,
+              deadline: deadlineLabel,
+              priority: 'urgent',
+            }
+          : undefined,
+      });
+    }
   }
 
   // Invoices due tomorrow (date field)

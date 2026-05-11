@@ -8,11 +8,21 @@ import {
 } from '@/lib/auth/data-scope';
 import type { Video } from '@/types/database';
 import { effectiveClientDeliveryIso } from '@/lib/videos/video-schedule';
+import {
+  fetchAssignmentsForVideos,
+  fetchVideoIdsAssignedToEmployee,
+  fetchVideoIdsForAssignmentRole,
+  formatAssigneeNames,
+  type VideoAssigneeRef,
+} from '@/lib/data/video-assignments';
 
 export type VideoWithClient = Video & {
   clients: { name: string } | null;
+  /** Libellés concaténés (liste / legacy). */
   editor_name: string | null;
   cameraman_name: string | null;
+  editors: VideoAssigneeRef[];
+  cameramen: VideoAssigneeRef[];
 };
 
 async function enrichVideoRows(
@@ -20,22 +30,41 @@ async function enrichVideoRows(
 ): Promise<VideoWithClient[]> {
   if (rows.length === 0) return [];
   const supabase = await createClient();
-  const empIds = [
-    ...new Set(
-      rows.flatMap((v) => [v.editor_id, v.cameraman_id].filter(Boolean) as string[])
-    ),
-  ];
-  if (empIds.length === 0) {
-    return rows.map((v) => ({ ...v, editor_name: null, cameraman_name: null }));
+  const videoIds = rows.map((r) => r.id);
+  const assignMap = await fetchAssignmentsForVideos(supabase, videoIds);
+  const allEmpIds = new Set<string>();
+  for (const v of rows) {
+    if (v.editor_id) allEmpIds.add(v.editor_id);
+    if (v.cameraman_id) allEmpIds.add(v.cameraman_id);
+    const a = assignMap.get(v.id);
+    if (a) {
+      a.editors.forEach((e) => allEmpIds.add(e.id));
+      a.cameramen.forEach((e) => allEmpIds.add(e.id));
+    }
   }
-  const { data: emps, error } = await supabase.from('employees').select('id, full_name').in('id', empIds);
-  if (error) throw new Error(error.message);
-  const map = new Map((emps ?? []).map((e) => [e.id, e.full_name]));
-  return rows.map((v) => ({
-    ...v,
-    editor_name: v.editor_id ? map.get(v.editor_id) ?? null : null,
-    cameraman_name: v.cameraman_id ? map.get(v.cameraman_id) ?? null : null,
-  }));
+  const nameMap = new Map<string, string>();
+  if (allEmpIds.size > 0) {
+    const { data: emps, error } = await supabase.from('employees').select('id, full_name').in('id', [...allEmpIds]);
+    if (error) throw new Error(error.message);
+    for (const e of emps ?? []) nameMap.set(e.id as string, String((e as { full_name: string }).full_name));
+  }
+  return rows.map((v) => {
+    let editors = [...(assignMap.get(v.id)?.editors ?? [])];
+    let cameramen = [...(assignMap.get(v.id)?.cameramen ?? [])];
+    if (editors.length === 0 && v.editor_id) {
+      editors = [{ id: v.editor_id, full_name: nameMap.get(v.editor_id) ?? '—' }];
+    }
+    if (cameramen.length === 0 && v.cameraman_id) {
+      cameramen = [{ id: v.cameraman_id, full_name: nameMap.get(v.cameraman_id) ?? '—' }];
+    }
+    return {
+      ...v,
+      editors,
+      cameramen,
+      editor_name: editors.length ? formatAssigneeNames(editors) : null,
+      cameraman_name: cameramen.length ? formatAssigneeNames(cameramen) : null,
+    };
+  });
 }
 
 export async function listVideosWithClients(
@@ -56,10 +85,22 @@ export async function listVideosWithClients(
     const er = effectiveRole(auth.role);
     const eid = auth.employee?.id;
     if (!eid) return [];
-    if (er === 'editor') q = q.or(`editor_id.eq.${eid},cameraman_id.eq.${eid}`);
-    else if (er === 'cameraman') q = q.eq('cameraman_id', eid);
-    else if (er === 'community_manager') q = q.or(`editor_id.eq.${eid},cameraman_id.eq.${eid}`);
-    else return [];
+    if (er === 'editor') {
+      const fromVa = await fetchVideoIdsAssignedToEmployee(supabase, eid);
+      const parts = [`editor_id.eq.${eid}`, `cameraman_id.eq.${eid}`];
+      if (fromVa.length) parts.push(`id.in.(${fromVa.join(',')})`);
+      q = q.or(parts.join(','));
+    } else if (er === 'cameraman') {
+      const fromVa = await fetchVideoIdsForAssignmentRole(supabase, eid, 'cameraman');
+      const parts = [`cameraman_id.eq.${eid}`];
+      if (fromVa.length) parts.push(`id.in.(${fromVa.join(',')})`);
+      q = q.or(parts.join(','));
+    } else if (er === 'community_manager') {
+      const fromVa = await fetchVideoIdsAssignedToEmployee(supabase, eid);
+      const parts = [`editor_id.eq.${eid}`, `cameraman_id.eq.${eid}`];
+      if (fromVa.length) parts.push(`id.in.(${fromVa.join(',')})`);
+      q = q.or(parts.join(','));
+    } else return [];
   }
 
   const { data, error } = await q;

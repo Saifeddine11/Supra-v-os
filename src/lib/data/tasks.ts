@@ -7,6 +7,13 @@ import {
 } from '@/lib/auth/data-scope';
 import { canManageAllTasks } from '@/lib/auth/capabilities';
 import type { Task, TaskEnriched, TaskPriority, TaskStatus } from '@/types/database';
+import {
+  employeeHasTaskAssignment,
+  fetchAssignmentsForTasks,
+  fetchTaskIdsAssignedToEmployee,
+  formatTaskAssigneeSummary,
+  type TaskAssigneeRef,
+} from '@/lib/data/task-assignments';
 
 export interface TaskListFilters {
   search?: string;
@@ -23,26 +30,49 @@ export interface TaskListFilters {
 async function enrichTasks(tasks: Task[]): Promise<TaskEnriched[]> {
   if (tasks.length === 0) return [];
   const supabase = await createClient();
+  const taskIds = tasks.map((t) => t.id);
   const clientIds = [...new Set(tasks.map((t) => t.client_id).filter(Boolean))] as string[];
-  const assigneeIds = [...new Set(tasks.map((t) => t.assignee_id).filter(Boolean))] as string[];
+  const assignMap = await fetchAssignmentsForTasks(supabase, taskIds);
+
+  const legacyEmpIds = [
+    ...new Set(tasks.map((t) => t.assignee_id).filter(Boolean)),
+  ] as string[];
+  const allEmpIds = new Set<string>(legacyEmpIds);
+  for (const arr of assignMap.values()) {
+    arr.forEach((a) => allEmpIds.add(a.id));
+  }
 
   const [clientsRes, empRes] = await Promise.all([
     clientIds.length
       ? supabase.from('clients').select('id, name').in('id', clientIds)
       : Promise.resolve({ data: [] as { id: string; name: string }[] }),
-    assigneeIds.length
-      ? supabase.from('employees').select('id, full_name').in('id', assigneeIds)
+    allEmpIds.size
+      ? supabase.from('employees').select('id, full_name').in('id', [...allEmpIds])
       : Promise.resolve({ data: [] as { id: string; full_name: string }[] }),
   ]);
 
   const clientMap = new Map((clientsRes.data ?? []).map((c) => [c.id, c.name]));
   const empMap = new Map((empRes.data ?? []).map((e) => [e.id, e.full_name]));
 
-  return tasks.map((t) => ({
-    ...t,
-    assignee_name: t.assignee_id ? (empMap.get(t.assignee_id) ?? null) : null,
-    client_name: t.client_id ? (clientMap.get(t.client_id) ?? null) : null,
-  }));
+  return tasks.map((t) => {
+    let assignees: TaskAssigneeRef[] = [...(assignMap.get(t.id) ?? [])];
+    if (assignees.length === 0 && t.assignee_id) {
+      assignees = [{ id: t.assignee_id, full_name: empMap.get(t.assignee_id) ?? '—' }];
+    }
+    const assignee_name = assignees.length ? formatTaskAssigneeSummary(assignees) : null;
+    return {
+      ...t,
+      assignees,
+      assignee_name,
+      client_name: t.client_id ? (clientMap.get(t.client_id) ?? null) : null,
+    };
+  });
+}
+
+function orAssigneeAndPivot(assigneeFilterId: string, pivotTaskIds: string[]): string {
+  const parts = [`assignee_id.eq.${assigneeFilterId}`];
+  if (pivotTaskIds.length) parts.push(`id.in.(${pivotTaskIds.join(',')})`);
+  return parts.join(',');
 }
 
 export async function listTasks(
@@ -61,9 +91,12 @@ export async function listTasks(
     .order('deadline', { ascending: true, nullsFirst: false });
 
   if (shouldScopeTasksToAssignee(auth) && auth.employee) {
-    q = q.eq('assignee_id', auth.employee.id);
+    const eid = auth.employee.id;
+    const fromPivot = await fetchTaskIdsAssignedToEmployee(supabase, eid);
+    q = q.or(orAssigneeAndPivot(eid, fromPivot));
   } else if (filters.assigneeId && filters.assigneeId !== 'all') {
-    q = q.eq('assignee_id', filters.assigneeId);
+    const fromPivot = await fetchTaskIdsAssignedToEmployee(supabase, filters.assigneeId);
+    q = q.or(orAssigneeAndPivot(filters.assigneeId, fromPivot));
   }
 
   if (filters.priority && filters.priority !== 'all') {
@@ -114,16 +147,29 @@ export async function listTasksEnriched(
 export async function getTaskById(
   id: string,
   ctx: AuthContext | null = null
-): Promise<Task | null> {
+): Promise<TaskEnriched | null> {
   const auth = ctx ?? (await getAuthContext());
   const supabase = await createClient();
   const { data, error } = await supabase.from('tasks').select('*').eq('id', id).maybeSingle();
   if (error) throw new Error(error.message);
   if (!data || !auth?.role) return null;
   if (taskListingDenied(auth)) return null;
-  if (canManageAllTasks(auth.role)) return data;
-  if (shouldScopeTasksToAssignee(auth) && auth.employee && data.assignee_id === auth.employee.id) {
-    return data;
+  if (canManageAllTasks(auth.role)) {
+    const [enriched] = await enrichTasks([data as Task]);
+    return enriched ?? null;
   }
-  return null;
+  if (shouldScopeTasksToAssignee(auth) && auth.employee) {
+    const eid = auth.employee.id;
+    if (data.assignee_id === eid) {
+      const [enriched] = await enrichTasks([data as Task]);
+      return enriched ?? null;
+    }
+    if (await employeeHasTaskAssignment(supabase, id, eid)) {
+      const [enriched] = await enrichTasks([data as Task]);
+      return enriched ?? null;
+    }
+    return null;
+  }
+  const [enriched] = await enrichTasks([data as Task]);
+  return enriched ?? null;
 }

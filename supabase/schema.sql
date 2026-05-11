@@ -437,6 +437,22 @@ create index idx_tasks_deadline on tasks(deadline);
 create index idx_tasks_priority on tasks(priority);
 create index idx_tasks_parent on tasks(parent_task_id);
 
+-- Multi-assignation tâches (premier assigné reste dans tasks.assignee_id pour compat).
+create table task_assignments (
+  id                uuid primary key default gen_random_uuid(),
+  task_id           uuid not null references tasks(id) on delete cascade,
+  employee_id       uuid not null references employees(id) on delete cascade,
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now(),
+  unique (task_id, employee_id)
+);
+
+create index idx_task_assignments_task on task_assignments(task_id);
+create index idx_task_assignments_employee on task_assignments(employee_id);
+
+create unique index tasks_one_production_task_per_video on tasks (video_id)
+  where video_id is not null;
+
 -- ============================================================================
 -- VIDEOS (production)
 -- ============================================================================
@@ -494,9 +510,9 @@ create index idx_videos_client_delivery_at on videos(client_delivery_at);
 create index idx_videos_shooting_date on videos(shooting_date);
 create index idx_videos_calendar on videos(editorial_calendar_id);
 
--- Add FK on tasks now that videos exists
+-- Add FK on tasks now that videos exists (cascade : tâche production supprimée avec la vidéo)
 alter table tasks add constraint fk_tasks_video
-  foreign key (video_id) references videos(id) on delete set null;
+  foreign key (video_id) references videos(id) on delete cascade;
 
 -- ============================================================================
 -- EDITORIAL CALENDARS (monthly per client)

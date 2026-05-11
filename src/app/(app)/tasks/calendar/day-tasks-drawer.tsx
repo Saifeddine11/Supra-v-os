@@ -84,8 +84,12 @@ export function DayTasksDrawer({
                             <p className="mt-1 text-sm text-muted-foreground">{taskContextLine(t)}</p>
                             <dl className="mt-2 grid gap-1 text-sm text-muted-foreground">
                               <div className="flex flex-wrap gap-x-2">
-                                <dt className="font-medium text-foreground/80">Assigné</dt>
-                                <dd>{t.assignee_name ?? '—'}</dd>
+                                <dt className="font-medium text-foreground/80">Assignés</dt>
+                                <dd className="min-w-0 flex-1">
+                                  {t.assignees?.length
+                                    ? t.assignees.map((p) => p.full_name).join(', ')
+                                    : (t.assignee_name ?? 'Non assigné')}
+                                </dd>
                               </div>
                               <div className="flex flex-wrap gap-x-2">
                                 <dt className="font-medium text-foreground/80">Priorité</dt>

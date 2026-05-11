@@ -6,6 +6,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import type { Client, Employee, Task, TaskStatus, TaskEnriched } from '@/types/database';
 import { TASK_STATUS_MAP, PRIORITY_MAP, TASK_KANBAN_STATUSES } from '@/types/domain';
 import { cn } from '@/lib/utils/cn';
@@ -79,8 +80,36 @@ export function DraggableTaskCard({
         {task.client_name ? (
           <p className="mt-1 text-xs text-muted-foreground">{task.client_name}</p>
         ) : null}
-        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          {task.assignee_name ? <span>{task.assignee_name}</span> : <span className="italic">Non assigné</span>}
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          {task.video_id ? (
+            <Badge
+              variant="outline"
+              className="shrink-0 border-primary/35 text-[10px] font-medium text-primary"
+            >
+              Vidéo
+            </Badge>
+          ) : null}
+          {task.assignees?.length ? (
+            <>
+              {task.assignees.slice(0, 3).map((p) => (
+                <Badge
+                  key={p.id}
+                  variant="outline"
+                  className="max-w-[7.5rem] shrink-0 truncate border-border/80 text-[10px] font-normal"
+                  title={p.full_name}
+                >
+                  {p.full_name.split(/\s+/)[0] ?? p.full_name}
+                </Badge>
+              ))}
+              {task.assignees.length > 3 ? (
+                <span className="text-[10px] text-muted-foreground">+{task.assignees.length - 3}</span>
+              ) : null}
+            </>
+          ) : (
+            <span className="text-xs italic text-muted-foreground">Non assigné</span>
+          )}
+        </div>
+        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           {task.deadline ? (
             <span className={cn('tabular-nums', od && 'font-semibold text-destructive')}>
               {format(new Date(task.deadline), 'd MMM · HH:mm', { locale: fr })}
@@ -88,6 +117,11 @@ export function DraggableTaskCard({
           ) : (
             <span>Pas d&apos;échéance</span>
           )}
+          {task.video_id ? (
+            <Button variant="link" className="h-auto p-0 text-xs font-medium text-primary" asChild>
+              <Link href="/videos">Ouvrir la vidéo</Link>
+            </Button>
+          ) : null}
         </div>
       </div>
       <div

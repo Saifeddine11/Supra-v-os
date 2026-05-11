@@ -1,5 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import type { Employee, Task, TaskStatus, UserRole, Video } from '@/types/database';
+import { fetchVideoIdsAssignedToEmployee } from '@/lib/data/video-assignments';
+import { fetchTaskIdsAssignedToEmployee } from '@/lib/data/task-assignments';
 
 const OPEN_TASK_STATUSES: TaskStatus[] = [
   'todo',
@@ -58,42 +60,71 @@ async function enrichEmployeesToRows(emps: Employee[]): Promise<TeamMemberRow[]>
   const empIds = emps.map((e) => e.id);
   const nowIso = new Date().toISOString();
 
-  const [tasksRes, vEd, vCam, projRes, intRes] = await Promise.all([
+  const empIdSet = new Set(empIds);
+  const [tasksLegRes, taRes, vaRes, vEd, vCam, projRes, intRes] = await Promise.all([
     supabase.from('tasks').select('id, assignee_id, status, deadline').in('assignee_id', empIds),
+    supabase.from('task_assignments').select('task_id, employee_id').in('employee_id', empIds),
+    supabase.from('video_assignments').select('video_id, employee_id').in('employee_id', empIds),
     supabase.from('videos').select('id, editor_id, cameraman_id').in('editor_id', empIds),
     supabase.from('videos').select('id, editor_id, cameraman_id').in('cameraman_id', empIds),
     supabase.from('projects').select('id, lead_id').in('lead_id', empIds).neq('status', 'archived'),
     supabase.from('internal_projects').select('id, owner_id').in('owner_id', empIds).neq('status', 'archived'),
   ]);
-  const videoRows = [...(vEd.data ?? []), ...(vCam.data ?? [])];
-  const seenVid = new Set<string>();
-  const videosResData = videoRows.filter((v) => {
-    const id = (v as { id: string }).id;
-    if (seenVid.has(id)) return false;
-    seenVid.add(id);
-    return true;
-  });
 
-  const tasks = (tasksRes.data ?? []) as Pick<Task, 'id' | 'assignee_id' | 'status' | 'deadline'>[];
+  const taskToEmps = new Map<string, Set<string>>();
+  const addTaskEmp = (taskId: string, eid: string) => {
+    if (!empIdSet.has(eid)) return;
+    if (!taskToEmps.has(taskId)) taskToEmps.set(taskId, new Set());
+    taskToEmps.get(taskId)!.add(eid);
+  };
+  for (const r of taRes.data ?? []) {
+    addTaskEmp(r.task_id as string, r.employee_id as string);
+  }
+  for (const t of tasksLegRes.data ?? []) {
+    const tid = t.id as string;
+    const aid = t.assignee_id as string | null;
+    if (aid) addTaskEmp(tid, aid);
+  }
+
+  const allTaskIds = [...taskToEmps.keys()];
+  const { data: taskFullRows } =
+    allTaskIds.length > 0
+      ? await supabase.from('tasks').select('id, status, deadline').in('id', allTaskIds)
+      : { data: [] as { id: string; status: TaskStatus; deadline: string | null }[] };
+
   const openByEmp = new Map<string, number>();
   const overdueByEmp = new Map<string, number>();
-
-  for (const t of tasks) {
-    if (!t.assignee_id) continue;
+  for (const eid of empIds) {
+    openByEmp.set(eid, 0);
+    overdueByEmp.set(eid, 0);
+  }
+  for (const t of taskFullRows ?? []) {
     if (!OPEN_TASK_STATUSES.includes(t.status)) continue;
-    openByEmp.set(t.assignee_id, (openByEmp.get(t.assignee_id) ?? 0) + 1);
-    if (t.deadline && t.deadline < nowIso) {
-      overdueByEmp.set(t.assignee_id, (overdueByEmp.get(t.assignee_id) ?? 0) + 1);
+    const emps = taskToEmps.get(t.id);
+    if (!emps) continue;
+    for (const eid of emps) {
+      openByEmp.set(eid, (openByEmp.get(eid) ?? 0) + 1);
+      if (t.deadline && t.deadline < nowIso) {
+        overdueByEmp.set(eid, (overdueByEmp.get(eid) ?? 0) + 1);
+      }
     }
   }
 
+  const videosByEmp = new Map<string, Set<string>>();
+  for (const eid of empIds) videosByEmp.set(eid, new Set());
+  for (const r of vaRes.data ?? []) {
+    const eid = r.employee_id as string;
+    const vid = r.video_id as string;
+    if (empIdSet.has(eid)) videosByEmp.get(eid)?.add(vid);
+  }
+  for (const v of [...(vEd.data ?? []), ...(vCam.data ?? [])]) {
+    const row = v as Pick<Video, 'id' | 'editor_id' | 'cameraman_id'>;
+    if (row.editor_id && empIdSet.has(row.editor_id)) videosByEmp.get(row.editor_id)?.add(row.id);
+    if (row.cameraman_id && empIdSet.has(row.cameraman_id)) videosByEmp.get(row.cameraman_id)?.add(row.id);
+  }
   const videoCount = new Map<string, number>();
-  for (const v of videosResData) {
-    const row = v as Pick<Video, 'editor_id' | 'cameraman_id'>;
-    if (row.editor_id) videoCount.set(row.editor_id, (videoCount.get(row.editor_id) ?? 0) + 1);
-    if (row.cameraman_id && row.cameraman_id !== row.editor_id) {
-      videoCount.set(row.cameraman_id, (videoCount.get(row.cameraman_id) ?? 0) + 1);
-    }
+  for (const eid of empIds) {
+    videoCount.set(eid, videosByEmp.get(eid)?.size ?? 0);
   }
 
   const ledCount = new Map<string, number>();
@@ -192,25 +223,48 @@ export async function getTeamMemberDetail(employeeId: string): Promise<TeamMembe
   const [rowArr] = await enrichEmployeesToRows([emp as Employee]);
   if (!rowArr) return null;
 
-  const [tasksRes, videosRes] = await Promise.all([
+  const fromVa = await fetchVideoIdsAssignedToEmployee(supabase, employeeId);
+  const videoOrParts = [`editor_id.eq.${employeeId}`, `cameraman_id.eq.${employeeId}`];
+  if (fromVa.length) videoOrParts.push(`id.in.(${fromVa.join(',')})`);
+
+  const fromTasksPivot = await fetchTaskIdsAssignedToEmployee(supabase, employeeId);
+  const taskOrParts = [`assignee_id.eq.${employeeId}`];
+  if (fromTasksPivot.length) taskOrParts.push(`id.in.(${fromTasksPivot.join(',')})`);
+
+  const [tasksRes, videosRes, rolesRes] = await Promise.all([
     supabase
       .from('tasks')
       .select('*')
-      .eq('assignee_id', employeeId)
+      .or(taskOrParts.join(','))
       .neq('status', 'archived')
       .order('updated_at', { ascending: false })
       .limit(25),
     supabase
       .from('videos')
       .select('*')
-      .or(`editor_id.eq.${employeeId},cameraman_id.eq.${employeeId}`)
+      .or(videoOrParts.join(','))
       .order('updated_at', { ascending: false })
       .limit(40),
+    supabase
+      .from('video_assignments')
+      .select('video_id, assignment_role')
+      .eq('employee_id', employeeId),
   ]);
 
+  const asEditorVa = new Set(
+    (rolesRes.data ?? []).filter((r) => r.assignment_role === 'editor').map((r) => r.video_id as string),
+  );
+  const asCamVa = new Set(
+    (rolesRes.data ?? []).filter((r) => r.assignment_role === 'cameraman').map((r) => r.video_id as string),
+  );
+
   const allVids = (videosRes.data ?? []) as Video[];
-  const videosAsEditor = allVids.filter((v) => v.editor_id === employeeId).slice(0, 15);
-  const videosAsCameraman = allVids.filter((v) => v.cameraman_id === employeeId).slice(0, 15);
+  const videosAsEditor = allVids
+    .filter((v) => v.editor_id === employeeId || asEditorVa.has(v.id))
+    .slice(0, 15);
+  const videosAsCameraman = allVids
+    .filter((v) => v.cameraman_id === employeeId || asCamVa.has(v.id))
+    .slice(0, 15);
 
   return {
     ...rowArr,
