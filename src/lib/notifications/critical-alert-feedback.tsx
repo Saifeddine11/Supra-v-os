@@ -17,6 +17,78 @@ const TOAST_ID = 'supra-critical-feedback';
 const GAP_NAV_MS = 10_000;
 const GAP_AMBIENT_MS = 2 * 60 * 60 * 1000;
 
+/** Mémoire stricte "1 son par ouverture + 1 son par nouvelle alerte". */
+const CRITICAL_SOUND_PLAYED_SESSION_KEY = 'supra_critical_sound_played_session_v1';
+const CRITICAL_ALERT_FINGERPRINTS_SESSION_KEY = 'supra_critical_alert_fingerprints_v1';
+
+type CriticalFingerprintsState = {
+  loaded: boolean;
+  played: boolean;
+  seen: Set<string>;
+};
+
+let fpState: CriticalFingerprintsState = {
+  loaded: false,
+  played: false,
+  seen: new Set<string>(),
+};
+
+function safeSessionStorage(): Storage | null {
+  try {
+    if (typeof window === 'undefined') return null;
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
+function loadFingerprintsState(): CriticalFingerprintsState {
+  if (fpState.loaded) return fpState;
+  fpState.loaded = true;
+
+  const ss = safeSessionStorage();
+  if (!ss) return fpState;
+
+  fpState.played = ss.getItem(CRITICAL_SOUND_PLAYED_SESSION_KEY) === '1';
+  const raw = ss.getItem(CRITICAL_ALERT_FINGERPRINTS_SESSION_KEY);
+  if (raw) {
+    try {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) fpState.seen = new Set(arr.filter((x) => typeof x === 'string'));
+    } catch {
+      // ignore
+    }
+  }
+
+  return fpState;
+}
+
+function persistFingerprintsState(state: CriticalFingerprintsState): void {
+  const ss = safeSessionStorage();
+  if (!ss) return;
+  ss.setItem(CRITICAL_SOUND_PLAYED_SESSION_KEY, state.played ? '1' : '0');
+  ss.setItem(CRITICAL_ALERT_FINGERPRINTS_SESSION_KEY, JSON.stringify([...state.seen]));
+}
+
+function criticalActiveFingerprints(p: CriticalActiveAlertsResponse): string[] {
+  // Fingerprint minimal et stable : id serveur dérivé (task-od-*, vid-od-*, etc.)
+  return p.alerts
+    .filter((a) => a.severity === 'critical')
+    .map((a) => `ca:${a.id}`)
+    .sort();
+}
+
+function bellFreshFingerprints(fresh: Notification[]): string[] {
+  const unreadCritical = fresh.filter((n) => !n.is_read && getNotificationSoundLevel(n) === 'critical');
+  return unreadCritical
+    .map((n) => {
+      const reType = (n as any).related_entity_type as string | null | undefined;
+      const reId = (n as any).related_entity_id as string | null | undefined;
+      return `notif:${n.type}:${reType ?? ''}:${reId ?? n.id}`;
+    })
+    .sort();
+}
+
 function isBarSnoozed(): boolean {
   if (typeof window === 'undefined') return false;
   const raw = localStorage.getItem(CRITICAL_BAR_SNOOZE_KEY);
@@ -224,7 +296,24 @@ export function triggerCriticalAlertFeedbackFromActiveApi(
   if (typeof window === 'undefined' || !p || p.criticalCount === 0) return;
   if (isBarSnoozed()) return;
 
-  if (!opts?.bypassBundleThrottle && isBundleThrottled(mode)) return;
+  const state = loadFingerprintsState();
+  const fps = criticalActiveFingerprints(p);
+  if (fps.length === 0) return;
+
+  const newFps = fps.filter((fp) => !state.seen.has(fp));
+
+  // Règle finale :
+  // - 1er passage (son jamais joué sur cette session) => son + toast
+  // - sinon => seulement si une vraie nouvelle alerte apparaît (fingerprint jamais vu)
+  const shouldPlay = !state.played || newFps.length > 0;
+  if (!shouldPlay) return;
+
+  // Anti-double-trigger (navigation + ambient dans la même seconde) :
+  // on met l’état en mémoire avant de jouer le son.
+  state.played = true;
+  for (const fp of fps) state.seen.add(fp);
+  persistFingerprintsState(state);
+
   markBundleEmitted();
 
   const content =
@@ -235,6 +324,7 @@ export function triggerCriticalAlertFeedbackFromActiveApi(
       tone: 'critical' as const,
     };
 
+  // Toast : signal d’action (même si `skipSound` est forcé en test).
   showCriticalToast(content);
 
   if (!opts?.skipSound) {
@@ -264,7 +354,19 @@ export function triggerCriticalAlertFeedbackFromBellFresh(fresh: Notification[],
   if (unreadCritical.length === 0) return;
   if (isBarSnoozed()) return;
 
-  if (!opts?.bypassBundleThrottle && isBundleThrottled('navigation')) return;
+  const state = loadFingerprintsState();
+  const fps = bellFreshFingerprints(fresh);
+  if (fps.length === 0) return;
+  const newFps = fps.filter((fp) => !state.seen.has(fp));
+
+  // Même règle de rejet : pas de son sauf sur 1er passage ou nouvelle alerte jamais vue.
+  const shouldPlay = !state.played || newFps.length > 0;
+  if (!shouldPlay) return;
+
+  state.played = true;
+  for (const fp of fps) state.seen.add(fp);
+  persistFingerprintsState(state);
+
   markBundleEmitted();
 
   const sorted = [...unreadCritical].sort(
