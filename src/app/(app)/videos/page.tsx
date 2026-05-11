@@ -1,32 +1,20 @@
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
 import Link from 'next/link';
 import { Plus } from 'lucide-react';
-import { endOfWeek, format, isWithinInterval, startOfWeek } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import { endOfWeek, isWithinInterval, startOfWeek } from 'date-fns';
 import { listVideosWithClients } from '@/lib/data/videos';
 import { listClients } from '@/lib/data/clients';
 import { listEmployeesForVideoAssign } from '@/lib/data/employees';
 import { getAuthContext } from '@/lib/auth/permissions';
 import { canDeleteVideo } from '@/lib/auth/capabilities';
-import { VIDEO_STATUS_MAP, VIDEO_PUBLIC_STATUS_MAP } from '@/types/domain';
+import { videoMutationDenied } from '@/lib/auth/data-scope';
 import { Button } from '@/components/ui/button';
 import { SectionCard } from '@/components/shared/section-card';
 import { EmptyState } from '@/components/shared/empty-state';
-import { Badge } from '@/components/ui/badge';
-import { cn } from '@/lib/utils/cn';
 import { VideoFormDialog } from './video-form-dialog';
-import { VideosKanban } from './videos-kanban';
-import { VideoRowActions } from './video-row-actions';
+import { VideosWorkspace } from './videos-workspace';
 import { effectiveClientDeliveryIso, isVideoDeliveryOverdue } from '@/lib/videos/video-schedule';
-import { videoCadreurTableCell, videoMonteurTableCell } from '@/lib/videos/video-assignee-labels';
-import {
-  getClientDeliveryBadge,
-  getShootingBadge,
-  getVideoProductionBadgeClass,
-  getVideoPublicBadgeClass,
-} from '@/lib/ui/status-colors';
-import { ClientColorDot } from '@/components/shared/client-color-dot';
-import { getClientColor } from '@/lib/ui/client-colors';
 
 export const metadata: Metadata = { title: 'Production vidéo' };
 
@@ -60,8 +48,10 @@ export default async function VideosPage({
     color_label: c.color_label,
   }));
   const canDelete = canDeleteVideo(ctx?.role ?? null);
+  const canMutateVideo = Boolean(ctx && !videoMutationDenied(ctx));
 
   const scheduleNow = new Date();
+  const scheduleNowIso = scheduleNow.toISOString();
   const weekStart = startOfWeek(scheduleNow, { weekStartsOn: 1 });
   const weekEnd = endOfWeek(scheduleNow, { weekStartsOn: 1 });
 
@@ -177,125 +167,20 @@ export default async function VideosPage({
           <EmptyState title="Aucune vidéo" description="Créez une fiche vidéo pour lancer la production." />
         ) : rows.length === 0 ? (
           <EmptyState title="Aucun résultat" description="Modifiez les filtres pour voir d’autres vidéos." />
-        ) : view === 'kanban' ? (
-          <VideosKanban videos={rows} clients={clientOpts} employees={employees} canDelete={canDelete} />
         ) : (
-          <div className="overflow-x-auto rounded-xl border border-border/80">
-            <table className="w-full min-w-[1100px] text-left text-sm">
-              <thead className="border-b border-border/80 bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-3 font-medium">Vidéo</th>
-                  <th className="px-4 py-3 font-medium">Client</th>
-                  <th className="px-4 py-3 font-medium">Tournage</th>
-                  <th className="px-4 py-3 font-medium">Livraison client</th>
-                  <th className="px-4 py-3 font-medium">Statut prod.</th>
-                  <th className="px-4 py-3 font-medium">Portail</th>
-                  <th className="px-4 py-3 font-medium">Monteur</th>
-                  <th className="px-4 py-3 font-medium">Cadreur</th>
-                  <th className="px-4 py-3 font-medium text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/60">
-                {rows.map((v) => {
-                  const deliveryIso = effectiveClientDeliveryIso(v);
-                  const od = isVideoDeliveryOverdue(v);
-                  const shootBadge = getShootingBadge(v.shooting_date, v.status, scheduleNow);
-                  const delBadge = getClientDeliveryBadge(v, scheduleNow);
-                  return (
-                    <tr
-                      key={v.id}
-                      className={cn(
-                        'bg-card/40 transition-colors hover:bg-muted/50',
-                        od && 'bg-red-500/[0.04] dark:bg-red-500/[0.06]',
-                      )}
-                    >
-                      <td className="px-4 py-3 font-medium text-foreground">{v.title}</td>
-                      <td className="px-4 py-3 text-muted-foreground">
-                        {v.clients?.name ? (
-                          <span className="inline-flex items-center gap-2">
-                            <ClientColorDot
-                              hex={getClientColor({ name: v.clients.name, color_hex: v.clients.color_hex })}
-                              title={v.clients.name}
-                            />
-                            {v.clients.name}
-                          </span>
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-col gap-1.5">
-                          <span className="tabular-nums text-xs text-muted-foreground">
-                            {v.shooting_date
-                              ? format(new Date(v.shooting_date), 'd MMM yyyy · HH:mm', { locale: fr })
-                              : '—'}
-                          </span>
-                          <Badge variant="outline" className={cn('w-fit text-[10px] font-medium', shootBadge.className)}>
-                            {shootBadge.label}
-                          </Badge>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-col gap-1.5">
-                          <span
-                            className={cn(
-                              'tabular-nums text-xs text-muted-foreground',
-                              od && 'font-semibold text-destructive',
-                            )}
-                          >
-                            {deliveryIso
-                              ? format(new Date(deliveryIso), 'd MMM yyyy · HH:mm', { locale: fr })
-                              : '—'}
-                          </span>
-                          <Badge variant="outline" className={cn('w-fit text-[10px] font-medium', delBadge.className)}>
-                            {delBadge.label}
-                          </Badge>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            'text-[10px] font-medium',
-                            getVideoProductionBadgeClass(v.status, v.public_status, {
-                              deliveryOverdue: od,
-                              video: v,
-                            }),
-                          )}
-                        >
-                          {VIDEO_STATUS_MAP[v.status].label}
-                        </Badge>
-                      </td>
-                      <td className="px-4 py-3">
-                        <Badge
-                          variant="outline"
-                          className={cn('text-[10px] font-medium', getVideoPublicBadgeClass(v.public_status))}
-                        >
-                          {VIDEO_PUBLIC_STATUS_MAP[v.public_status].label}
-                        </Badge>
-                      </td>
-                      <td className="max-w-[220px] px-4 py-3 text-xs text-muted-foreground">
-                        {videoMonteurTableCell(v)}
-                      </td>
-                      <td
-                        className="max-w-[200px] px-4 py-3 text-xs text-muted-foreground"
-                        title={
-                          v.editors.some((e) => v.cameramen.some((c) => c.id === e.id))
-                            ? 'Certaines personnes sont à la fois monteurs et caméramans sur cette vidéo.'
-                            : undefined
-                        }
-                      >
-                        {videoCadreurTableCell(v)}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <VideoRowActions video={v} clients={clientOpts} employees={employees} canDelete={canDelete} />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <Suspense
+            fallback={<div className="rounded-xl border border-border/60 bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">Chargement…</div>}
+          >
+            <VideosWorkspace
+              view={view}
+              rows={rows}
+              clients={clientOpts}
+              employees={employees}
+              canDelete={canDelete}
+              canMutateVideo={canMutateVideo}
+              scheduleNowIso={scheduleNowIso}
+            />
+          </Suspense>
         )}
       </SectionCard>
     </div>

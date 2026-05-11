@@ -21,6 +21,7 @@ import {
 } from '@/lib/data/employee-guards';
 import { legacyPrimaryAssignees, replaceVideoAssignments } from '@/lib/data/video-assignments';
 import { syncVideoLinkedProductionTaskFromDb, upsertVideoProductionTask } from '@/lib/tasks/video-production-task';
+import { getVideoById, type VideoWithClient } from '@/lib/data/videos';
 
 function parseOptionalIsoTimestamp(raw: unknown): string | null {
   const s = String(raw ?? '').trim();
@@ -418,6 +419,40 @@ export async function updateVideoStatusAction(
   revalidatePath('/tasks/calendar');
   revalidatePath('/tasks');
   return actionOk();
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** Détail vidéo pour deep-link / modal — respecte `assertVideoRecordVisible` via `getVideoById`. */
+export async function getVideoDetailForViewerAction(
+  videoId: string,
+): Promise<ActionResult<VideoWithClient>> {
+  const ctx = await getAuthContext();
+  if (!ctx) return actionError('Non authentifié.');
+  const id = String(videoId ?? '').trim();
+  if (!id || !UUID_RE.test(id)) return actionError('Identifiant vidéo invalide.');
+  try {
+    const v = await getVideoById(id, ctx);
+    if (!v) return actionError('Vidéo introuvable ou accès non autorisé.');
+    return actionOk(v);
+  } catch {
+    return actionError('Vidéo introuvable ou accès non autorisé.');
+  }
+}
+
+export async function getLinkedProductionTaskIdForVideoAction(
+  videoId: string,
+): Promise<ActionResult<{ taskId: string | null }>> {
+  const ctx = await getAuthContext();
+  if (!ctx) return actionError('Non authentifié.');
+  const supabase = await createClient();
+  if (!(await assertVideoRecordVisible(supabase, ctx, videoId))) {
+    return actionError('Vidéo inaccessible.');
+  }
+  const { data, error } = await supabase.from('tasks').select('id').eq('video_id', videoId).maybeSingle();
+  if (error) return actionError(getPostgrestError(error));
+  const row = data as { id: string } | null;
+  return actionOk({ taskId: row?.id ?? null });
 }
 
 export async function deleteVideoAction(id: string): Promise<ActionResult> {

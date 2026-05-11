@@ -51,6 +51,8 @@ import { RecentActivityPreview } from '@/components/dashboard/recent-activity-pr
 import { PersonalWorkOverview } from '@/components/dashboard/personal-work-overview';
 import { getDashboardVariant, shouldLoadGlobalActivityFeed } from '@/lib/dashboard/dashboard-variant';
 import { getPersonalDashboardWork } from '@/lib/data/dashboard-personal-work';
+import { fetchDashboardChartsPayload } from '@/lib/data/dashboard-charts';
+import { DashboardChartsSection } from '@/components/dashboard/dashboard-charts-section';
 import type { UserRole } from '@/types/database';
 
 export const metadata: Metadata = {
@@ -317,10 +319,23 @@ export default async function DashboardPage() {
     }
   }
 
-  const [summary, dashboardNotifications] = await Promise.all([
-    getDashboardSummary(ctx),
-    listRecentNotifications(6, ctx),
-  ]);
+  const summary = await getDashboardSummary(ctx);
+  let chartsPayload: Awaited<ReturnType<typeof fetchDashboardChartsPayload>>;
+  try {
+    chartsPayload = await fetchDashboardChartsPayload(ctx, {
+      scope: summary.scope,
+      agencyDisplayCurrency: summary.agencyDisplayCurrency,
+    });
+  } catch {
+    chartsPayload = {
+      currency: summary.agencyDisplayCurrency,
+      deadlinesWeek: null,
+      revenueByMonth: null,
+      criticalByType: [],
+      clientPipeline: null,
+    };
+  }
+  const dashboardNotifications = await listRecentNotifications(6, ctx);
 
   let operational = emptyDashboardOperational();
   if (summary.scope === 'full' || summary.scope === 'operations') {
@@ -618,6 +633,8 @@ export default async function DashboardPage() {
           ))}
         </div>
       </section>
+
+      <DashboardChartsSection variant={variant} scope={summary.scope} role={ctx.employee.role} charts={chartsPayload} />
 
       <div className="grid gap-6 xl:grid-cols-3">
         <div className="space-y-6 xl:col-span-2">

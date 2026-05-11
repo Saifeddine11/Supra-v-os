@@ -264,14 +264,18 @@ export function LoginForm() {
               </p>
             ) : null}
 
-            <button type="submit" disabled={loading} className="btn-supra-cta">
+            <button
+              type="submit"
+              disabled={loading}
+              className="group inline-flex h-12 min-h-[44px] w-full items-center justify-center gap-2 rounded-full bg-[#FF3D0A] px-6 text-sm font-semibold tracking-tight text-white shadow-[0_14px_36px_-10px_rgba(255,61,10,0.45)] transition-all duration-200 hover:bg-[#E63509] hover:shadow-[0_18px_44px_-10px_rgba(255,61,10,0.5)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6A2A] focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:bg-[rgba(255,61,10,0.45)] disabled:text-white disabled:opacity-70 disabled:shadow-none"
+            >
               {loading ? (
                 'Connexion…'
               ) : (
                 <>
                   Connexion
                   <svg
-                    className="btn-supra-cta-icon"
+                    className="inline-block h-4 w-4 shrink-0 transition-transform duration-200 group-hover:translate-x-0.5"
                     width="16"
                     height="16"
                     viewBox="0 0 16 16"

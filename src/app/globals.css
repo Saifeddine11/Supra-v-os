@@ -66,6 +66,27 @@
     /* Succès / paiement validé uniquement */
     --success: 154 52% 45%;
     --success-foreground: 37 33% 98%;
+
+    /* Dashboard charts — premium (dark default) */
+    --chart-orange: #ff3d0a;
+    --chart-orange-soft: rgba(255, 61, 10, 0.16);
+    --chart-blue: #3b82f6;
+    --chart-blue-soft: rgba(59, 130, 246, 0.14);
+    --chart-violet: #8b5cf6;
+    --chart-violet-soft: rgba(139, 92, 246, 0.16);
+    --chart-emerald: #10b981;
+    --chart-emerald-soft: rgba(16, 185, 129, 0.12);
+    --chart-amber: #f59e0b;
+    --chart-amber-soft: rgba(245, 158, 11, 0.16);
+    --chart-rose: #f43f5e;
+    --chart-rose-soft: rgba(244, 63, 94, 0.12);
+    --chart-slate: #64748b;
+    --chart-slate-soft: rgba(100, 116, 139, 0.18);
+    --chart-grid: rgba(255, 255, 255, 0.06);
+    --chart-axis: rgba(248, 244, 239, 0.35);
+    --chart-card-bg: rgba(22, 11, 8, 0.78);
+    --chart-card-border: rgba(255, 120, 80, 0.12);
+    --chart-card-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
   }
 
   /* Light mode — rare ; aligné orange Supra */
@@ -94,6 +115,12 @@
     --surface: 0 0% 100%;
     --surface-secondary: 32 36% 97%; /* #FAF8F5 */
     --orange-glow: 20 100% 58%;
+
+    --chart-grid: rgba(120, 90, 75, 0.12);
+    --chart-axis: rgba(26, 7, 3, 0.45);
+    --chart-card-bg: rgba(255, 247, 244, 0.82);
+    --chart-card-border: rgba(160, 100, 80, 0.14);
+    --chart-card-shadow: 0 16px 40px rgba(26, 7, 3, 0.08);
   }
 }
 

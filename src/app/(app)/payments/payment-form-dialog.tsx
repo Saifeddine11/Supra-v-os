@@ -1,7 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 import type { InvoiceWithClient } from '@/lib/data/invoices';
 import {
   Dialog,
@@ -14,7 +16,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { PAYMENT_METHOD_LABELS } from '@/types/domain';
+import { Badge } from '@/components/ui/badge';
+import { PAYMENT_METHOD_LABELS, INVOICE_STATUS_MAP } from '@/types/domain';
 import type { PaymentMethod } from '@/types/database';
 import { createPaymentAction } from './actions';
 import { formatAgencyMoneyCompact } from '@/lib/money/format-money';
@@ -37,20 +40,33 @@ export function PaymentFormDialog({
   const [pending, setPending] = useState(false);
   const [invoiceId, setInvoiceId] = useState('');
 
-  const selectable = invoices.filter((i) => i.status !== 'paid' && i.status !== 'cancelled' && i.status !== 'draft');
+  const selectable = useMemo(
+    () => invoices.filter((i) => i.status !== 'paid' && i.status !== 'cancelled' && i.status !== 'draft'),
+    [invoices],
+  );
 
   useEffect(() => {
     if (!open) setErr(null);
   }, [open]);
 
+  useEffect(() => {
+    if (!open) return;
+    if (selectable.length === 0) {
+      setInvoiceId('');
+      return;
+    }
+    setInvoiceId((prev) => (prev && selectable.some((i) => i.id === prev) ? prev : selectable[0]!.id));
+  }, [open, selectable]);
+
   const selected = selectable.find((i) => i.id === invoiceId);
+  const invStatusLabel = selected ? INVOICE_STATUS_MAP[selected.status]?.label : null;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+      <DialogContent className="max-h-[90vh] overflow-y-auto rounded-2xl sm:max-w-[640px]">
         <DialogHeader>
-          <DialogTitle>Enregistrer un paiement</DialogTitle>
+          <DialogTitle>Nouveau paiement</DialogTitle>
         </DialogHeader>
         <form
           className="grid gap-4"
@@ -63,6 +79,7 @@ export function PaymentFormDialog({
                 setErr(res.error);
                 return;
               }
+              toast.success('Paiement enregistré');
               router.refresh();
               setOpen(false);
             } finally {
@@ -70,14 +87,26 @@ export function PaymentFormDialog({
             }
           }}
         >
+          {selectable.length === 0 ? (
+            <div className="rounded-xl border border-border/70 bg-muted/25 px-3 py-3 text-sm text-muted-foreground">
+              Aucune facture éligible pour un encaissement (toutes sont payées, annulées ou en brouillon). Créez ou
+              réactivez une facture depuis{' '}
+              <Link href="/invoices" className="font-medium text-primary underline-offset-4 hover:underline">
+                Factures
+              </Link>
+              .
+            </div>
+          ) : null}
+
           <div className="grid gap-2">
-            <Label htmlFor="pay-inv">Facture</Label>
+            <Label htmlFor="pay-inv">Facture liée</Label>
             <select
               id="pay-inv"
               name="invoice_id"
-              required
+              required={selectable.length > 0}
               className={selectCls}
               value={invoiceId}
+              disabled={selectable.length === 0}
               onChange={(e) => setInvoiceId(e.target.value)}
             >
               <option value="">—</option>
@@ -88,6 +117,23 @@ export function PaymentFormDialog({
               ))}
             </select>
           </div>
+
+          <div className="grid gap-2">
+            <Label>Client</Label>
+            <p className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2 text-sm text-foreground">
+              {selected?.clients?.name ?? '—'}
+            </p>
+          </div>
+
+          {selected && invStatusLabel ? (
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="text-muted-foreground">Statut facture</span>
+              <Badge variant="outline" className="font-normal">
+                {invStatusLabel}
+              </Badge>
+            </div>
+          ) : null}
+
           <input type="hidden" name="client_id" value={selected?.client_id ?? ''} readOnly />
           <input type="hidden" name="currency" value={selected?.currency ?? agencyDisplayCurrency} readOnly />
           <div className="grid gap-2 sm:grid-cols-2">
@@ -101,17 +147,25 @@ export function PaymentFormDialog({
                 min={0.01}
                 step={0.01}
                 required
+                disabled={!selected}
                 defaultValue={selected?.total ?? ''}
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="pay-date">Date</Label>
-              <Input id="pay-date" name="payment_date" type="date" required defaultValue={new Date().toISOString().slice(0, 10)} />
+              <Label htmlFor="pay-date">Date de paiement</Label>
+              <Input
+                id="pay-date"
+                name="payment_date"
+                type="date"
+                required
+                disabled={!selected}
+                defaultValue={new Date().toISOString().slice(0, 10)}
+              />
             </div>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="pay-method">Moyen</Label>
-            <select id="pay-method" name="method" className={selectCls} defaultValue="bank_transfer">
+            <Label htmlFor="pay-method">Moyen de paiement</Label>
+            <select id="pay-method" name="method" className={selectCls} defaultValue="bank_transfer" disabled={!selected}>
               {(Object.keys(PAYMENT_METHOD_LABELS) as PaymentMethod[]).map((m) => (
                 <option key={m} value={m}>
                   {PAYMENT_METHOD_LABELS[m]}
@@ -121,16 +175,21 @@ export function PaymentFormDialog({
           </div>
           <div className="grid gap-2">
             <Label htmlFor="pay-ref">Référence (optionnel)</Label>
-            <Input id="pay-ref" name="reference" />
+            <Input id="pay-ref" name="reference" disabled={!selected} />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="pay-notes">Notes</Label>
-            <Textarea id="pay-notes" name="notes" rows={2} />
+            <Textarea id="pay-notes" name="notes" rows={2} disabled={!selected} />
           </div>
           {err ? <p className="text-sm text-destructive">{err}</p> : null}
-          <Button type="submit" variant="primary" className="rounded-full" disabled={pending || !selected}>
-            {pending ? 'Enregistrement…' : 'Valider le paiement'}
-          </Button>
+          <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
+            <Button type="button" variant="ghost" className="rounded-full" onClick={() => setOpen(false)}>
+              Annuler
+            </Button>
+            <Button type="submit" variant="primary" className="rounded-full" disabled={pending || !selected}>
+              {pending ? 'Enregistrement…' : 'Enregistrer'}
+            </Button>
+          </div>
         </form>
       </DialogContent>
     </Dialog>

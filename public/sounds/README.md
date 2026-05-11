@@ -7,15 +7,13 @@ Fichiers attendus (noms exacts) :
 - `notification-soft.mp3`
 - `notification-important.mp3`
 - `notification-urgent.mp3`
-- `notification-critical.mp3` (recommandé, ~3–4 s, fort)
-- `notification-critical.wav` (**fourni par défaut** ~3,5 s si le MP3 est absent)
+- `notification-critical.mp3` (cloche / niveau critique non obligatoire)
+- `notification-critical.wav` (repli si MP3 absent)
 
-## Critique (alarme obligatoire)
+## Bannière « alertes critiques actives » (obligatoire)
 
-L’alarme critique tente dans l’ordre :
+Le son **obligatoire** de la bannière (API `critical-active`) est un **ding Web Audio** très court (~0,45 s, volume ~0,22) — il ne lit plus les fichiers `notification-critical.*` longs.
 
-1. `/sounds/notification-critical.mp3` à **volume 1.0**
-2. sinon `/sounds/notification-critical.wav` (fichier généré dans le dépôt)
-3. sinon synthèse Web Audio longue (~3,5 s)
+Les fichiers `notification-critical.*` restent utilisés pour la **cloche** lorsqu’une notification est au niveau sonore `critical` (hors flux obligatoire bannière).
 
-Les membres ne peuvent pas désactiver ce son pour les alertes critiques ; le navigateur peut toutefois bloquer l’autoplay jusqu’à une interaction (clic / touche), puis le son part automatiquement.
+Les membres ne peuvent pas désactiver ce son obligatoire ; le navigateur peut bloquer l’autoplay jusqu’à une interaction (clic / touche), puis le son part après déblocage.

@@ -36,11 +36,14 @@ export function TaskFormDialog({
   clients,
   employees,
   trigger,
+  onSaved,
 }: {
   task?: Task | TaskEnriched | null;
   clients: Pick<Client, 'id' | 'name' | 'color_hex' | 'color_label'>[];
   employees: Pick<Employee, 'id' | 'full_name'>[];
   trigger: React.ReactNode;
+  /** Appelé après enregistrement réussi (ex. fermer la fiche détail). */
+  onSaved?: () => void;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -93,6 +96,7 @@ export function TaskFormDialog({
               }
               router.refresh();
               setOpen(false);
+              onSaved?.();
             } finally {
               setPending(false);
             }

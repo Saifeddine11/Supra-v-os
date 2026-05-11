@@ -32,7 +32,7 @@ export function AppTopbar({
   const title = titleForPathname(pathname);
 
   return (
-    <header className="relative z-30 border-b border-border/80 bg-[hsl(var(--background)/0.88)] backdrop-blur-md">
+    <header className="relative z-30 border-b border-border/80 bg-background/95 backdrop-blur-md">
       <div className="flex h-16 items-center gap-3 px-4 sm:gap-4 sm:px-6 lg:px-8">
         <div className="min-w-0 flex-1">
           <h1 className="truncate font-sans text-lg font-semibold tracking-tight text-foreground sm:text-xl">

@@ -25,7 +25,7 @@ export function VideoRowActions({
   const [pending, startTransition] = useTransition();
 
   return (
-    <div className="flex flex-wrap justify-end gap-1">
+    <div className="flex flex-wrap justify-end gap-1" onClick={(e) => e.stopPropagation()}>
       <VideoFormDialog
         video={video}
         clients={clients}

@@ -98,11 +98,13 @@ export function VideoFormDialog({
   clients,
   employees,
   trigger,
+  onSaved,
 }: {
   video?: VideoWithClient | null;
   clients: Pick<Client, 'id' | 'name' | 'color_hex' | 'color_label'>[];
   employees: VideoAssignEmployeeRow[];
   trigger: React.ReactNode;
+  onSaved?: () => void;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -214,6 +216,7 @@ export function VideoFormDialog({
               }
               router.refresh();
               setOpen(false);
+              onSaved?.();
             } finally {
               setPending(false);
             }

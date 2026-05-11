@@ -64,8 +64,6 @@ export default async function PaymentsPage({
     listInvoicesWithClients(ctx),
     getAgencyDisplayCurrency(),
   ]);
-  const unpaid = invoices.filter((i) => i.status !== 'paid' && i.status !== 'cancelled' && i.status !== 'draft');
-
   const clientOpts = [...new Map(invoices.map((i) => [i.client_id, i.clients?.name ?? ''])).entries()].map(
     ([id, name]) => ({ id, name })
   );
@@ -84,7 +82,7 @@ export default async function PaymentsPage({
             invoices={invoices}
             agencyDisplayCurrency={agencyCurrency}
             trigger={
-              <Button variant="primary" className="rounded-full" disabled={unpaid.length === 0}>
+              <Button variant="primary" className="rounded-full">
                 <Plus className="h-4 w-4" />
                 Nouveau paiement
               </Button>

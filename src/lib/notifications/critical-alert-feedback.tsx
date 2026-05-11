@@ -124,7 +124,7 @@ function hrefForEntity(entityType: string): string {
   }
 }
 
-function summarizeCriticalAlerts(alerts: CriticalActiveAlertDTO[]): string {
+export function summarizeCriticalAlerts(alerts: CriticalActiveAlertDTO[]): string {
   const crit = alerts.filter((a) => a.severity === 'critical');
   const tasks = crit.filter((a) => a.entityType === 'task').length;
   const videos = crit.filter((a) => a.entityType === 'video').length;
@@ -269,7 +269,7 @@ function showCriticalToast(content: {
     ),
     {
       id: TOAST_ID,
-      duration: 8800,
+      duration: 5200,
       dismissible: true,
       className:
         '!m-0 !w-full !max-w-[min(480px,calc(100vw-24px))] !bg-transparent !p-0 !shadow-none !border-0',

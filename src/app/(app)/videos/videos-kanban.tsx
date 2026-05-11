@@ -34,11 +34,16 @@ export function VideosKanban({
   clients,
   employees,
   canDelete,
+  onOpenDetail,
+  highlightVideoId,
 }: {
   videos: VideoWithClient[];
   clients: Pick<Client, 'id' | 'name' | 'color_hex' | 'color_label'>[];
   employees: VideoAssignEmployeeRow[];
   canDelete: boolean;
+  onOpenDetail?: (video: VideoWithClient) => void;
+  /** Mise en évidence (ex. deep-link depuis une tâche). */
+  highlightVideoId?: string | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -93,6 +98,7 @@ export function VideosKanban({
                       className={cn(
                         'relative overflow-hidden p-3 pl-3.5',
                         getStatusBlockSurface(tone, { urgentGlow: Boolean(od) }),
+                        highlightVideoId === v.id && 'ring-1 ring-primary/40 ring-offset-0',
                       )}
                     >
                       {v.clients?.name ? (
@@ -107,71 +113,99 @@ export function VideosKanban({
                           aria-hidden
                         />
                       ) : null}
-                      <p className="text-sm font-medium text-foreground">{v.title}</p>
-                      <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
-                        {v.clients?.name ? (
-                          <>
-                            <ClientColorDot
-                              hex={getClientColor({ name: v.clients.name, color_hex: v.clients.color_hex })}
-                              size="sm"
-                              title={v.clients.name}
-                            />
-                            <span>{v.clients.name}</span>
-                          </>
+                      <div
+                        role={onOpenDetail ? 'button' : undefined}
+                        tabIndex={onOpenDetail ? 0 : undefined}
+                        className={cn(onOpenDetail && 'cursor-pointer rounded-lg outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring/35')}
+                        onClick={
+                          onOpenDetail
+                            ? (e) => {
+                                const t = e.target as HTMLElement;
+                                if (t.closest('button,a,select,input')) return;
+                                onOpenDetail(v);
+                              }
+                            : undefined
+                        }
+                        onKeyDown={
+                          onOpenDetail
+                            ? (e) => {
+                                if (e.key !== 'Enter' && e.key !== ' ') return;
+                                e.preventDefault();
+                                onOpenDetail(v);
+                              }
+                            : undefined
+                        }
+                      >
+                        <p className="text-sm font-medium text-foreground">{v.title}</p>
+                        <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                          {v.clients?.name ? (
+                            <>
+                              <ClientColorDot
+                                hex={getClientColor({ name: v.clients.name, color_hex: v.clients.color_hex })}
+                                size="sm"
+                                title={v.clients.name}
+                              />
+                              <span>{v.clients.name}</span>
+                            </>
+                          ) : (
+                            '—'
+                          )}
+                        </p>
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              'text-[10px] font-medium',
+                              getVideoProductionBadgeClass(v.status, v.public_status, {
+                                deliveryOverdue: od,
+                                video: v,
+                              }),
+                            )}
+                          >
+                            {VIDEO_STATUS_MAP[v.status].label}
+                          </Badge>
+                          <Badge
+                            variant="outline"
+                            className={cn('text-[10px] font-medium', getVideoPublicBadgeClass(v.public_status))}
+                          >
+                            {VIDEO_PUBLIC_STATUS_MAP[v.public_status].label}
+                          </Badge>
+                          <Badge variant="outline" className={cn('text-[10px] font-medium', shootB.className)}>
+                            {shootB.label}
+                          </Badge>
+                          <Badge variant="outline" className={cn('text-[10px] font-medium', delB.className)}>
+                            {delB.label}
+                          </Badge>
+                          <Badge variant="primary" className="text-[10px]">
+                            {PRIORITY_MAP[v.priority].label}
+                          </Badge>
+                        </div>
+                        <p className="mt-2 text-[11px] text-muted-foreground">{videoKanbanAssigneeSummary(v)}</p>
+                        {v.shooting_date ? (
+                          <p className="mt-1 text-[11px] tabular-nums text-muted-foreground">
+                            Tournage {format(new Date(v.shooting_date), 'd MMM yyyy · HH:mm', { locale: fr })}
+                          </p>
                         ) : (
-                          '—'
+                          <p className="mt-1 text-[11px] text-muted-foreground">Tournage : non planifié</p>
                         )}
-                      </p>
-                      <div className="mt-2 flex flex-wrap gap-1">
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            'text-[10px] font-medium',
-                            getVideoProductionBadgeClass(v.status, v.public_status, {
-                              deliveryOverdue: od,
-                              video: v,
-                            }),
-                          )}
-                        >
-                          {VIDEO_STATUS_MAP[v.status].label}
-                        </Badge>
-                        <Badge
-                          variant="outline"
-                          className={cn('text-[10px] font-medium', getVideoPublicBadgeClass(v.public_status))}
-                        >
-                          {VIDEO_PUBLIC_STATUS_MAP[v.public_status].label}
-                        </Badge>
-                        <Badge variant="outline" className={cn('text-[10px] font-medium', shootB.className)}>
-                          {shootB.label}
-                        </Badge>
-                        <Badge variant="outline" className={cn('text-[10px] font-medium', delB.className)}>
-                          {delB.label}
-                        </Badge>
-                        <Badge variant="primary" className="text-[10px]">
-                          {PRIORITY_MAP[v.priority].label}
-                        </Badge>
+                        {deliveryIso ? (
+                          <p
+                            className={cn(
+                              'mt-0.5 text-[11px] tabular-nums',
+                              od ? 'font-semibold text-destructive' : 'text-muted-foreground'
+                            )}
+                          >
+                            Livraison client {format(new Date(deliveryIso), 'd MMM yyyy · HH:mm', { locale: fr })}
+                          </p>
+                        ) : (
+                          <p className="mt-0.5 text-[11px] text-muted-foreground">Livraison client : non planifié</p>
+                        )}
                       </div>
-                      <p className="mt-2 text-[11px] text-muted-foreground">{videoKanbanAssigneeSummary(v)}</p>
-                      {v.shooting_date ? (
-                        <p className="mt-1 text-[11px] tabular-nums text-muted-foreground">
-                          Tournage {format(new Date(v.shooting_date), 'd MMM yyyy · HH:mm', { locale: fr })}
-                        </p>
-                      ) : (
-                        <p className="mt-1 text-[11px] text-muted-foreground">Tournage : non planifié</p>
-                      )}
-                      {deliveryIso ? (
-                        <p
-                          className={cn(
-                            'mt-0.5 text-[11px] tabular-nums',
-                            od ? 'font-semibold text-destructive' : 'text-muted-foreground'
-                          )}
-                        >
-                          Livraison client {format(new Date(deliveryIso), 'd MMM yyyy · HH:mm', { locale: fr })}
-                        </p>
-                      ) : (
-                        <p className="mt-0.5 text-[11px] text-muted-foreground">Livraison client : non planifié</p>
-                      )}
-                      <div className="mt-2 flex flex-wrap gap-1 border-t border-border/60 pt-2">
+                      <div
+                        className="mt-2 flex flex-wrap gap-1 border-t border-border/60 pt-2"
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <select
                           className="h-8 max-w-[160px] flex-1 rounded-md border border-border bg-muted px-2 text-xs"
                           value={v.status}

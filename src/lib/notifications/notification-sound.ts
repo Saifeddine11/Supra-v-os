@@ -121,8 +121,10 @@ function playOscillatorPattern(level: NotificationSoundLevel, masterGain: number
   }
 }
 
-/** Synthèse ~3,5 s — secours si fichiers critiques indisponibles ou autoplay bloqué. */
-function playOscillatorCriticalMandatory(): void {
+/**
+ * « Ding » critique obligatoire — une seule enveloppe, ~0,45 s, volume modéré.
+ */
+function playCriticalSoftDingWebAudio(peakGain = 0.22): void {
   if (typeof window === 'undefined') return;
   const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!Ctx) return;
@@ -135,31 +137,30 @@ function playOscillatorCriticalMandatory(): void {
   g.gain.value = 0;
   g.connect(ac.destination);
 
-  const tone = (freq: number, start: number, dur: number, peak: number) => {
-    const o = ac.createOscillator();
-    o.type = 'sine';
-    o.frequency.setValueAtTime(freq, start);
-    o.connect(g);
-    o.start(start);
-    o.stop(start + dur);
-    g.gain.linearRampToValueAtTime(0, start);
-    g.gain.linearRampToValueAtTime(peak * 0.95, start + 0.02);
-    g.gain.exponentialRampToValueAtTime(0.001, start + dur);
-  };
+  const o = ac.createOscillator();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(587.33, t0);
+  o.frequency.exponentialRampToValueAtTime(880, t0 + 0.1);
+  o.frequency.exponentialRampToValueAtTime(659.25, t0 + 0.22);
+  o.connect(g);
+  o.start(t0);
+  o.stop(t0 + 0.46);
 
-  let t = t0;
-  for (let i = 0; i < 6; i++) {
-    tone(i % 2 === 0 ? 1320 : 880, t, 0.28, 0.92);
-    t += 0.42;
-    tone(660, t, 0.22, 0.75);
-    t += 0.38;
-  }
+  g.gain.setValueAtTime(0, t0);
+  g.gain.linearRampToValueAtTime(peakGain, t0 + 0.022);
+  g.gain.exponentialRampToValueAtTime(0.00012, t0 + 0.44);
+}
+
+/** Secours minimal si Web Audio indisponible (ne doit presque jamais s’exécuter). */
+function playOscillatorCriticalMandatory(): void {
+  playCriticalSoftDingWebAudio(0.2);
 }
 
 const CRITICAL_SOUND_URLS = ['/sounds/notification-critical.mp3', '/sounds/notification-critical.wav'] as const;
 
 /**
- * Fichier critique : MP3 si présent, sinon WAV (~3,5 s), sinon synthèse longue.
+ * Fichiers legacy (longs) — utilisé par la cloche pour niveau `critical` non obligatoire.
+ * Le son **obligatoire** bannière passe par `playMandatoryCriticalAlarm` (ding court).
  */
 export async function playCriticalAlarmFiles(volume = 1.0): Promise<'mp3' | 'wav' | 'osc'> {
   for (const url of CRITICAL_SOUND_URLS) {
@@ -178,9 +179,9 @@ export async function playCriticalAlarmFiles(volume = 1.0): Promise<'mp3' | 'wav
     }
   }
   if (process.env.NODE_ENV === 'development') {
-    console.log('[critical-sound] playing critical sound (oscillator fallback)');
+    console.log('[critical-sound] playing critical sound (soft ding fallback)');
   }
-  playOscillatorCriticalMandatory();
+  playCriticalSoftDingWebAudio(Math.min(0.28, volume * 0.22));
   return 'osc';
 }
 
@@ -253,7 +254,11 @@ export function playMandatoryCriticalAlarm(opts?: MandatoryCriticalAlarmOptions)
   }
   markNotificationSoundUserGesture();
   if (typeof window === 'undefined') return true;
-  void playCriticalAlarmFiles(1.0);
+  try {
+    playCriticalSoftDingWebAudio(0.22);
+  } catch {
+    playOscillatorCriticalMandatory();
+  }
   return true;
 }
 

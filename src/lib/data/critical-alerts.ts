@@ -48,6 +48,28 @@ function parseCriticalAlertEntity(id: string): { entityType: string; entityId: s
   return { entityType: 'unknown', entityId: id };
 }
 
+export type CriticalAlertTypeBucket = {
+  typeLabel: string;
+  count: number;
+  critical: number;
+  warning: number;
+};
+
+/** Répartition par libellé de type — alignée sur la bannière et `/api/notifications/critical-active`. */
+export function aggregateCriticalAlertsByType(items: CriticalAlertItem[]): CriticalAlertTypeBucket[] {
+  const map = new Map<string, { count: number; critical: number; warning: number }>();
+  for (const item of items) {
+    const cur = map.get(item.typeLabel) ?? { count: 0, critical: 0, warning: 0 };
+    cur.count += 1;
+    if (item.severity === 'critical') cur.critical += 1;
+    else cur.warning += 1;
+    map.set(item.typeLabel, cur);
+  }
+  return [...map.entries()]
+    .map(([typeLabel, v]) => ({ typeLabel, ...v }))
+    .sort((a, b) => b.count - a.count);
+}
+
 export function mapCriticalAlertsToActiveApi(items: CriticalAlertItem[]): CriticalActiveAlertsResponse {
   const alerts: CriticalActiveAlertDTO[] = items.map((item) => {
     const { entityType, entityId } = parseCriticalAlertEntity(item.id);
