@@ -34,6 +34,7 @@ export function VideosWorkspace({
   employees,
   canDelete,
   canMutateVideo,
+  allowKanbanDrag,
   scheduleNowIso,
 }: {
   view: 'table' | 'kanban';
@@ -42,6 +43,7 @@ export function VideosWorkspace({
   employees: VideoAssignEmployeeRow[];
   canDelete: boolean;
   canMutateVideo: boolean;
+  allowKanbanDrag: boolean;
   scheduleNowIso: string;
 }) {
   const router = useRouter();
@@ -154,6 +156,8 @@ export function VideosWorkspace({
           canDelete={canDelete}
           onOpenDetail={openDetail}
           highlightVideoId={detail?.id ?? null}
+          allowKanbanDrag={allowKanbanDrag}
+          scheduleNow={scheduleNow}
         />
         {dialog}
       </>

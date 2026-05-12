@@ -8,6 +8,7 @@ import {
   assertClientRecordVisible,
   assertVideoRecordVisible,
   effectiveRole,
+  hasFullOrgDataAccess,
   videoMutationDenied,
 } from '@/lib/auth/data-scope';
 import { actionError, actionOk, getPostgrestError, type ActionResult } from '@/lib/actions/types';
@@ -38,6 +39,35 @@ function deliveryDeadlineDateFromClientAt(clientDeliveryAt: string | null): stri
 
 function dedupeIds(ids: string[]): string[] {
   return [...new Set(ids.map((x) => x.trim()).filter(Boolean))];
+}
+
+/** Étapes autorisées pour un cadreur (drag Kanban ou changement rapide). */
+const CAMERAMAN_ALLOWED_PRODUCTION_STATUSES: VideoStatus[] = [
+  'idea',
+  'brief_pending',
+  'brief_validated',
+  'shooting_planned',
+  'shooting_done',
+  'rushes_received',
+];
+
+function assertVideoKanbanStatusTransitionAllowed(
+  ctx: NonNullable<Awaited<ReturnType<typeof getAuthContext>>>,
+  next: VideoStatus,
+): string | null {
+  if (hasFullOrgDataAccess(ctx)) return null;
+  const er = effectiveRole(ctx.role);
+  if (er === 'cameraman') {
+    if (!CAMERAMAN_ALLOWED_PRODUCTION_STATUSES.includes(next)) {
+      return 'Votre rôle ne permet pas de passer la vidéo à cette étape de production.';
+    }
+  }
+  if (er === 'editor' || er === 'community_manager') {
+    if (next === 'archived' || next === 'cancelled') {
+      return 'Seuls l’administrateur ou le chef de projet peuvent archiver ou annuler une vidéo depuis le flux.';
+    }
+  }
+  return null;
 }
 
 function parseJsonIdArray(raw: unknown): string[] {
@@ -350,6 +380,19 @@ export async function updateVideoStatusAction(
   if (!(await assertVideoRecordVisible(supabase, ctx, id))) {
     return actionError('Vidéo inaccessible.');
   }
+
+  const { data: beforeRow, error: beforeErr } = await supabase
+    .from('videos')
+    .select('status')
+    .eq('id', id)
+    .maybeSingle();
+  if (beforeErr) return actionError(getPostgrestError(beforeErr));
+  if (!beforeRow) return actionError('Vidéo introuvable.');
+  const prevStatus = beforeRow.status as VideoStatus;
+  if (prevStatus === status && public_status == null) return actionOk();
+
+  const perm = assertVideoKanbanStatusTransitionAllowed(ctx, status);
+  if (perm) return actionError(perm);
 
   const patch: Record<string, unknown> = {
     status,
