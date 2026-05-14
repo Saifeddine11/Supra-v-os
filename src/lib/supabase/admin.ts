@@ -12,6 +12,7 @@ import 'server-only';
  *   - Cron jobs (morning reminders, deadline alerts, overdue invoice marking)
  *   - PDF generation (need to fetch invoices regardless of caller's role)
  *   - Admin-only employee Auth flows (inviteUserByEmail / createUser / link user_id), server actions only
+ *   - Video create writes (after server-side permission checks): insert + assignments + linked task
  *   - Admin maintenance scripts
  *
  * NEVER use in Client Components or expose service_role key to the browser.

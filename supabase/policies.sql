@@ -362,7 +362,7 @@ drop policy if exists "videos_insert_authorized" on videos;
 create policy "videos_insert_authorized"
   on videos for insert
   to authenticated
-  with check (auth_user_role() in ('admin', 'project_manager', 'editor', 'cameraman', 'commercial'));
+  with check (auth_user_role() in ('admin', 'project_manager', 'editor', 'cameraman', 'commercial', 'community_manager'));
 
 drop policy if exists "videos_update_assigned_or_admin" on videos;
 -- Pivot video_assignments = source principale ; legacy editor_id / cameraman_id = secours.
@@ -417,7 +417,7 @@ create policy "video_assignments_insert_authorized"
   on video_assignments for insert
   to authenticated
   with check (
-    auth_user_role() in ('admin', 'project_manager', 'editor', 'cameraman', 'commercial')
+    auth_user_role() in ('admin', 'project_manager', 'editor', 'cameraman', 'commercial', 'community_manager')
     and exists (select 1 from videos v where v.id = video_assignments.video_id)
   );
 

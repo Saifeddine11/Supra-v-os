@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 import { getAuthContext } from '@/lib/auth/permissions';
 import { canDeleteVideo, canManageAllTasks } from '@/lib/auth/capabilities';
 import {
+  assertCanCreateVideo,
   assertClientRecordVisible,
   assertVideoRecordVisible,
   effectiveRole,
@@ -12,6 +13,7 @@ import {
   videoMutationDenied,
 } from '@/lib/auth/data-scope';
 import { actionError, actionOk, getPostgrestError, type ActionResult } from '@/lib/actions/types';
+import { createAdminClient } from '@/lib/supabase/admin';
 import type { TaskPriority, VideoPublicStatus, VideoStatus } from '@/types/database';
 import { appBaseUrl } from '@/lib/cron/app-base-url';
 import { getEmployeeUserId, insertNotifications } from '@/lib/notifications/notify';
@@ -23,6 +25,19 @@ import {
 import { legacyPrimaryAssignees, replaceVideoAssignments } from '@/lib/data/video-assignments';
 import { syncVideoLinkedProductionTaskFromDb, upsertVideoProductionTask } from '@/lib/tasks/video-production-task';
 import { getVideoById, type VideoWithClient } from '@/lib/data/videos';
+
+/** Ne pas exposer les messages techniques RLS / Postgres au formulaire. */
+function formatVideoMutationDbError(err: unknown): string {
+  const raw =
+    err && typeof err === 'object' && 'message' in err
+      ? String((err as { message: unknown }).message)
+      : getPostgrestError(err);
+  const lower = raw.toLowerCase();
+  if (lower.includes('row-level security') || lower.includes('rls')) {
+    return 'Création impossible : permissions insuffisantes ou configuration vidéo invalide.';
+  }
+  return raw;
+}
 
 function parseOptionalIsoTimestamp(raw: unknown): string | null {
   const s = String(raw ?? '').trim();
@@ -155,7 +170,8 @@ function enforceVideoAssigneeScopeArrays(
 export async function createVideoAction(formData: FormData): Promise<ActionResult<{ id: string }>> {
   const ctx = await getAuthContext();
   if (!ctx) return actionError('Non authentifié.');
-  if (videoMutationDenied(ctx)) return actionError('Action non autorisée pour votre rôle.');
+  const createDenied = assertCanCreateVideo(ctx);
+  if (createDenied) return actionError(createDenied);
 
   const supabase = await createClient();
   const {
@@ -212,20 +228,31 @@ export async function createVideoAction(formData: FormData): Promise<ActionResul
     created_by: user.id,
   };
 
-  const { data, error } = await supabase.from('videos').insert(row).select('id').single();
-  if (error) return actionError(getPostgrestError(error));
+  let admin;
+  try {
+    admin = createAdminClient();
+  } catch {
+    return actionError('Création impossible : configuration serveur incomplète. Contactez l’administrateur.');
+  }
+
+  const { data, error } = await admin.from('videos').insert(row).select('id').single();
+  if (error) {
+    console.error('[createVideoAction] insert videos:', error);
+    return actionError(formatVideoMutationDbError(error));
+  }
 
   try {
-    await replaceVideoAssignments(supabase, data.id, editorIds, cameramanIds);
+    await replaceVideoAssignments(admin, data.id, editorIds, cameramanIds);
   } catch (e) {
-    await supabase.from('videos').delete().eq('id', data.id);
-    return actionError(e instanceof Error ? e.message : 'Assignations vidéo invalides.');
+    await admin.from('videos').delete().eq('id', data.id);
+    console.error('[createVideoAction] video_assignments:', e);
+    return actionError(formatVideoMutationDbError(e));
   }
 
   const assigneeIdsForTask = [...new Set([...editorIds, ...cameramanIds])];
   const { data: clientRow } = await supabase.from('clients').select('name').eq('id', clientId).maybeSingle();
   try {
-    await upsertVideoProductionTask(supabase, {
+    await upsertVideoProductionTask(admin, {
       videoId: data.id,
       title,
       clientId,
@@ -319,7 +346,7 @@ export async function updateVideoAction(id: string, formData: FormData): Promise
     })
     .eq('id', id);
 
-  if (error) return actionError(getPostgrestError(error));
+  if (error) return actionError(formatVideoMutationDbError(error));
 
   try {
     await replaceVideoAssignments(supabase, id, editorIds, cameramanIds);
@@ -401,7 +428,7 @@ export async function updateVideoStatusAction(
   if (public_status) patch.public_status = public_status;
 
   const { error } = await supabase.from('videos').update(patch).eq('id', id);
-  if (error) return actionError(getPostgrestError(error));
+  if (error) return actionError(formatVideoMutationDbError(error));
 
   await logStaffActivity(ctx, {
     action: 'updated',
@@ -511,7 +538,7 @@ export async function deleteVideoAction(id: string): Promise<ActionResult> {
 
   const { data: v } = await supabase.from('videos').select('title').eq('id', id).maybeSingle();
   const { error } = await supabase.from('videos').delete().eq('id', id);
-  if (error) return actionError(getPostgrestError(error));
+  if (error) return actionError(formatVideoMutationDbError(error));
 
   await logStaffActivity(ctx, {
     action: 'deleted',

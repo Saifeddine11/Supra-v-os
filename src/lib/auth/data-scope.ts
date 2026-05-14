@@ -15,6 +15,16 @@ import type { AuthContext } from '@/lib/auth/permissions';
 import { canModifyQuotes, canViewInvoices } from '@/lib/auth/capabilities';
 import type { Project, UserRole } from '@/types/database';
 
+/** Rôles pouvant créer une fiche vidéo (aligné RLS `videos_insert_authorized` + produit). */
+const VIDEO_CREATE_ROLES: UserRole[] = [
+  'admin',
+  'project_manager',
+  'editor',
+  'cameraman',
+  'community_manager',
+  'commercial',
+];
+
 export type ScopedSupabase = SupabaseClient;
 
 export function effectiveRole(role: UserRole | null): UserRole | null {
@@ -46,6 +56,22 @@ export function videoMutationDenied(ctx: AuthContext): boolean {
   if (ctx.role === 'finance') return true;
   const er = effectiveRole(ctx.role);
   return er === 'developer' || er === 'seo';
+}
+
+/**
+ * Refus explicite de création de vidéo (complète `videoMutationDenied`).
+ * À appeler dans les server actions avant tout insert.
+ */
+export function assertCanCreateVideo(ctx: AuthContext): string | null {
+  if (videoMutationDenied(ctx)) return 'Action non autorisée pour votre rôle.';
+  if (!ctx.employee) return 'Profil employé introuvable : contactez un administrateur.';
+  if (!ctx.employee.is_active || ctx.employee.archived_at) {
+    return 'Compte employé inactif : la création de vidéo est désactivée.';
+  }
+  if (!ctx.role || !VIDEO_CREATE_ROLES.includes(ctx.role)) {
+    return 'Votre rôle ne permet pas de créer une vidéo.';
+  }
+  return null;
 }
 
 export function shouldScopeTasksToAssignee(ctx: AuthContext): boolean {
