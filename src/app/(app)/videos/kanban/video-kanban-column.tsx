@@ -1,7 +1,7 @@
 'use client';
 
 import { useDroppable } from '@dnd-kit/core';
-import type { Client } from '@/types/database';
+import type { Client, UserRole } from '@/types/database';
 import type { VideoAssignEmployeeRow } from '@/lib/data/employees';
 import type { VideoWithClient } from '@/lib/data/videos';
 import type { VideoStatus } from '@/types/database';
@@ -24,6 +24,8 @@ export function VideoKanbanColumn({
   onOpenDetail,
   highlightVideoId,
   scheduleNow,
+  viewerRole,
+  viewerEmployeeId,
 }: {
   columnKey: string;
   label: string;
@@ -38,6 +40,8 @@ export function VideoKanbanColumn({
   onOpenDetail?: (video: VideoWithClient) => void;
   highlightVideoId?: string | null;
   scheduleNow: Date;
+  viewerRole: UserRole | null;
+  viewerEmployeeId: string | null;
 }) {
   const droppable = columnKey !== 'terminal';
   const { setNodeRef, isOver } = useDroppable({
@@ -105,6 +109,8 @@ export function VideoKanbanColumn({
               onOpenDetail={onOpenDetail}
               highlightVideoId={highlightVideoId}
               scheduleNow={scheduleNow}
+              viewerRole={viewerRole}
+              viewerEmployeeId={viewerEmployeeId}
             />
           ))
         )}

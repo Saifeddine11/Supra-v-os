@@ -10,6 +10,8 @@ import type { NotificationSoundPrefs } from '@/lib/notifications/notification-so
 import { NotificationSoundBootstrap } from '@/components/app/notification-sound-bootstrap';
 import { GlobalCriticalAlertBar } from '@/components/app/global-critical-alert-bar';
 import { StickyAppHeader } from '@/components/app/sticky-app-header';
+import { ShootingConfirmationHost } from '@/components/videos/shooting-confirmation-modal';
+import type { ShootingConfirmQueueItem } from '@/lib/data/shooting-confirmation-queue';
 
 export type AppShellMode = 'full' | 'password_gate';
 
@@ -20,6 +22,10 @@ export interface AppShellProps {
   initialBellPreview: Notification[];
   notificationSoundPrefs: NotificationSoundPrefs;
   children: React.ReactNode;
+  /** Tournages à confirmer (PM / admin / cadreur assigné) — affichage modal unique. */
+  shootingConfirmQueue?: ShootingConfirmQueueItem[];
+  /** auth.users id — snooze localStorage par utilisateur. */
+  shootingConfirmUserId?: string | null;
   /** Sans navigation : changement de mot de passe obligatoire. */
   mode?: AppShellMode;
 }
@@ -31,6 +37,8 @@ export function AppShell({
   initialBellPreview,
   notificationSoundPrefs,
   children,
+  shootingConfirmQueue = [],
+  shootingConfirmUserId = null,
   mode = 'full',
 }: AppShellProps) {
   if (mode === 'password_gate') {
@@ -83,6 +91,9 @@ export function AppShell({
         <main className="relative z-10 mx-auto max-w-[1600px] px-4 py-6 pb-24 sm:px-6 lg:px-8 lg:py-8 lg:pb-8">
           {children}
         </main>
+        {shootingConfirmUserId && shootingConfirmQueue.length > 0 ? (
+          <ShootingConfirmationHost userId={shootingConfirmUserId} initialQueue={shootingConfirmQueue} />
+        ) : null}
         <AppShellToaster />
       </div>
     </div>

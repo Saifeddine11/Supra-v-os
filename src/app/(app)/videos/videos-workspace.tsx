@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { toast } from 'sonner';
-import type { Client } from '@/types/database';
+import type { Client, UserRole } from '@/types/database';
 import type { VideoWithClient } from '@/lib/data/videos';
 import type { VideoAssignEmployeeRow } from '@/lib/data/employees';
 import { VIDEO_STATUS_MAP, VIDEO_PUBLIC_STATUS_MAP } from '@/types/domain';
@@ -25,6 +25,7 @@ import { videoCadreurTableCell, videoMonteurTableCell } from '@/lib/videos/video
 import { VideoRowActions } from './video-row-actions';
 import { VideosKanban } from './videos-kanban';
 import { VideoDetailDialog } from './video-detail-dialog';
+import { videoShowsShootingConfirmBadge } from '@/lib/videos/shooting-confirmation';
 import { getVideoDetailForViewerAction } from './actions';
 
 export function VideosWorkspace({
@@ -36,6 +37,8 @@ export function VideosWorkspace({
   canMutateVideo,
   allowKanbanDrag,
   scheduleNowIso,
+  viewerRole,
+  viewerEmployeeId,
 }: {
   view: 'table' | 'kanban';
   rows: VideoWithClient[];
@@ -45,6 +48,8 @@ export function VideosWorkspace({
   canMutateVideo: boolean;
   allowKanbanDrag: boolean;
   scheduleNowIso: string;
+  viewerRole: UserRole | null;
+  viewerEmployeeId: string | null;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -143,6 +148,8 @@ export function VideosWorkspace({
       canDelete={canDelete}
       canMutateVideo={canMutateVideo}
       scheduleNow={scheduleNow}
+      viewerRole={viewerRole}
+      viewerEmployeeId={viewerEmployeeId}
     />
   ) : null;
 
@@ -158,6 +165,8 @@ export function VideosWorkspace({
           highlightVideoId={detail?.id ?? null}
           allowKanbanDrag={allowKanbanDrag}
           scheduleNow={scheduleNow}
+          viewerRole={viewerRole}
+          viewerEmployeeId={viewerEmployeeId}
         />
         {dialog}
       </>
@@ -211,7 +220,19 @@ export function VideosWorkspace({
                     openDetail(v);
                   }}
                 >
-                  <td className="px-4 py-3 font-medium text-foreground">{v.title}</td>
+                  <td className="px-4 py-3 font-medium text-foreground">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span>{v.title}</span>
+                      {videoShowsShootingConfirmBadge(v, scheduleNow, viewerRole, viewerEmployeeId) ? (
+                        <Badge
+                          variant="outline"
+                          className="border-primary/40 bg-primary/[0.08] text-[10px] font-semibold text-primary"
+                        >
+                          Tournage à confirmer
+                        </Badge>
+                      ) : null}
+                    </div>
+                  </td>
                   <td className="px-4 py-3 text-muted-foreground">
                     {v.clients?.name ? (
                       <span className="inline-flex items-center gap-2">

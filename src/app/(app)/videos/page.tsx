@@ -180,6 +180,8 @@ export default async function VideosPage({
               canMutateVideo={canMutateVideo}
               allowKanbanDrag={Boolean(canMutateVideo && ctx?.role !== 'commercial')}
               scheduleNowIso={scheduleNowIso}
+              viewerRole={ctx?.role ?? null}
+              viewerEmployeeId={ctx?.employee?.id ?? null}
             />
           </Suspense>
         )}

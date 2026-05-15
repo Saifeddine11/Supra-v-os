@@ -371,6 +371,24 @@ export interface Video {
   created_at: string;
   updated_at: string;
   created_by: string | null;
+  /** Confirmation « tournage fait » (passage montage). */
+  shooting_completed_at?: string | null;
+  /** Dernier report de tournage. */
+  shooting_postponed_at?: string | null;
+  shooting_postponed_reason?: string | null;
+  shooting_postponed_note?: string | null;
+}
+
+export interface VideoShootingEvent {
+  id: string;
+  video_id: string;
+  event_type: 'confirmed' | 'postponed';
+  old_shooting_at: string | null;
+  new_shooting_at: string | null;
+  reason: string | null;
+  note: string | null;
+  created_by: string | null;
+  created_at: string;
 }
 
 export interface EditorialCalendar {

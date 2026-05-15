@@ -129,6 +129,25 @@ export async function upsertVideoProductionTask(sb: SB, input: SyncVideoProducti
   await replaceTaskAssignments(sb, inserted.id as string, assignees);
 }
 
+/** Ajoute un paragraphe en fin de description de la tâche production liée à la vidéo. */
+export async function appendNoteToVideoProductionTask(sb: SB, videoId: string, paragraph: string): Promise<void> {
+  const note = paragraph.trim();
+  if (!note) return;
+  const { data: t, error } = await sb.from('tasks').select('id, description').eq('video_id', videoId).maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!t?.id) return;
+  const prev = String((t as { description: string | null }).description ?? '').trim();
+  const block = prev ? `\n\n${note}` : note;
+  const { error: up } = await sb
+    .from('tasks')
+    .update({
+      description: prev ? `${prev}${block}` : note,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', t.id as string);
+  if (up) throw new Error(up.message);
+}
+
 /** Recharge la vidéo + assignations et resynchronise la tâche production (ex. changement de statut). */
 export async function syncVideoLinkedProductionTaskFromDb(sb: SB, videoId: string): Promise<void> {
   const { data: vfull, error } = await sb

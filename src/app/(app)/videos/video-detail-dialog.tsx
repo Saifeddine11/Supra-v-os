@@ -6,7 +6,7 @@ import { fr } from 'date-fns/locale';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { X } from 'lucide-react';
-import type { Client, VideoPublicStatus, VideoStatus } from '@/types/database';
+import type { Client, UserRole, VideoPublicStatus, VideoStatus } from '@/types/database';
 import type { VideoWithClient } from '@/lib/data/videos';
 import type { VideoAssignEmployeeRow } from '@/lib/data/employees';
 import { VIDEO_STATUS_MAP, VIDEO_PUBLIC_STATUS_MAP, PRIORITY_MAP } from '@/types/domain';
@@ -25,6 +25,8 @@ import {
   getLinkedProductionTaskIdForVideoAction,
   updateVideoStatusAction,
 } from './actions';
+import { ShootingConfirmationInline } from '@/components/videos/shooting-confirmation-inline';
+import { videoShowsShootingConfirmBadge } from '@/lib/videos/shooting-confirmation';
 
 const STATUSES = Object.keys(VIDEO_STATUS_MAP) as VideoStatus[];
 const PUBLIC_STATUSES = Object.keys(VIDEO_PUBLIC_STATUS_MAP) as VideoPublicStatus[];
@@ -75,6 +77,8 @@ export function VideoDetailDialog({
   canDelete,
   canMutateVideo,
   scheduleNow,
+  viewerRole,
+  viewerEmployeeId,
 }: {
   video: VideoWithClient;
   open: boolean;
@@ -84,6 +88,8 @@ export function VideoDetailDialog({
   canDelete: boolean;
   canMutateVideo: boolean;
   scheduleNow: Date;
+  viewerRole: UserRole | null;
+  viewerEmployeeId: string | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -91,6 +97,12 @@ export function VideoDetailDialog({
   const deliveryIso = effectiveClientDeliveryIso(video);
   const od = isVideoDeliveryOverdue(video);
   const alerts = scheduleAlerts(video, scheduleNow);
+  const showShootingConfirm = videoShowsShootingConfirmBadge(
+    video,
+    scheduleNow,
+    viewerRole,
+    viewerEmployeeId,
+  );
   const clientRow = clients.find((c) => c.id === video.client_id);
   const clientHex = clientRow
     ? getClientColor(clientRow)
@@ -162,6 +174,8 @@ export function VideoDetailDialog({
         </header>
 
         <div className="space-y-5 px-5 py-4 sm:px-6">
+          {showShootingConfirm ? <ShootingConfirmationInline video={video} /> : null}
+
           {alerts.length ? (
             <div className="space-y-1.5 rounded-xl border border-orange-500/25 bg-orange-500/[0.06] px-3 py-2.5 dark:bg-orange-500/[0.08]">
               {alerts.map((line) => (

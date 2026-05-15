@@ -7,7 +7,7 @@ import { useTransition } from 'react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { GripVertical } from 'lucide-react';
-import type { Client } from '@/types/database';
+import type { Client, UserRole } from '@/types/database';
 import type { VideoAssignEmployeeRow } from '@/lib/data/employees';
 import type { VideoWithClient } from '@/lib/data/videos';
 import type { VideoStatus } from '@/types/database';
@@ -29,6 +29,7 @@ import { VideoFormDialog } from '../video-form-dialog';
 import { deleteVideoAction, updateVideoStatusAction } from '../actions';
 import { ClientColorDot } from '@/components/shared/client-color-dot';
 import { getClientColor } from '@/lib/ui/client-colors';
+import { videoShowsShootingConfirmBadge } from '@/lib/videos/shooting-confirmation';
 
 export function DraggableVideoKanbanCard({
   video: v,
@@ -39,6 +40,8 @@ export function DraggableVideoKanbanCard({
   onOpenDetail,
   highlightVideoId,
   scheduleNow,
+  viewerRole,
+  viewerEmployeeId,
 }: {
   video: VideoWithClient;
   clients: Pick<Client, 'id' | 'name' | 'color_hex' | 'color_label'>[];
@@ -48,6 +51,8 @@ export function DraggableVideoKanbanCard({
   onOpenDetail?: (video: VideoWithClient) => void;
   highlightVideoId?: string | null;
   scheduleNow: Date;
+  viewerRole: UserRole | null;
+  viewerEmployeeId: string | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -62,6 +67,7 @@ export function DraggableVideoKanbanCard({
   };
 
   const od = isVideoDeliveryOverdue(v);
+  const needsShootingConfirm = videoShowsShootingConfirmBadge(v, scheduleNow, viewerRole, viewerEmployeeId);
   const tone = videoWorkflowToStatusTone(v, { deliveryOverdue: Boolean(od) });
   const deliveryIso = effectiveClientDeliveryIso(v);
   const shootB = getShootingBadge(v.shooting_date, v.status, scheduleNow);
@@ -136,6 +142,14 @@ export function DraggableVideoKanbanCard({
           }
         >
           <p className="text-sm font-medium text-foreground">{v.title}</p>
+          {needsShootingConfirm ? (
+            <Badge
+              variant="outline"
+              className="mt-1.5 border-primary/40 bg-primary/[0.08] text-[10px] font-semibold text-primary"
+            >
+              Tournage à confirmer
+            </Badge>
+          ) : null}
           <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
             {v.clients?.name ? (
               <>

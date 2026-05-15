@@ -503,7 +503,12 @@ create table videos (
   -- Audit
   created_at          timestamptz not null default now(),
   updated_at          timestamptz not null default now(),
-  created_by          uuid references auth.users(id) on delete set null
+  created_by          uuid references auth.users(id) on delete set null,
+
+  shooting_completed_at timestamptz,
+  shooting_postponed_at timestamptz,
+  shooting_postponed_reason text,
+  shooting_postponed_note text
 );
 
 create index idx_videos_client on videos(client_id);

@@ -12,7 +12,7 @@ import {
 } from '@dnd-kit/core';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import type { Client } from '@/types/database';
+import type { Client, UserRole } from '@/types/database';
 import type { VideoAssignEmployeeRow } from '@/lib/data/employees';
 import type { VideoWithClient } from '@/lib/data/videos';
 import type { VideoStatus } from '@/types/database';
@@ -50,6 +50,8 @@ export function VideosKanban({
   highlightVideoId,
   allowKanbanDrag,
   scheduleNow,
+  viewerRole,
+  viewerEmployeeId,
 }: {
   videos: VideoWithClient[];
   clients: Pick<Client, 'id' | 'name' | 'color_hex' | 'color_label'>[];
@@ -59,6 +61,8 @@ export function VideosKanban({
   highlightVideoId?: string | null;
   allowKanbanDrag: boolean;
   scheduleNow: Date;
+  viewerRole: UserRole | null;
+  viewerEmployeeId: string | null;
 }) {
   const router = useRouter();
   const isDesktop = useDesktopDragEnabled();
@@ -164,6 +168,8 @@ export function VideosKanban({
                 onOpenDetail={onOpenDetail}
                 highlightVideoId={highlightVideoId}
                 scheduleNow={scheduleNow}
+                viewerRole={viewerRole}
+                viewerEmployeeId={viewerEmployeeId}
               />
             ))}
             <VideoKanbanColumn
@@ -181,6 +187,8 @@ export function VideosKanban({
               onOpenDetail={onOpenDetail}
               highlightVideoId={highlightVideoId}
               scheduleNow={scheduleNow}
+              viewerRole={viewerRole}
+              viewerEmployeeId={viewerEmployeeId}
             />
           </div>
         </div>

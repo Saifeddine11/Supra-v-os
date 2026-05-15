@@ -6,6 +6,7 @@ import { notificationSoundPrefsFromRow } from '@/lib/notifications/notification-
 import { AppShell } from '@/components/app/app-shell';
 import { StaffPasswordChangeGate } from '@/components/app/staff-password-change-gate';
 import type { Notification } from '@/types/database';
+import { fetchShootingConfirmationQueue } from '@/lib/data/shooting-confirmation-queue';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const ctx = await requireAuth();
@@ -29,6 +30,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     notificationSoundPrefs = notificationSoundPrefsFromRow(notifPrefs);
   }
 
+  let shootingConfirmQueue: Awaited<ReturnType<typeof fetchShootingConfirmationQueue>> = [];
+  if (!mustChangePassword) {
+    try {
+      shootingConfirmQueue = await fetchShootingConfirmationQueue(ctx);
+    } catch {
+      shootingConfirmQueue = [];
+    }
+  }
+
   return (
     <StaffPasswordChangeGate mustChangePassword={mustChangePassword}>
       <AppShell
@@ -38,6 +48,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         initialUnread={initialUnread}
         initialBellPreview={initialBellPreview}
         notificationSoundPrefs={notificationSoundPrefs}
+        shootingConfirmQueue={shootingConfirmQueue}
+        shootingConfirmUserId={ctx.userId}
       >
         {children}
       </AppShell>
