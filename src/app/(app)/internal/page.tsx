@@ -4,7 +4,7 @@ import { Plus } from 'lucide-react';
 import { listInternalProjectsWithStats, type InternalProjectListFilters } from '@/lib/data/internal-projects';
 import { listEmployeesForSelect } from '@/lib/data/employees';
 import { getAuthContext } from '@/lib/auth/permissions';
-import { canManageProjects } from '@/lib/auth/capabilities';
+import { canDeleteInternalProject, canManageProjects } from '@/lib/auth/capabilities';
 import { PROJECT_STATUS_MAP, INTERNAL_PRIORITY_MAP } from '@/types/domain';
 import type { InternalPriority, ProjectStatus } from '@/types/database';
 import { Button } from '@/components/ui/button';
@@ -37,7 +37,7 @@ export default async function InternalProjectsPage({
     listEmployeesForSelect(ctx),
   ]);
   const canEdit = canManageProjects(ctx?.role ?? null);
-  const isAdmin = ctx?.role === 'admin';
+  const canDelete = canDeleteInternalProject(ctx?.role ?? null);
 
   return (
     <div className="space-y-6">
@@ -113,7 +113,7 @@ export default async function InternalProjectsPage({
                       <td className="px-4 py-3 tabular-nums text-muted-foreground">{p.deadline ?? '—'}</td>
                       <td className="px-4 py-3 text-center text-muted-foreground">{p.task_count}</td>
                       <td className="px-4 py-3 text-right">
-                        <InternalProjectRowActions project={p} canEdit={canEdit} isAdmin={isAdmin} />
+                        <InternalProjectRowActions project={p} canEdit={canEdit} canDelete={canDelete} />
                       </td>
                     </tr>
                   );

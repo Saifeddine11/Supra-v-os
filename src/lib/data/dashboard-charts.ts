@@ -3,7 +3,7 @@ import 'server-only';
 import { addDays, endOfDay, format, startOfDay } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import type { AuthContext } from '@/lib/auth/permissions';
-import { canViewGlobalFinanceStats } from '@/lib/auth/capabilities';
+import { canViewGlobalFinanceStats, canViewQuotePipelineStats } from '@/lib/auth/capabilities';
 import {
   effectiveRole,
   fetchManagedClientIds,
@@ -400,18 +400,24 @@ export async function fetchDashboardChartsPayload(
       const rows = clients ?? [];
       const countStatus = (st: string) => rows.filter((r) => (r as { status: string }).status === st).length;
 
-      let qqSent = supabase.from('quotes').select('id', { count: 'exact', head: true }).eq('status', 'sent');
-      let qqAcc = supabase.from('quotes').select('id', { count: 'exact', head: true }).eq('status', 'accepted');
-      if (inList) {
-        qqSent = qqSent.in('client_id', inList);
-        qqAcc = qqAcc.in('client_id', inList);
+      let quoteSent = 0;
+      let quoteAccepted = 0;
+      if (canViewQuotePipelineStats(ctx.role)) {
+        let qqSent = supabase.from('quotes').select('id', { count: 'exact', head: true }).eq('status', 'sent');
+        let qqAcc = supabase.from('quotes').select('id', { count: 'exact', head: true }).eq('status', 'accepted');
+        if (inList) {
+          qqSent = qqSent.in('client_id', inList);
+          qqAcc = qqAcc.in('client_id', inList);
+        }
+        const [sentR, accR] = await Promise.all([qqSent, qqAcc]);
+        quoteSent = sentR.count ?? 0;
+        quoteAccepted = accR.count ?? 0;
       }
-      const [sentR, accR] = await Promise.all([qqSent, qqAcc]);
 
       clientPipeline = [
         { key: 'prospect', label: 'Prospects', count: countStatus('prospect') },
-        { key: 'quote_sent', label: 'Devis envoyés', count: sentR.count ?? 0 },
-        { key: 'quote_accepted', label: 'Devis acceptés', count: accR.count ?? 0 },
+        { key: 'quote_sent', label: 'Devis envoyés', count: quoteSent },
+        { key: 'quote_accepted', label: 'Devis acceptés', count: quoteAccepted },
         { key: 'active', label: 'Clients actifs', count: countStatus('active') },
         { key: 'pause', label: 'En pause', count: countStatus('pause') },
         { key: 'terminated', label: 'Terminés', count: countStatus('terminated') },

@@ -18,11 +18,11 @@ import { archiveProjectAction, deleteProjectAction } from './actions';
 export function ProjectRowActions({
   project,
   canEdit,
-  isAdmin,
+  canDelete,
 }: {
   project: Project;
   canEdit: boolean;
-  isAdmin: boolean;
+  canDelete: boolean;
 }) {
   const router = useRouter();
 
@@ -64,7 +64,7 @@ export function ProjectRowActions({
             </ConfirmDialog>
           </>
         ) : null}
-        {isAdmin ? (
+        {canDelete ? (
           <>
             <DropdownMenuSeparator />
             <ConfirmDialog

@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { getAuthContext } from '@/lib/auth/permissions';
-import { canManageProjects } from '@/lib/auth/capabilities';
+import { canDeleteProject, canManageProjects } from '@/lib/auth/capabilities';
 import { actionError, actionOk, getPostgrestError, type ActionResult } from '@/lib/actions/types';
 import type { ProjectStatus, TaskPriority } from '@/types/database';
 import { assertCommercialClientChoice, assertProjectIdAccessible } from '@/lib/auth/data-scope';
@@ -115,7 +115,7 @@ export async function archiveProjectAction(id: string): Promise<ActionResult> {
 
 export async function deleteProjectAction(id: string): Promise<ActionResult> {
   const ctx = await getAuthContext();
-  if (!ctx || ctx.role !== 'admin') return actionError('Réservé aux administrateurs.');
+  if (!ctx || !canDeleteProject(ctx.role)) return actionError('Droits insuffisants.');
   const supabase = await createClient();
   if (!(await assertProjectIdAccessible(supabase, ctx, id))) {
     return actionError('Projet inaccessible.');

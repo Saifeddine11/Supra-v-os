@@ -1,4 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
+import { canViewAgencyGoals } from '@/lib/auth/capabilities';
+import { getAuthContext } from '@/lib/auth/permissions';
 import type { AgencyMonthlyGoalRow } from '@/types/database';
 
 function normalizeGoalRow(row: Record<string, unknown> | null): AgencyMonthlyGoalRow | null {
@@ -27,6 +29,9 @@ export async function getAgencyMonthlyGoalForMonth(
   year: number,
   month: number
 ): Promise<AgencyMonthlyGoalRow | null> {
+  const ctx = await getAuthContext();
+  if (!canViewAgencyGoals(ctx?.role ?? null)) return null;
+
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('agency_monthly_goals')

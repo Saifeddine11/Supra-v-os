@@ -9,9 +9,9 @@ import type { NavGroup } from '@/config/navigation';
 import { APP_NAV_GROUPS } from '@/config/navigation';
 import {
   canManageClientPortal,
-  canModifyQuotes,
-  canViewInvoices,
   canManagePayments,
+  canViewInvoices,
+  canViewOperationalReports,
 } from '@/lib/auth/capabilities';
 
 /** Rôles salariés (hors portail client). */
@@ -82,18 +82,11 @@ export function navItemVisible(href: string, role: UserRole): boolean {
     case '/invoices':
       return canViewInvoices(role);
     case '/quotes':
-      return canModifyQuotes(role);
+      return canViewInvoices(role);
     case '/payments':
       return canManagePayments(role);
     case '/reports':
-      return (
-        r === 'admin' ||
-        r === 'project_manager' ||
-        r === 'commercial' ||
-        r === 'finance' ||
-        r === 'seo' ||
-        r === 'community_manager'
-      );
+      return canViewOperationalReports(role);
     case '/documents':
       return (
         r === 'admin' ||

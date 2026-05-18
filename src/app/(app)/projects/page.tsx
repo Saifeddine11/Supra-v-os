@@ -5,7 +5,7 @@ import { listProjectsWithStats, type ProjectListFilters } from '@/lib/data/proje
 import { listClients } from '@/lib/data/clients';
 import { listEmployeesForSelect } from '@/lib/data/employees';
 import { getAuthContext } from '@/lib/auth/permissions';
-import { canManageProjects } from '@/lib/auth/capabilities';
+import { canDeleteProject, canManageProjects } from '@/lib/auth/capabilities';
 import { PROJECT_STATUS_MAP, PRIORITY_MAP } from '@/types/domain';
 import { formatProjectType } from '@/lib/utils/project-labels';
 import type { ProjectStatus, TaskPriority } from '@/types/database';
@@ -48,7 +48,7 @@ export default async function ProjectsPage({
   ]);
 
   const canEdit = canManageProjects(ctx?.role ?? null);
-  const isAdmin = ctx?.role === 'admin';
+  const canDelete = canDeleteProject(ctx?.role ?? null);
   const clientOpts = clients.map((c) => ({ id: c.id, name: c.name }));
 
   return (
@@ -151,7 +151,7 @@ export default async function ProjectsPage({
                       <td className="px-4 py-3 tabular-nums text-muted-foreground">{p.deadline ?? '—'}</td>
                       <td className="px-4 py-3 text-center tabular-nums text-muted-foreground">{p.task_count}</td>
                       <td className="px-4 py-3 text-right">
-                        <ProjectRowActions project={p} canEdit={canEdit} isAdmin={isAdmin} />
+                        <ProjectRowActions project={p} canEdit={canEdit} canDelete={canDelete} />
                       </td>
                     </tr>
                   );

@@ -643,7 +643,7 @@ export default async function DashboardPage() {
               title="Urgent aujourd’hui"
               description={
                 summary.scope === 'operations'
-                  ? 'Tâches urgentes, validations vidéo, rapports — factures signalées sans montant (finance globale réservée Admin / Finance).'
+                  ? 'Tâches urgentes, validations vidéo, rapports non envoyés et échéances production — sans indicateurs financiers globaux.'
                   : 'Factures échues, tâches urgentes, validations vidéo et rapports non envoyés.'
               }
               action={

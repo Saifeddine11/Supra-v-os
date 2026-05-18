@@ -18,11 +18,11 @@ import { archiveInternalProjectAction, deleteInternalProjectAction } from './act
 export function InternalProjectRowActions({
   project,
   canEdit,
-  isAdmin,
+  canDelete,
 }: {
   project: InternalProject;
   canEdit: boolean;
-  isAdmin: boolean;
+  canDelete: boolean;
 }) {
   const router = useRouter();
 
@@ -59,7 +59,7 @@ export function InternalProjectRowActions({
             </ConfirmDialog>
           </>
         ) : null}
-        {isAdmin ? (
+        {canDelete ? (
           <>
             <DropdownMenuSeparator />
             <ConfirmDialog

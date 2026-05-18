@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { getAuthContext } from '@/lib/auth/permissions';
-import { canManageProjects } from '@/lib/auth/capabilities';
+import { canDeleteInternalProject, canManageProjects } from '@/lib/auth/capabilities';
 import { actionError, actionOk, getPostgrestError, type ActionResult } from '@/lib/actions/types';
 import type { InternalPriority, ProjectStatus } from '@/types/database';
 
@@ -96,7 +96,7 @@ export async function archiveInternalProjectAction(id: string): Promise<ActionRe
 
 export async function deleteInternalProjectAction(id: string): Promise<ActionResult> {
   const ctx = await getAuthContext();
-  if (!ctx || ctx.role !== 'admin') return actionError('Réservé aux administrateurs.');
+  if (!ctx || !canDeleteInternalProject(ctx.role)) return actionError('Droits insuffisants.');
   const supabase = await createClient();
   const { error } = await supabase.from('internal_projects').delete().eq('id', id);
   if (error) return actionError(getPostgrestError(error));
