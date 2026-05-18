@@ -1,7 +1,11 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { getAuthContext } from '@/lib/auth/permissions';
-import { canDeleteClient, canModifyClients } from '@/lib/auth/capabilities';
+import {
+  canDeleteClient,
+  canModifyClients,
+  canViewClientContractFinancials,
+} from '@/lib/auth/capabilities';
 import { listClients } from '@/lib/data/clients';
 import { listEmployeesForSelect } from '@/lib/data/employees';
 import { getAgencyDisplayCurrency } from '@/lib/data/agency-settings-db';
@@ -39,6 +43,7 @@ export default async function ClientsPage({
 
   const canEdit = canModifyClients(ctx?.role ?? null);
   const canDelete = canDeleteClient(ctx?.role ?? null);
+  const showContractFinancials = canViewClientContractFinancials(ctx?.role ?? null);
 
   return (
     <div className="space-y-6">
@@ -55,6 +60,7 @@ export default async function ClientsPage({
         defaultQ={q}
         defaultStatus={statusParam}
         defaultAgencyCurrency={agencyCurrency}
+        showContractFinancials={showContractFinancials}
       />
 
       <SectionCard title="Liste" description={`${clients.length} client(s) affiché(s)`}>
@@ -112,6 +118,7 @@ export default async function ClientsPage({
                           client={c}
                           employees={employees}
                           defaultAgencyCurrency={agencyCurrency}
+                          showContractFinancials={showContractFinancials}
                           canEdit={canEdit}
                           canDelete={canDelete}
                         />

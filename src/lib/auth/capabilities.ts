@@ -4,13 +4,17 @@
  */
 import type { UserRole } from '@/types/database';
 
+/** Lecture factures / paiements liés — hors chef de projet (pilotage prod sans finance). */
 export function canViewInvoices(role: UserRole | null): boolean {
-  return (
-    role === 'admin' ||
-    role === 'project_manager' ||
-    role === 'commercial' ||
-    role === 'finance'
-  );
+  return role === 'admin' || role === 'commercial' || role === 'finance';
+}
+
+/**
+ * Forfait client, devise contrat, champs liés au CA client.
+ * Réservé admin + commercial + finance — pas le chef de projet.
+ */
+export function canViewClientContractFinancials(role: UserRole | null): boolean {
+  return role === 'admin' || role === 'commercial' || role === 'finance';
 }
 
 /**

@@ -39,12 +39,15 @@ export function ClientFormDialog({
   employees,
   client,
   defaultAgencyCurrency,
+  showContractFinancials = true,
   trigger,
 }: {
   employees: Pick<Employee, 'id' | 'full_name'>[];
   client?: Client | null;
   /** Devise par défaut à la création (Paramètres agence). */
   defaultAgencyCurrency: string;
+  /** Montant forfaitaire / devise — masqués pour le chef de projet. */
+  showContractFinancials?: boolean;
   trigger: React.ReactNode;
 }) {
   const router = useRouter();
@@ -200,20 +203,22 @@ export function ClientFormDialog({
                 defaultValue={client?.monthly_video_quota ?? 0}
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="monthly_fee">Montant forfaitaire</Label>
-              <Input
-                id="monthly_fee"
-                name="monthly_fee"
-                type="number"
-                min={0}
-                step="0.01"
-                defaultValue={client?.monthly_fee ?? 0}
-              />
-              <p className="text-[11px] text-muted-foreground">
-                Mensuel / retainer : montant par mois. One-shot : montant unique (compté le mois de la date de début).
-              </p>
-            </div>
+            {showContractFinancials ? (
+              <div className="space-y-2">
+                <Label htmlFor="monthly_fee">Montant forfaitaire</Label>
+                <Input
+                  id="monthly_fee"
+                  name="monthly_fee"
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  defaultValue={client?.monthly_fee ?? 0}
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Mensuel / retainer : montant par mois. One-shot : montant unique (compté le mois de la date de début).
+                </p>
+              </div>
+            ) : null}
             <div className="space-y-2 sm:col-span-2 grid gap-2 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="start_date">Date de début contrat</Label>
@@ -229,21 +234,23 @@ export function ClientFormDialog({
                 <Input id="end_date" name="end_date" type="date" defaultValue={client?.end_date ?? ''} />
               </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="currency">Devise</Label>
-              <select
-                id="currency"
-                name="currency"
-                className="flex h-10 w-full rounded-lg border border-border bg-muted px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-                defaultValue={normalizeAgencyCurrency(client?.currency ?? defaultAgencyCurrency)}
-              >
-                {AGENCY_CURRENCY_SELECT_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {showContractFinancials ? (
+              <div className="space-y-2">
+                <Label htmlFor="currency">Devise</Label>
+                <select
+                  id="currency"
+                  name="currency"
+                  className="flex h-10 w-full rounded-lg border border-border bg-muted px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                  defaultValue={normalizeAgencyCurrency(client?.currency ?? defaultAgencyCurrency)}
+                >
+                  {AGENCY_CURRENCY_SELECT_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="account_manager_id">Account manager</Label>
               <select

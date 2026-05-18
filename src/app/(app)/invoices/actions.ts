@@ -241,7 +241,7 @@ export async function deleteInvoiceAction(id: string): Promise<ActionResult> {
 export async function refreshInvoiceOverdueAction(): Promise<ActionResult> {
   const ctx = await getAuthContext();
   /** Pas de recalcul global pour les rôles sans responsabilité ops / finance (ex. commercial en lecture). */
-  if (!ctx || !['admin', 'finance', 'project_manager'].includes(ctx.role ?? '')) {
+  if (!ctx || !['admin', 'finance'].includes(ctx.role ?? '')) {
     return actionOk();
   }
 

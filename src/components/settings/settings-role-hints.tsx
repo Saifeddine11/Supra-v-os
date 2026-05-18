@@ -33,22 +33,22 @@ export function SettingsRoleHints({ role }: { role: UserRole }) {
       return (
         <ul className="list-inside list-disc space-y-2 text-sm text-muted-foreground">
           <li>
-            <Link href="/tasks/calendar" className={linkCls}>
-              Calendrier des tâches
+            <Link href="/videos" className={linkCls}>
+              Vidéos
             </Link>{' '}
-            — planning et échéances.
+            — production, kanban et tournages.
           </li>
           <li>
             <Link href="/tasks" className={linkCls}>
               Tâches
             </Link>{' '}
-            — suivi opérationnel.
+            — statuts, assignations et priorités.
           </li>
           <li>
-            <Link href="/team" className={linkCls}>
-              Équipe
+            <Link href="/tasks/calendar" className={linkCls}>
+              Calendrier des tâches
             </Link>{' '}
-            — rosters et charge.
+            — planning et deadlines.
           </li>
         </ul>
       );

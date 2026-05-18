@@ -538,7 +538,7 @@ create policy "invoices_select_scoped"
   on invoices for select
   to authenticated
   using (
-    auth_is_admin_or_pm()
+    public.auth_is_admin()
     or public.auth_is_finance()
     or (
       public.auth_is_commercial()
@@ -566,7 +566,7 @@ create policy "invoice_items_select_scoped"
       select 1 from invoices inv
       where inv.id = invoice_items.invoice_id
         and (
-          auth_is_admin_or_pm()
+          public.auth_is_admin()
           or public.auth_is_finance()
           or (
             public.auth_is_commercial()
@@ -597,7 +597,6 @@ create policy "quotes_select_scoped"
   to authenticated
   using (
     public.auth_is_admin()
-    or auth_user_role() = 'project_manager'::user_role
     or public.auth_is_finance()
     or (
       public.auth_is_commercial()
@@ -626,7 +625,6 @@ create policy "quote_items_select_scoped"
       where q.id = quote_items.quote_id
         and (
           public.auth_is_admin()
-          or auth_user_role() = 'project_manager'::user_role
           or public.auth_is_finance()
           or (
             public.auth_is_commercial()

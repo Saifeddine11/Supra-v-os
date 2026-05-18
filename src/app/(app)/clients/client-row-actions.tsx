@@ -14,6 +14,7 @@ export function ClientRowActions({
   client,
   employees,
   defaultAgencyCurrency,
+  showContractFinancials = true,
   canEdit,
   canDelete,
   onDeleted,
@@ -21,6 +22,7 @@ export function ClientRowActions({
   client: Client;
   employees: Pick<Employee, 'id' | 'full_name'>[];
   defaultAgencyCurrency: string;
+  showContractFinancials?: boolean;
   canEdit: boolean;
   canDelete: boolean;
   /** Appelé après suppression réussie (ex. redirection depuis la fiche). */
@@ -39,6 +41,7 @@ export function ClientRowActions({
           client={client}
           employees={employees}
           defaultAgencyCurrency={defaultAgencyCurrency}
+          showContractFinancials={showContractFinancials}
           trigger={
             <Button variant="ghost" size="icon" className="h-8 w-8" title="Modifier">
               <Pencil className="h-4 w-4" />

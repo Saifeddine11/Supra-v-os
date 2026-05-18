@@ -5,7 +5,13 @@ import { getClientById } from '@/lib/data/clients';
 import { getClientRelations } from '@/lib/data/client-detail';
 import { listEmployeesForSelect } from '@/lib/data/employees';
 import { getAuthContext } from '@/lib/auth/permissions';
-import { canDeleteClient, canManageClientPortal, canModifyClients } from '@/lib/auth/capabilities';
+import {
+  canDeleteClient,
+  canManageClientPortal,
+  canModifyClients,
+  canViewClientContractFinancials,
+  canViewInvoices,
+} from '@/lib/auth/capabilities';
 import {
   CLIENT_STATUS_MAP,
   INVOICE_STATUS_MAP,
@@ -60,6 +66,8 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   const canEdit = canModifyClients(ctx?.role ?? null);
   const canDelete = canDeleteClient(ctx?.role ?? null);
   const canPortal = canManageClientPortal(ctx?.role ?? null);
+  const showContractFinancials = canViewClientContractFinancials(ctx?.role ?? null);
+  const showInvoices = canViewInvoices(ctx?.role ?? null);
   const st = CLIENT_STATUS_MAP[client.status];
 
   const clientAccent = getClientAccent({ name: client.name, color_hex: client.color_hex });
@@ -103,6 +111,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
             client={client}
             employees={employees}
             defaultAgencyCurrency={agencyCurrency}
+            showContractFinancials={showContractFinancials}
             canEdit={canEdit}
             canDelete={canDelete}
           />
@@ -132,9 +141,13 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
               </dd>
             </div>
             <div>
-              <dt className="text-xs text-muted-foreground">Forfait / quota</dt>
+              <dt className="text-xs text-muted-foreground">
+                {showContractFinancials ? 'Forfait / quota' : 'Quota production'}
+              </dt>
               <dd className="text-foreground">
-                {client.monthly_fee} {client.currency} · {client.monthly_video_quota} vidéos / mois
+                {showContractFinancials
+                  ? `${client.monthly_fee} ${client.currency} · ${client.monthly_video_quota} vidéos / mois`
+                  : `${client.monthly_video_quota} vidéos / mois`}
               </dd>
             </div>
           </dl>
@@ -287,6 +300,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
         ) : null}
       </SectionCard>
 
+      {showInvoices ? (
       <SectionCard title="Factures" description={`${bundle.invoices.length} facture(s)`}>
         {bundle.invoices.length === 0 ? (
           <p className="text-sm text-muted-foreground">Aucune facture.</p>
@@ -315,6 +329,7 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
           </ul>
         )}
       </SectionCard>
+      ) : null}
 
       <SectionCard title="Documents" description={`${otherDocuments.length} fichier(s) (hors roadmaps)`}>
         {otherDocuments.length === 0 ? (

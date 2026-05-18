@@ -4,7 +4,7 @@ import { endOfDay, format, formatDistanceToNow, isBefore, isWithinInterval, star
 import { fr } from 'date-fns/locale';
 import { createClient } from '@/lib/supabase/server';
 import type { AuthContext } from '@/lib/auth/permissions';
-import { canViewGlobalFinanceStats } from '@/lib/auth/capabilities';
+import { canViewGlobalFinanceStats, canViewInvoices } from '@/lib/auth/capabilities';
 import { fetchManagedClientIds, hasFullOrgDataAccess } from '@/lib/auth/data-scope';
 import type {
   ClientFollowMock,
@@ -169,6 +169,7 @@ export async function fetchDashboardOperational(ctx: AuthContext): Promise<Dashb
 
   const supabase = await createClient();
   const currency = await getAgencyDisplayCurrency();
+  const canQueryInvoices = canViewInvoices(ctx.role);
   const showInvoiceAmountsInFeed = canViewGlobalFinanceStats(ctx.role);
   const today = format(new Date(), 'yyyy-MM-dd');
   const now = new Date();
@@ -202,17 +203,19 @@ export async function fetchDashboardOperational(ctx: AuthContext): Promise<Dashb
       .select('id, title, status, public_status, client_id, updated_at, clients(name, color_hex)')
       .order('updated_at', { ascending: false })
       .limit(400),
-    showInvoiceAmountsInFeed
-      ? supabase
-          .from('invoices')
-          .select('id, client_id, due_date, status, total, clients(name, color_hex)')
-          .in('status', ['overdue', 'sent', 'pending'])
-          .limit(200)
-      : supabase
-          .from('invoices')
-          .select('id, client_id, due_date, status, clients(name, color_hex)')
-          .in('status', ['overdue', 'sent', 'pending'])
-          .limit(200),
+    canQueryInvoices
+      ? showInvoiceAmountsInFeed
+        ? supabase
+            .from('invoices')
+            .select('id, client_id, due_date, status, total, clients(name, color_hex)')
+            .in('status', ['overdue', 'sent', 'pending'])
+            .limit(200)
+        : supabase
+            .from('invoices')
+            .select('id, client_id, due_date, status, clients(name, color_hex)')
+            .in('status', ['overdue', 'sent', 'pending'])
+            .limit(200)
+      : Promise.resolve({ data: [] as { id: string; client_id: string; due_date: string; status: string; total?: number; clients: { name?: string; color_hex?: string | null } | null }[], error: null }),
     supabase
       .from('projects')
       .select('id, title, progress, status, notes_internal, clients(name)')

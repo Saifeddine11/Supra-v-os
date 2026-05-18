@@ -213,7 +213,7 @@ export async function assertPaymentRecordVisible(
   ctx: AuthContext,
   clientId: string | null
 ): Promise<boolean> {
-  if (!clientId) return hasFullOrgDataAccess(ctx) || ctx.role === 'finance';
+  if (!clientId) return ctx.role === 'admin' || ctx.role === 'finance';
   return assertInvoiceRecordVisible(sb, ctx, clientId);
 }
 

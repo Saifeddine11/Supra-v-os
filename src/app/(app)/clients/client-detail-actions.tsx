@@ -8,12 +8,14 @@ export function ClientDetailActions({
   client,
   employees,
   defaultAgencyCurrency,
+  showContractFinancials = true,
   canEdit,
   canDelete,
 }: {
   client: Client;
   employees: Pick<Employee, 'id' | 'full_name'>[];
   defaultAgencyCurrency: string;
+  showContractFinancials?: boolean;
   canEdit: boolean;
   canDelete: boolean;
 }) {
@@ -23,6 +25,7 @@ export function ClientDetailActions({
       client={client}
       employees={employees}
       defaultAgencyCurrency={defaultAgencyCurrency}
+      showContractFinancials={showContractFinancials}
       canEdit={canEdit}
       canDelete={canDelete}
       onDeleted={() => router.push('/clients')}

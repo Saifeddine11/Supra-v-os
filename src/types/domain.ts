@@ -257,7 +257,7 @@ export const TASK_KANBAN_STATUSES: TaskStatus[] = [
 
 // ─── PERMISSION HELPERS ─────────────────────────────────────────────────────
 
-export const FINANCIAL_ROLES: UserRole[] = ['admin', 'project_manager', 'commercial', 'finance'];
+export const FINANCIAL_ROLES: UserRole[] = ['admin', 'commercial', 'finance'];
 export const FINANCIAL_WRITE_ROLES: UserRole[] = ['admin', 'commercial', 'finance'];
 export const PRODUCTION_ROLES: UserRole[] = ['admin', 'project_manager', 'editor', 'cameraman'];
 export const ADMIN_ROLES: UserRole[] = ['admin', 'project_manager'];

@@ -3,7 +3,11 @@
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 import { getAuthContext } from '@/lib/auth/permissions';
-import { canDeleteClient, canModifyClients } from '@/lib/auth/capabilities';
+import {
+  canDeleteClient,
+  canModifyClients,
+  canViewClientContractFinancials,
+} from '@/lib/auth/capabilities';
 import { actionError, actionOk, getPostgrestError, type ActionResult } from '@/lib/actions/types';
 import { logStaffActivity } from '@/lib/activity/log-activity';
 import { assertClientRecordVisible } from '@/lib/auth/data-scope';
@@ -59,6 +63,8 @@ export async function createClientAction(formData: FormData): Promise<ActionResu
     accountManager = ctx.employee.id;
   }
 
+  const showContractFinancials = canViewClientContractFinancials(ctx.role);
+
   const row = {
     name,
     legal_name: String(formData.get('legal_name') ?? '').trim() || null,
@@ -72,10 +78,12 @@ export async function createClientAction(formData: FormData): Promise<ActionResu
     country: String(formData.get('country') ?? 'Maroc').trim() || 'Maroc',
     services: services.length ? services : [],
     monthly_video_quota: Number(formData.get('monthly_video_quota') ?? 0) || 0,
-    monthly_fee: Number(formData.get('monthly_fee') ?? 0) || 0,
+    monthly_fee: showContractFinancials ? Number(formData.get('monthly_fee') ?? 0) || 0 : 0,
     start_date: parseOptionalDate(formData, 'start_date'),
     end_date: parseOptionalDate(formData, 'end_date'),
-    currency: normalizeAgencyCurrency(String(formData.get('currency') ?? '').trim() || agencyCurrency),
+    currency: showContractFinancials
+      ? normalizeAgencyCurrency(String(formData.get('currency') ?? '').trim() || agencyCurrency)
+      : agencyCurrency,
     notes_internal: String(formData.get('notes_internal') ?? '').trim() || null,
     account_manager_id: accountManager || null,
     color_hex,
@@ -131,7 +139,9 @@ export async function updateClientAction(id: string, formData: FormData): Promis
     accountManager = ctx.employee.id;
   }
 
-  const patch = {
+  const showContractFinancials = canViewClientContractFinancials(ctx.role);
+
+  const patch: Record<string, unknown> = {
     name,
     legal_name: String(formData.get('legal_name') ?? '').trim() || null,
     sector,
@@ -144,16 +154,21 @@ export async function updateClientAction(id: string, formData: FormData): Promis
     country: String(formData.get('country') ?? 'Maroc').trim() || 'Maroc',
     services: services.length ? services : [],
     monthly_video_quota: Number(formData.get('monthly_video_quota') ?? 0) || 0,
-    monthly_fee: Number(formData.get('monthly_fee') ?? 0) || 0,
     start_date: parseOptionalDate(formData, 'start_date'),
     end_date: parseOptionalDate(formData, 'end_date'),
-    currency: normalizeAgencyCurrency(String(formData.get('currency') ?? '').trim() || agencyCurrency),
     notes_internal: String(formData.get('notes_internal') ?? '').trim() || null,
     account_manager_id: accountManager || null,
     color_hex,
     color_label,
     updated_at: new Date().toISOString(),
   };
+
+  if (showContractFinancials) {
+    patch.monthly_fee = Number(formData.get('monthly_fee') ?? 0) || 0;
+    patch.currency = normalizeAgencyCurrency(
+      String(formData.get('currency') ?? '').trim() || agencyCurrency,
+    );
+  }
   const { error } = await supabase.from('clients').update(patch).eq('id', id);
 
   if (error) return actionError(getPostgrestError(error));

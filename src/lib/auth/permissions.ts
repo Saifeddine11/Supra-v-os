@@ -73,7 +73,7 @@ export async function requireAdminOrPM() {
 }
 
 export async function requireFinancialRole() {
-  return requireRole(['admin', 'project_manager', 'commercial', 'finance']);
+  return requireRole(['admin', 'commercial', 'finance']);
 }
 
 export async function requireFinancialWriteRole() {

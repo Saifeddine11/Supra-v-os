@@ -21,12 +21,14 @@ export function ClientsToolbar({
   defaultQ,
   defaultStatus,
   defaultAgencyCurrency,
+  showContractFinancials = true,
 }: {
   employees: Pick<Employee, 'id' | 'full_name'>[];
   canCreate: boolean;
   defaultQ?: string;
   defaultStatus?: string;
   defaultAgencyCurrency: string;
+  showContractFinancials?: boolean;
 }) {
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -51,6 +53,7 @@ export function ClientsToolbar({
         <ClientFormDialog
           employees={employees}
           defaultAgencyCurrency={defaultAgencyCurrency}
+          showContractFinancials={showContractFinancials}
           trigger={
             <Button variant="primary" className="rounded-full">
               <Plus className="h-4 w-4" />
