@@ -230,10 +230,19 @@ create policy "tasks_select_scoped"
   using (public.auth_staff_task_visible(tasks.id));
 
 drop policy if exists "tasks_insert_authorized" on tasks;
-create policy "tasks_insert_authorized"
+drop policy if exists "tasks_insert_operational" on tasks;
+create policy "tasks_insert_operational"
   on tasks for insert
   to authenticated
-  with check (auth_user_role() is not null);
+  with check (
+    auth_is_admin_or_pm()
+    or (
+      auth_employee_id() is not null
+      and auth_user_role() in (
+        'editor', 'cameraman', 'developer', 'designer', 'seo', 'community_manager'
+      )
+    )
+  );
 
 drop policy if exists "tasks_update_assigned_or_admin" on tasks;
 -- Pivot task_assignments + legacy assignee_id / watchers.
@@ -278,12 +287,18 @@ create policy "task_assignments_select_scoped"
   );
 
 drop policy if exists "task_assignments_insert_authorized" on task_assignments;
-create policy "task_assignments_insert_authorized"
+drop policy if exists "task_assignments_insert_operational" on task_assignments;
+create policy "task_assignments_insert_operational"
   on task_assignments for insert
   to authenticated
   with check (
-    auth_user_role() is not null
-    and exists (select 1 from tasks t where t.id = task_assignments.task_id)
+    auth_is_admin_or_pm()
+    or (
+      auth_employee_id() is not null
+      and auth_user_role() is not null
+      and auth_user_role() not in ('finance', 'commercial')
+      and exists (select 1 from tasks t where t.id = task_assignments.task_id)
+    )
   );
 
 drop policy if exists "task_assignments_update_assigned_or_admin" on task_assignments;

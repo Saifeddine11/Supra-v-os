@@ -1155,32 +1155,57 @@ $$ language plpgsql;
 -- ============================================================================
 
 -- Get the calling user's role (or null)
-create or replace function auth_user_role()
-returns user_role as $$
-declare r user_role;
+create or replace function public.auth_user_role()
+returns public.user_role
+language plpgsql
+stable
+security definer
+set search_path = public
+set row_security = off
+as $$
+declare r public.user_role;
 begin
-  select role into r from employees where user_id = auth.uid() limit 1;
+  select e.role into r
+  from public.employees e
+  where e.user_id = auth.uid()
+  limit 1;
   return r;
 end;
-$$ language plpgsql stable security definer;
+$$;
 
 -- Get the calling user's employee_id (or null)
-create or replace function auth_employee_id()
-returns uuid as $$
+create or replace function public.auth_employee_id()
+returns uuid
+language plpgsql
+stable
+security definer
+set search_path = public
+set row_security = off
+as $$
 declare e uuid;
 begin
-  select id into e from employees where user_id = auth.uid() limit 1;
+  select emp.id into e
+  from public.employees emp
+  where emp.user_id = auth.uid()
+  limit 1;
   return e;
 end;
-$$ language plpgsql stable security definer;
+$$;
 
 -- Is the user an admin or PM?
-create or replace function auth_is_admin_or_pm()
-returns boolean as $$
-begin
-  return auth_user_role() in ('admin', 'project_manager');
-end;
-$$ language plpgsql stable security definer;
+create or replace function public.auth_is_admin_or_pm()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+set row_security = off
+as $$
+  select public.auth_user_role() in (
+    'admin'::public.user_role,
+    'project_manager'::public.user_role
+  );
+$$;
 
 -- ---------------------------------------------------------------------------
 -- RLS SELECT scope helpers (SECURITY DEFINER + row_security off). Full source

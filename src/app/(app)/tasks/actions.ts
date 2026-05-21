@@ -1,9 +1,17 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/server';
-import { getAuthContext } from '@/lib/auth/permissions';
-import { canDeleteTask, canManageAllTasks } from '@/lib/auth/capabilities';
+import { createAdminClient } from '@/lib/supabase/admin';
+import { getAuthContext, type AuthContext } from '@/lib/auth/permissions';
+import {
+  canChangeTaskStatus,
+  canCreateTasks,
+  canDeleteTask,
+  canManageAllTasks,
+  canUpdateTasks,
+} from '@/lib/auth/capabilities';
 import {
   assertClientRecordVisible,
   assertTaskRecordVisible,
@@ -20,6 +28,43 @@ import {
   legacyPrimaryAssignee,
   replaceTaskAssignments,
 } from '@/lib/data/task-assignments';
+
+const TASK_MUTATION_DENIED =
+  'Action impossible : vous n’avez pas l’autorisation ou la tâche est invalide.';
+
+function formatTaskMutationDbError(err: unknown): string {
+  const raw =
+    err && typeof err === 'object' && 'message' in err
+      ? String((err as { message: unknown }).message)
+      : getPostgrestError(err);
+  const lower = raw.toLowerCase();
+  if (lower.includes('row-level security') || lower.includes('rls') || lower.includes('permission denied')) {
+    return TASK_MUTATION_DENIED;
+  }
+  return raw;
+}
+
+/** Admin / chef de projet : écritures via service role après contrôle métier (évite les écarts RLS). */
+async function resolveTaskMutationClient(ctx: AuthContext): Promise<SupabaseClient> {
+  if (canManageAllTasks(ctx.role)) {
+    try {
+      return createAdminClient();
+    } catch (e) {
+      console.error('[tasks] createAdminClient:', e);
+    }
+  }
+  return createClient();
+}
+
+function assertActiveEmployee(ctx: AuthContext): ActionResult<never> | null {
+  if (!ctx.employee) {
+    return actionError('Profil employé introuvable : contactez un administrateur.');
+  }
+  if (!ctx.employee.is_active || ctx.employee.archived_at) {
+    return actionError('Compte employé inactif : action désactivée.');
+  }
+  return null;
+}
 
 function dedupeIds(ids: string[]): string[] {
   return [...new Set(ids.map((x) => x.trim()).filter(Boolean))];
@@ -50,12 +95,17 @@ function parseAssigneeIdsFromForm(formData: FormData): string[] {
 export async function createTaskAction(formData: FormData): Promise<ActionResult<{ id: string }>> {
   const ctx = await getAuthContext();
   if (!ctx) return actionError('Non authentifié.');
+  if (!canCreateTasks(ctx.role)) return actionError('Action non autorisée pour votre rôle.');
   if (taskListingDenied(ctx)) return actionError('Action non autorisée pour votre rôle.');
 
-  const supabase = await createClient();
+  const inactive = assertActiveEmployee(ctx);
+  if (inactive) return inactive;
+
+  const readSb = await createClient();
+  const writeSb = await resolveTaskMutationClient(ctx);
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await readSb.auth.getUser();
   if (!user) return actionError('Session expirée.');
 
   const title = String(formData.get('title') ?? '').trim();
@@ -65,7 +115,7 @@ export async function createTaskAction(formData: FormData): Promise<ActionResult
   let assigneeIds = parseAssigneeIdsFromForm(formData);
   const deadlineRaw = String(formData.get('deadline') ?? '').trim();
 
-  if (clientId && !(await assertClientRecordVisible(supabase, ctx, clientId))) {
+  if (clientId && !(await assertClientRecordVisible(readSb, ctx, clientId))) {
     return actionError('Client non autorisé pour cette tâche.');
   }
 
@@ -78,7 +128,7 @@ export async function createTaskAction(formData: FormData): Promise<ActionResult
   }
 
   for (const aid of assigneeIds) {
-    const assignCheck = await requireAssignableEmployee(supabase, aid);
+    const assignCheck = await requireAssignableEmployee(readSb, aid);
     if (!assignCheck.ok) return assignCheck;
   }
 
@@ -95,14 +145,18 @@ export async function createTaskAction(formData: FormData): Promise<ActionResult
     created_by: user.id,
   };
 
-  const { data, error } = await supabase.from('tasks').insert(row).select('id').single();
-  if (error) return actionError(getPostgrestError(error));
+  const { data, error } = await writeSb.from('tasks').insert(row).select('id').single();
+  if (error) {
+    console.error('[createTaskAction] insert tasks:', error);
+    return actionError(formatTaskMutationDbError(error));
+  }
 
   try {
-    await replaceTaskAssignments(supabase, data.id, assigneeIds);
+    await replaceTaskAssignments(writeSb, data.id, assigneeIds);
   } catch (e) {
-    await supabase.from('tasks').delete().eq('id', data.id);
-    return actionError(e instanceof Error ? e.message : 'Assignations invalides.');
+    await writeSb.from('tasks').delete().eq('id', data.id);
+    console.error('[createTaskAction] task_assignments:', e);
+    return actionError(formatTaskMutationDbError(e));
   }
 
   await logStaffActivity(ctx, {
@@ -123,9 +177,15 @@ export async function createTaskAction(formData: FormData): Promise<ActionResult
 export async function updateTaskAction(id: string, formData: FormData): Promise<ActionResult> {
   const ctx = await getAuthContext();
   if (!ctx) return actionError('Non authentifié.');
+  if (!canUpdateTasks(ctx.role)) return actionError('Action non autorisée pour votre rôle.');
 
-  const supabase = await createClient();
-  if (!(await assertTaskRecordVisible(supabase, ctx, id))) {
+  const inactive = assertActiveEmployee(ctx);
+  if (inactive) return inactive;
+
+  const readSb = await createClient();
+  const writeSb = await resolveTaskMutationClient(ctx);
+
+  if (!(await assertTaskRecordVisible(readSb, ctx, id))) {
     return actionError('Tâche inaccessible.');
   }
 
@@ -136,15 +196,15 @@ export async function updateTaskAction(id: string, formData: FormData): Promise<
   let assigneeIds = parseAssigneeIdsFromForm(formData);
   const deadlineRaw = String(formData.get('deadline') ?? '').trim();
 
-  if (clientId && !(await assertClientRecordVisible(supabase, ctx, clientId))) {
+  if (clientId && !(await assertClientRecordVisible(readSb, ctx, clientId))) {
     return actionError('Client non autorisé pour cette tâche.');
   }
 
-  const { data: taskMeta } = await supabase.from('tasks').select('video_id').eq('id', id).maybeSingle();
+  const { data: taskMeta } = await readSb.from('tasks').select('video_id').eq('id', id).maybeSingle();
   if (taskMeta?.video_id) {
     const vid = taskMeta.video_id as string;
-    const { data: va } = await supabase.from('video_assignments').select('employee_id').eq('video_id', vid);
-    const { data: vrow } = await supabase.from('videos').select('editor_id,cameraman_id').eq('id', vid).maybeSingle();
+    const { data: va } = await readSb.from('video_assignments').select('employee_id').eq('video_id', vid);
+    const { data: vrow } = await readSb.from('videos').select('editor_id,cameraman_id').eq('id', vid).maybeSingle();
     const s = new Set<string>();
     for (const r of va ?? []) {
       if (r.employee_id) s.add(r.employee_id as string);
@@ -157,18 +217,18 @@ export async function updateTaskAction(id: string, formData: FormData): Promise<
   }
 
   for (const aid of assigneeIds) {
-    const assignCheck = await requireAssignableEmployee(supabase, aid);
+    const assignCheck = await requireAssignableEmployee(readSb, aid);
     if (!assignCheck.ok) return assignCheck;
   }
 
-  const prevMap = await fetchAssignmentsForTasks(supabase, [id]);
+  const prevMap = await fetchAssignmentsForTasks(readSb, [id]);
   const prevSet = new Set((prevMap.get(id) ?? []).map((a) => a.id));
-  const { data: curTask } = await supabase.from('tasks').select('assignee_id').eq('id', id).maybeSingle();
+  const { data: curTask } = await readSb.from('tasks').select('assignee_id').eq('id', id).maybeSingle();
   if (curTask?.assignee_id) prevSet.add(curTask.assignee_id as string);
 
   const primary = legacyPrimaryAssignee(assigneeIds);
 
-  const { error } = await supabase
+  const { error } = await writeSb
     .from('tasks')
     .update({
       title,
@@ -182,12 +242,16 @@ export async function updateTaskAction(id: string, formData: FormData): Promise<
     })
     .eq('id', id);
 
-  if (error) return actionError(getPostgrestError(error));
+  if (error) {
+    console.error('[updateTaskAction] update tasks:', error);
+    return actionError(formatTaskMutationDbError(error));
+  }
 
   try {
-    await replaceTaskAssignments(supabase, id, assigneeIds);
+    await replaceTaskAssignments(writeSb, id, assigneeIds);
   } catch (e) {
-    return actionError(e instanceof Error ? e.message : 'Échec mise à jour des assignations.');
+    console.error('[updateTaskAction] task_assignments:', e);
+    return actionError(formatTaskMutationDbError(e));
   }
 
   await logStaffActivity(ctx, {
@@ -197,7 +261,6 @@ export async function updateTaskAction(id: string, formData: FormData): Promise<
     metadata: { title },
   });
 
-  const nextSet = new Set(assigneeIds);
   const newly = assigneeIds.filter((eid) => !prevSet.has(eid));
   if (newly.length) {
     await notifyTaskAssignees(newly, id, title);
@@ -212,9 +275,12 @@ export async function updateTaskAction(id: string, formData: FormData): Promise<
 export async function updateTaskStatusAction(id: string, status: TaskStatus): Promise<ActionResult> {
   const ctx = await getAuthContext();
   if (!ctx) return actionError('Non authentifié.');
+  if (!canChangeTaskStatus(ctx.role)) return actionError('Action non autorisée pour votre rôle.');
 
-  const supabase = await createClient();
-  if (!(await assertTaskRecordVisible(supabase, ctx, id))) {
+  const readSb = await createClient();
+  const writeSb = await resolveTaskMutationClient(ctx);
+
+  if (!(await assertTaskRecordVisible(readSb, ctx, id))) {
     return actionError('Tâche inaccessible.');
   }
 
@@ -226,8 +292,11 @@ export async function updateTaskStatusAction(id: string, status: TaskStatus): Pr
     patch.completed_at = new Date().toISOString();
   }
 
-  const { error } = await supabase.from('tasks').update(patch).eq('id', id);
-  if (error) return actionError(getPostgrestError(error));
+  const { error } = await writeSb.from('tasks').update(patch).eq('id', id);
+  if (error) {
+    console.error('[updateTaskStatusAction] update tasks:', error);
+    return actionError(formatTaskMutationDbError(error));
+  }
 
   await logStaffActivity(ctx, {
     action: 'updated',
@@ -237,10 +306,10 @@ export async function updateTaskStatusAction(id: string, status: TaskStatus): Pr
   });
 
   if (status === 'blocked') {
-    const { data: t } = await supabase.from('tasks').select('title').eq('id', id).maybeSingle();
-    const am = await fetchAssignmentsForTasks(supabase, [id]);
+    const { data: t } = await readSb.from('tasks').select('title').eq('id', id).maybeSingle();
+    const am = await fetchAssignmentsForTasks(readSb, [id]);
     const ids = (am.get(id) ?? []).map((a) => a.id);
-    const { data: row } = await supabase.from('tasks').select('assignee_id').eq('id', id).maybeSingle();
+    const { data: row } = await readSb.from('tasks').select('assignee_id').eq('id', id).maybeSingle();
     const all = new Set(ids);
     if (row?.assignee_id) all.add(row.assignee_id as string);
     await notifyTaskBlocked([...all], id, t?.title ?? 'Tâche');
@@ -258,14 +327,19 @@ export async function deleteTaskAction(id: string): Promise<ActionResult> {
     return actionError('Seuls l’administrateur ou le chef de projet peuvent supprimer une tâche.');
   }
 
-  const supabase = await createClient();
-  if (!(await assertTaskRecordVisible(supabase, ctx, id))) {
+  const readSb = await createClient();
+  const writeSb = await resolveTaskMutationClient(ctx);
+
+  if (!(await assertTaskRecordVisible(readSb, ctx, id))) {
     return actionError('Tâche inaccessible.');
   }
 
-  const { data: t } = await supabase.from('tasks').select('title').eq('id', id).maybeSingle();
-  const { error } = await supabase.from('tasks').delete().eq('id', id);
-  if (error) return actionError(getPostgrestError(error));
+  const { data: t } = await readSb.from('tasks').select('title').eq('id', id).maybeSingle();
+  const { error } = await writeSb.from('tasks').delete().eq('id', id);
+  if (error) {
+    console.error('[deleteTaskAction] delete tasks:', error);
+    return actionError(formatTaskMutationDbError(error));
+  }
 
   await logStaffActivity(ctx, {
     action: 'deleted',

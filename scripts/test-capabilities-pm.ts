@@ -4,15 +4,22 @@
 import assert from 'node:assert/strict';
 import type { UserRole } from '../src/types/database';
 import {
+  canArchiveTasks,
+  canAssignTasks,
+  canChangeTaskStatus,
+  canCreateTasks,
   canDeleteInternalProject,
   canDeleteProject,
   canDeleteTask,
+  canDeleteTasks,
   canDeleteVideo,
   canManageAllTasks,
   canManageClientPortal,
   canManagePayments,
   canManageProjects,
+  canManageTasks,
   canModifyClients,
+  canUpdateTasks,
   canViewAgencyGoals,
   canViewClientContractFinancials,
   canViewGlobalFinanceStats,
@@ -33,7 +40,14 @@ function assertPm(role: UserRole, fn: (r: UserRole | null) => boolean, expected:
 function main() {
   // Opérationnel : true pour PM
   assertPm(PM, canManageAllTasks, true, 'canManageAllTasks');
+  assertPm(PM, canManageTasks, true, 'canManageTasks');
+  assertPm(PM, canCreateTasks, true, 'canCreateTasks');
+  assertPm(PM, canUpdateTasks, true, 'canUpdateTasks');
+  assertPm(PM, canDeleteTasks, true, 'canDeleteTasks');
   assertPm(PM, canDeleteTask, true, 'canDeleteTask');
+  assertPm(PM, canArchiveTasks, true, 'canArchiveTasks');
+  assertPm(PM, canAssignTasks, true, 'canAssignTasks');
+  assertPm(PM, canChangeTaskStatus, true, 'canChangeTaskStatus');
   assertPm(PM, canDeleteVideo, true, 'canDeleteVideo');
   assertPm(PM, canModifyClients, true, 'canModifyClients');
   assertPm(PM, canManageProjects, true, 'canManageProjects');
@@ -60,12 +74,14 @@ function main() {
   // Finance garde finance
   assertPm('finance', canViewGlobalFinanceStats, true, 'finance canViewGlobalFinanceStats');
   assertPm('finance', canManageAllTasks, false, 'finance canManageAllTasks');
+  assertPm('finance', canCreateTasks, false, 'finance canCreateTasks');
+  assertPm('commercial', canCreateTasks, false, 'commercial canCreateTasks');
 
   // Editor non impacté
   assertPm('editor', canManageAllTasks, false, 'editor canManageAllTasks');
   assertPm('editor', canViewGlobalFinanceStats, false, 'editor canViewGlobalFinanceStats');
 
-  console.log('OK — capabilities project_manager (%d assertions)', 22);
+  console.log('OK — capabilities project_manager');
 }
 
 main();

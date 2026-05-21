@@ -89,9 +89,29 @@ export function canManageAllTasks(role: UserRole | null): boolean {
 /** Alias explicite — création / édition / statuts / kanban tâches. */
 export const canManageTasks = canManageAllTasks;
 
+/** Création de tâche (hors finance / commercial). */
+export function canCreateTasks(role: UserRole | null): boolean {
+  if (!role) return false;
+  return role !== 'finance' && role !== 'commercial';
+}
+
+/** Édition d’une tâche (même périmètre que création côté app). */
+export const canUpdateTasks = canCreateTasks;
+
 export function canDeleteTask(role: UserRole | null): boolean {
   return role === 'admin' || role === PM;
 }
+
+export const canDeleteTasks = canDeleteTask;
+
+/** Archivage (= changement de statut vers archived). */
+export const canArchiveTasks = canCreateTasks;
+
+/** Assignation multi-membres (admin / chef de projet). */
+export const canAssignTasks = canManageAllTasks;
+
+/** Kanban, statuts rapides, drag & drop. */
+export const canChangeTaskStatus = canCreateTasks;
 
 export function canManageVideos(role: UserRole | null): boolean {
   return (
