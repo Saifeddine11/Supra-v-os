@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { TaskFormDialog } from '../task-form-dialog';
+import { CalendarTaskDetailTrigger } from './calendar-task-detail-trigger';
 import { ClientColorDot } from '@/components/shared/client-color-dot';
 import type { CalendarVideoEvent } from '@/lib/data/videos-calendar';
 
@@ -36,6 +36,7 @@ export function DayTasksDrawer({
   clients,
   employees,
   colorBy,
+  canDelete,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -45,6 +46,7 @@ export function DayTasksDrawer({
   clients: Pick<Client, 'id' | 'name' | 'color_hex' | 'color_label'>[];
   employees: Pick<Employee, 'id' | 'full_name'>[];
   colorBy: CalendarColorBy;
+  canDelete: boolean;
 }) {
   const hasAny = tasks.length > 0 || videoEvents.length > 0;
 
@@ -61,7 +63,7 @@ export function DayTasksDrawer({
             {day ? `Agenda du ${format(day, 'EEEE d MMMM yyyy', { locale: fr })}` : ''}
           </DialogTitle>
         </DialogHeader>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-5 pt-2">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-2">
           {!hasAny ? (
             <p className="text-sm text-muted-foreground">Aucun élément ce jour-là.</p>
           ) : (
@@ -141,20 +143,13 @@ export function DayTasksDrawer({
                               ) : null}
                             </dl>
                             <div className="mt-3">
-                              <TaskFormDialog
+                              <CalendarTaskDetailTrigger
                                 task={t}
                                 clients={clients}
                                 employees={employees}
-                                trigger={
-                                  <Button
-                                    type="button"
-                                    variant="outline"
-                                    size="sm"
-                                    className="min-h-11 w-full rounded-full"
-                                  >
-                                    Ouvrir / modifier
-                                  </Button>
-                                }
+                                canDelete={canDelete}
+                                label="Détails · modifier · archiver"
+                                onMutated={() => onOpenChange(false)}
                               />
                             </div>
                           </div>

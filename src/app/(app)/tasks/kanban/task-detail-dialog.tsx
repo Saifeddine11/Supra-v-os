@@ -20,6 +20,7 @@ import { TaskFormDialog } from '../task-form-dialog';
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
 import { archiveTaskAction, deleteTaskAction, updateTaskStatusAction } from '../actions';
 import { hrefVideosOpenDetail } from '@/lib/videos/video-deep-link';
+import { toast } from 'sonner';
 
 function isOverdue(task: TaskEnriched): boolean {
   if (!task.deadline || task.status === 'done') return false;
@@ -40,6 +41,7 @@ export function TaskDetailDialog({
   clients,
   employees,
   canDelete,
+  onMutated,
 }: {
   task: TaskEnriched;
   open: boolean;
@@ -47,6 +49,8 @@ export function TaskDetailDialog({
   clients: Pick<Client, 'id' | 'name' | 'color_hex' | 'color_label'>[];
   employees: Pick<Employee, 'id' | 'full_name'>[];
   canDelete: boolean;
+  /** Fermer drawer calendrier parent après mutation réussie. */
+  onMutated?: () => void;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -232,7 +236,12 @@ export function TaskDetailDialog({
               onChange={(e) => {
                 const next = e.target.value as TaskStatus;
                 startTransition(async () => {
-                  await updateTaskStatusAction(task.id, next);
+                  const res = await updateTaskStatusAction(task.id, next);
+                  if (!res.ok) {
+                    toast.error(res.error || 'Impossible de mettre à jour le statut.');
+                    return;
+                  }
+                  toast.success('Statut mis à jour');
                   router.refresh();
                 });
               }}
@@ -245,7 +254,12 @@ export function TaskDetailDialog({
             </select>
           </section>
 
-          <section className="flex flex-wrap gap-2 border-t border-border/60 pt-4">
+          <section
+            className={cn(
+              'flex flex-wrap gap-2 border-t border-border/60 pt-4',
+              'pb-[max(1rem,env(safe-area-inset-bottom))]',
+            )}
+          >
             <TaskFormDialog
               task={task}
               clients={clients}
@@ -270,8 +284,14 @@ export function TaskDetailDialog({
                   confirmLabel="Archiver"
                   onConfirm={() =>
                     startTransition(async () => {
-                      await archiveTaskAction(task.id);
+                      const res = await archiveTaskAction(task.id);
+                      if (!res.ok) {
+                        toast.error(res.error || 'Impossible d’archiver la tâche.');
+                        return;
+                      }
+                      toast.success('Tâche archivée');
                       onOpenChange(false);
+                      onMutated?.();
                       router.refresh();
                     })
                   }
@@ -286,8 +306,14 @@ export function TaskDetailDialog({
                   confirmLabel="Supprimer"
                   onConfirm={() =>
                     startTransition(async () => {
-                      await deleteTaskAction(task.id);
+                      const res = await deleteTaskAction(task.id);
+                      if (!res.ok) {
+                        toast.error(res.error || 'Impossible de supprimer la tâche.');
+                        return;
+                      }
+                      toast.success('Tâche supprimée');
                       onOpenChange(false);
+                      onMutated?.();
                       router.refresh();
                     })
                   }

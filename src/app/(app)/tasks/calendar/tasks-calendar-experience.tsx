@@ -15,7 +15,7 @@ import {
 import { getCalendarVideoDotClass } from '@/lib/ui/status-colors';
 import { CalendarTaskChip } from './calendar-task-chip';
 import { DayTasksDrawer } from './day-tasks-drawer';
-import { TaskFormDialog } from '../task-form-dialog';
+import { CalendarTaskDetailTrigger } from './calendar-task-detail-trigger';
 import { Button } from '@/components/ui/button';
 import type { CalendarVideoEvent } from '@/lib/data/videos-calendar';
 import { CalendarVideoChip } from './calendar-video-chip';
@@ -88,6 +88,7 @@ function DayAgendaView({
   clients,
   employees,
   colorBy,
+  canDelete,
 }: {
   anchorDay: Date;
   tasks: TaskEnriched[];
@@ -95,6 +96,7 @@ function DayAgendaView({
   clients: Pick<Client, 'id' | 'name' | 'color_hex' | 'color_label'>[];
   employees: Pick<Employee, 'id' | 'full_name'>[];
   colorBy: CalendarColorBy;
+  canDelete: boolean;
 }) {
   const { overdue, active, done } = useMemo(() => dayAgendaGroups(tasks), [tasks]);
   const dayVideos = useMemo(() => videosOnDay(anchorDay, videoEvents), [anchorDay, videoEvents]);
@@ -152,15 +154,12 @@ function DayAgendaView({
                     </p>
                   ) : null}
                   <div className="mt-3">
-                    <TaskFormDialog
+                    <CalendarTaskDetailTrigger
                       task={t}
                       clients={clients}
                       employees={employees}
-                      trigger={
-                        <Button type="button" variant="outline" size="sm" className="min-h-11 w-full rounded-full">
-                          Ouvrir / modifier
-                        </Button>
-                      }
+                      canDelete={canDelete}
+                      label="Détails · modifier · archiver"
                     />
                   </div>
                 </div>
@@ -233,6 +232,7 @@ export function TasksCalendarExperience({
   clients,
   employees,
   colorBy,
+  canDelete,
 }: {
   view: 'month' | 'week' | 'day';
   filterStartISO: string;
@@ -243,6 +243,7 @@ export function TasksCalendarExperience({
   clients: Pick<Client, 'id' | 'name' | 'color_hex' | 'color_label'>[];
   employees: Pick<Employee, 'id' | 'full_name'>[];
   colorBy: CalendarColorBy;
+  canDelete: boolean;
 }) {
   const filterStart = useMemo(() => parseISO(filterStartISO), [filterStartISO]);
   const filterEnd = useMemo(() => parseISO(filterEndISO), [filterEndISO]);
@@ -275,6 +276,7 @@ export function TasksCalendarExperience({
         clients={clients}
         employees={employees}
         colorBy={colorBy}
+        canDelete={canDelete}
       />
     );
   }
@@ -320,6 +322,7 @@ export function TasksCalendarExperience({
                         clients={clients}
                         employees={employees}
                         density="week"
+                        canDelete={canDelete}
                       />
                     </li>
                   ))}
@@ -425,6 +428,7 @@ export function TasksCalendarExperience({
                         clients={clients}
                         employees={employees}
                         density="week"
+                        canDelete={canDelete}
                       />
                     ))}
                     {dayVids.map((ev) => (
@@ -441,6 +445,7 @@ export function TasksCalendarExperience({
                         clients={clients}
                         employees={employees}
                         density="month"
+                        canDelete={canDelete}
                       />
                     ))}
                     {desktopVideos.map((ev) => (
@@ -523,6 +528,7 @@ export function TasksCalendarExperience({
         clients={clients}
         employees={employees}
         colorBy={colorBy}
+        canDelete={canDelete}
       />
     </>
   );
