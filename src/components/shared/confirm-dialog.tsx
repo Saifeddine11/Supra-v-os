@@ -39,6 +39,8 @@ export function ConfirmDialog({
     try {
       await onConfirm();
       setOpen(false);
+    } catch {
+      // Garder la confirmation ouverte ; l’appelant affiche le toast d’erreur.
     } finally {
       setLoading(false);
     }

@@ -282,41 +282,37 @@ export function TaskDetailDialog({
                   title="Archiver cette tâche ?"
                   description="Elle disparaîtra du tableau (statut archivé)."
                   confirmLabel="Archiver"
-                  onConfirm={() =>
-                    startTransition(async () => {
-                      const res = await archiveTaskAction(task.id);
-                      if (!res.ok) {
-                        toast.error(res.error || 'Impossible d’archiver la tâche.');
-                        return;
-                      }
-                      toast.success('Tâche archivée');
-                      onOpenChange(false);
-                      onMutated?.();
-                      router.refresh();
-                    })
-                  }
+                  onConfirm={async () => {
+                    const res = await archiveTaskAction(task.id);
+                    if (!res.ok) {
+                      toast.error(res.error || 'Impossible d’archiver la tâche.');
+                      throw new Error(res.error || 'archive_failed');
+                    }
+                    toast.success('Tâche archivée');
+                    onOpenChange(false);
+                    onMutated?.();
+                    router.refresh();
+                  }}
                 >
                   <Button type="button" variant="outline" className="rounded-full text-orange-600 dark:text-orange-300">
                     Archiver
                   </Button>
                 </ConfirmDialog>
                 <ConfirmDialog
-                  title="Supprimer définitivement ?"
+                  title="Supprimer cette tâche ?"
                   description="Action irréversible."
                   confirmLabel="Supprimer"
-                  onConfirm={() =>
-                    startTransition(async () => {
-                      const res = await deleteTaskAction(task.id);
-                      if (!res.ok) {
-                        toast.error(res.error || 'Impossible de supprimer la tâche.');
-                        return;
-                      }
-                      toast.success('Tâche supprimée');
-                      onOpenChange(false);
-                      onMutated?.();
-                      router.refresh();
-                    })
-                  }
+                  onConfirm={async () => {
+                    const res = await deleteTaskAction(task.id);
+                    if (!res.ok) {
+                      toast.error(res.error || 'Impossible de supprimer la tâche.');
+                      throw new Error(res.error || 'delete_failed');
+                    }
+                    toast.success('Tâche supprimée');
+                    onOpenChange(false);
+                    onMutated?.();
+                    router.refresh();
+                  }}
                 >
                   <Button type="button" variant="outline" className="rounded-full text-destructive">
                     Supprimer
