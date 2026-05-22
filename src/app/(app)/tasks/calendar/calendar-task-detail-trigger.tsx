@@ -15,6 +15,7 @@ export function CalendarTaskDetailTrigger({
   label = 'Ouvrir / modifier',
   className,
   onMutated,
+  onOpenDetail,
 }: {
   task: TaskEnriched;
   clients: Pick<Client, 'id' | 'name' | 'color_hex' | 'color_label'>[];
@@ -24,6 +25,8 @@ export function CalendarTaskDetailTrigger({
   className?: string;
   /** Fermer le drawer parent après archivage / suppression. */
   onMutated?: () => void;
+  /** Fermer le drawer agenda avant d’ouvrir la fiche (évite modales imbriquées). */
+  onOpenDetail?: () => void;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -34,7 +37,10 @@ export function CalendarTaskDetailTrigger({
         variant="outline"
         size="sm"
         className={cn('min-h-11 w-full rounded-full', className)}
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          onOpenDetail?.();
+          setOpen(true);
+        }}
       >
         {label}
       </Button>

@@ -149,6 +149,7 @@ export function DayTasksDrawer({
                                 employees={employees}
                                 canDelete={canDelete}
                                 label="Détails · modifier · archiver"
+                                onOpenDetail={() => onOpenChange(false)}
                                 onMutated={() => onOpenChange(false)}
                               />
                             </div>

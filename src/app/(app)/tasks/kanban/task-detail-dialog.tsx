@@ -1,6 +1,6 @@
 'use client';
 
-import { useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import Link from 'next/link';
@@ -17,8 +17,8 @@ import { getClientColor } from '@/lib/ui/client-colors';
 import { getTaskDeadlineState } from '@/lib/deadlines/deadline-state';
 import { getTaskPriorityBadgeClass, getTaskStatusBadgeClass } from '@/lib/ui/status-colors';
 import { TaskFormDialog } from '../task-form-dialog';
-import { ConfirmDialog } from '@/components/shared/confirm-dialog';
-import { archiveTaskAction, deleteTaskAction, updateTaskStatusAction } from '../actions';
+import { ConfirmTaskActionDialog, type TaskConfirmActionMode } from '../confirm-task-action-dialog';
+import { updateTaskStatusAction } from '../actions';
 import { hrefVideosOpenDetail } from '@/lib/videos/video-deep-link';
 import { toast } from 'sonner';
 
@@ -54,13 +54,22 @@ export function TaskDetailDialog({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [confirmAction, setConfirmAction] = useState<TaskConfirmActionMode | null>(null);
+
+  function handleMutationSuccess() {
+    setConfirmAction(null);
+    onOpenChange(false);
+    onMutated?.();
+    router.refresh();
+  }
   const od = isOverdue(task);
   const dlState = getTaskDeadlineState(task.deadline, task.status);
   const clientRow = clients.find((c) => c.id === task.client_id);
   const clientHex = clientRow ? getClientColor(clientRow) : task.client_brand_hex;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+    <Dialog open={open} onOpenChange={onOpenChange} modal={confirmAction === null}>
       <DialogContent
         showCloseButton={false}
         className={cn(
@@ -278,51 +287,47 @@ export function TaskDetailDialog({
             ) : null}
             {canDelete ? (
               <>
-                <ConfirmDialog
-                  title="Archiver cette tâche ?"
-                  description="Elle disparaîtra du tableau (statut archivé)."
-                  confirmLabel="Archiver"
-                  onConfirm={async () => {
-                    const res = await archiveTaskAction(task.id);
-                    if (!res.ok) {
-                      toast.error(res.error || 'Impossible d’archiver la tâche.');
-                      throw new Error(res.error || 'archive_failed');
-                    }
-                    toast.success('Tâche archivée');
-                    onOpenChange(false);
-                    onMutated?.();
-                    router.refresh();
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-full text-orange-600 dark:text-orange-300"
+                  disabled={pending || confirmAction !== null}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setConfirmAction('archive');
                   }}
                 >
-                  <Button type="button" variant="outline" className="rounded-full text-orange-600 dark:text-orange-300">
-                    Archiver
-                  </Button>
-                </ConfirmDialog>
-                <ConfirmDialog
-                  title="Supprimer cette tâche ?"
-                  description="Action irréversible."
-                  confirmLabel="Supprimer"
-                  onConfirm={async () => {
-                    const res = await deleteTaskAction(task.id);
-                    if (!res.ok) {
-                      toast.error(res.error || 'Impossible de supprimer la tâche.');
-                      throw new Error(res.error || 'delete_failed');
-                    }
-                    toast.success('Tâche supprimée');
-                    onOpenChange(false);
-                    onMutated?.();
-                    router.refresh();
+                  Archiver
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-full text-destructive"
+                  disabled={pending || confirmAction !== null}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setConfirmAction('delete');
                   }}
                 >
-                  <Button type="button" variant="outline" className="rounded-full text-destructive">
-                    Supprimer
-                  </Button>
-                </ConfirmDialog>
+                  Supprimer
+                </Button>
               </>
             ) : null}
           </section>
         </div>
       </DialogContent>
     </Dialog>
+    <ConfirmTaskActionDialog
+      open={confirmAction !== null}
+      onOpenChange={(next) => {
+        if (!next) setConfirmAction(null);
+      }}
+      mode={confirmAction}
+      taskId={task.id}
+      onSuccess={handleMutationSuccess}
+    />
+    </>
   );
 }

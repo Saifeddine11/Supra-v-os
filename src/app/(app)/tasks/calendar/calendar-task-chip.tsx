@@ -105,6 +105,7 @@ export function CalendarTaskChip({
         clients={clients}
         employees={employees}
         canDelete={canDelete}
+        onMutated={() => setDetailOpen(false)}
       />
     </>
   );
