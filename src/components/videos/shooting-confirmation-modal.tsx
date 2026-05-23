@@ -12,7 +12,18 @@ import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import type { ShootingConfirmQueueItem } from '@/lib/data/shooting-confirmation-queue';
 import { SHOOTING_POSTPONE_REASON_PRESETS } from '@/lib/videos/shooting-confirmation';
-import { confirmVideoShootingDoneAction, postponeVideoShootingAction } from '@/app/(app)/videos/shooting-actions';
+import {
+  fingerprintFromQueueItem,
+  getUnseenShootingFingerprints,
+  markShootingFingerprintsSeen,
+  markShootingQueueSeen,
+} from '@/lib/videos/shooting-confirmation-popup-seen';
+import { requestCriticalAlertsRefresh } from '@/lib/alerts/request-critical-alerts-refresh';
+import {
+  confirmVideoShootingDoneAction,
+  markVideoShootingInProgressAction,
+  postponeVideoShootingAction,
+} from '@/app/(app)/videos/shooting-actions';
 
 function snoozeKey(userId: string) {
   return `supra-shooting-confirm-snooze:${userId}`;
@@ -41,7 +52,7 @@ export function filterShootingQueueBySnooze(userId: string, queue: ShootingConfi
   return queue.filter((q) => !sn[q.id] || sn[q.id] <= now);
 }
 
-type Mode = 'main' | 'postpone' | 'list';
+type Mode = 'main' | 'postpone' | 'in_progress' | 'list';
 
 export function ShootingConfirmationModal({
   open,
@@ -64,6 +75,8 @@ export function ShootingConfirmationModal({
   const [reasonDetail, setReasonDetail] = useState('');
   const [internalNote, setInternalNote] = useState('');
   const [newShootLocal, setNewShootLocal] = useState('');
+  const [expectedEndLocal, setExpectedEndLocal] = useState('');
+  const [inProgressNote, setInProgressNote] = useState('');
 
   const active = queue[activeIdx] ?? null;
 
@@ -72,21 +85,17 @@ export function ShootingConfirmationModal({
     setReasonDetail('');
     setInternalNote('');
     setNewShootLocal('');
+    setExpectedEndLocal('');
+    setInProgressNote('');
     setMode('main');
   }, []);
 
   const handleLater = useCallback(() => {
-    if (!active) return;
-    writeShootingSnooze(userId, active.id, Date.now() + 2 * 3600_000);
-    toast.message('Rappel dans 2 h pour ce tournage.');
+    markShootingQueueSeen(userId, queue);
+    toast.message('Rappel demain pour les tournages en attente.');
     onSnoozeChange?.();
-    if (activeIdx < queue.length - 1) {
-      setActiveIdx((i) => i + 1);
-    } else {
-      onOpenChange(false);
-    }
-    router.refresh();
-  }, [active, activeIdx, onOpenChange, onSnoozeChange, queue.length, router, userId]);
+    onOpenChange(false);
+  }, [onOpenChange, onSnoozeChange, queue, userId]);
 
   const onConfirmYes = useCallback(() => {
     if (!active) return;
@@ -96,13 +105,15 @@ export function ShootingConfirmationModal({
         toast.error(res.error);
         return;
       }
+      markShootingFingerprintsSeen(userId, [fingerprintFromQueueItem(active)]);
       toast.success('Tournage confirmé — passage en montage.');
+      requestCriticalAlertsRefresh();
       resetPostpone();
       if (queue.length <= 1) onOpenChange(false);
       else setActiveIdx(0);
       router.refresh();
     });
-  }, [active, onOpenChange, queue.length, resetPostpone, router]);
+  }, [active, onOpenChange, queue.length, resetPostpone, router, userId]);
 
   const onPostponeSubmit = useCallback(() => {
     if (!active) return;
@@ -123,12 +134,38 @@ export function ShootingConfirmationModal({
         toast.error(res.error);
         return;
       }
+      markShootingFingerprintsSeen(userId, [fingerprintFromQueueItem(active)]);
       toast.success('Tournage reprogrammé.');
+      requestCriticalAlertsRefresh();
       resetPostpone();
       onOpenChange(false);
       router.refresh();
     });
-  }, [active, internalNote, newShootLocal, onOpenChange, reasonDetail, reasonPreset, resetPostpone, router]);
+  }, [active, internalNote, newShootLocal, onOpenChange, reasonDetail, reasonPreset, resetPostpone, router, userId]);
+
+  const onInProgressSubmit = useCallback(() => {
+    if (!active) return;
+    startTransition(async () => {
+      const fd = new FormData();
+      fd.set('video_id', active.id);
+      if (expectedEndLocal.trim()) {
+        fd.set('expected_end_at', new Date(expectedEndLocal).toISOString());
+      }
+      if (inProgressNote.trim()) fd.set('internal_note', inProgressNote.trim());
+      const res = await markVideoShootingInProgressAction(fd);
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      markShootingFingerprintsSeen(userId, [fingerprintFromQueueItem(active)]);
+      toast.success('Tournage marqué en cours.');
+      requestCriticalAlertsRefresh();
+      resetPostpone();
+      if (queue.length <= 1) onOpenChange(false);
+      else setActiveIdx(0);
+      router.refresh();
+    });
+  }, [active, expectedEndLocal, inProgressNote, onOpenChange, queue.length, resetPostpone, router, userId]);
 
   const titleDate = useMemo(() => {
     if (!active?.shootingDate) return '—';
@@ -172,6 +209,46 @@ export function ShootingConfirmationModal({
                 </li>
               ))}
             </ul>
+          ) : mode === 'in_progress' && active ? (
+            <div className="space-y-4">
+              <p className="text-sm font-medium text-foreground">Tournage en cours</p>
+              <p className="text-sm text-muted-foreground">
+                « {active.title} » — le tournage n’est pas terminé (plusieurs jours possibles).
+              </p>
+              <div className="space-y-2">
+                <Label>Date de fin prévue (optionnel)</Label>
+                <Input
+                  type="datetime-local"
+                  value={expectedEndLocal}
+                  onChange={(e) => setExpectedEndLocal(e.target.value)}
+                  className="text-sm"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Note interne (optionnel)</Label>
+                <Textarea
+                  value={inProgressNote}
+                  onChange={(e) => setInProgressNote(e.target.value)}
+                  rows={2}
+                  className="resize-none text-sm"
+                />
+              </div>
+              <div className="flex flex-wrap gap-2 pt-1">
+                <Button type="button" variant="ghost" size="sm" onClick={() => resetPostpone()} disabled={pending}>
+                  Retour
+                </Button>
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  className="min-w-[120px]"
+                  disabled={pending}
+                  onClick={onInProgressSubmit}
+                >
+                  Enregistrer
+                </Button>
+              </div>
+            </div>
           ) : mode === 'postpone' && active ? (
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">Reporter « {active.title} »</p>
@@ -222,19 +299,34 @@ export function ShootingConfirmationModal({
               <p className="text-sm leading-relaxed text-muted-foreground">
                 Le tournage de « <span className="font-medium text-foreground">{active.title}</span> » pour «{' '}
                 <span className="font-medium text-foreground">{active.clientName}</span> » était prévu le{' '}
-                <span className="tabular-nums text-foreground">{titleDate}</span>. Est-ce que le tournage a été fait ?
+                <span className="tabular-nums text-foreground">{titleDate}</span>. Quel est l’état actuel ?
               </p>
-              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+              <div className="flex flex-col gap-2">
                 <Button
                   type="button"
                   variant="primary"
-                  className="w-full bg-[#FF3D0A] text-white hover:bg-[#FF450F] sm:w-auto sm:min-w-[160px]"
+                  className="w-full bg-[#FF3D0A] text-white hover:bg-[#FF450F]"
                   disabled={pending}
                   onClick={onConfirmYes}
                 >
                   Oui, tournage fait
                 </Button>
-                <Button type="button" variant="outline" className="w-full sm:w-auto" disabled={pending} onClick={() => setMode('postpone')}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  disabled={pending}
+                  onClick={() => setMode('in_progress')}
+                >
+                  Tournage en cours
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  disabled={pending}
+                  onClick={() => setMode('postpone')}
+                >
                   Non, à reprogrammer
                 </Button>
               </div>
@@ -264,42 +356,42 @@ export function ShootingConfirmationHost({
   initialQueue: ShootingConfirmQueueItem[];
 }) {
   const [snoozeTick, setSnoozeTick] = useState(0);
-  const suppressedRef = useRef(false);
+  const autoOpenedForKeyRef = useRef<string | null>(null);
 
   const visible = useMemo(() => {
     void snoozeTick;
     return filterShootingQueueBySnooze(userId, initialQueue);
   }, [initialQueue, userId, snoozeTick]);
 
-  const queueKey = useMemo(
-    () =>
-      visible
-        .map((q) => q.id)
-        .sort()
-        .join(','),
-    [visible],
+  const unseenFingerprints = useMemo(
+    () => getUnseenShootingFingerprints(userId, visible),
+    [userId, visible],
   );
+
+  const unseenKey = useMemo(() => unseenFingerprints.slice().sort().join('|'), [unseenFingerprints]);
 
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
-    suppressedRef.current = false;
-  }, [queueKey]);
-
-  useEffect(() => {
-    if (visible.length === 0) {
+    if (visible.length === 0 || unseenFingerprints.length === 0) {
       setOpen(false);
       return;
     }
-    if (!suppressedRef.current) {
-      setOpen(true);
-    }
-  }, [visible.length, queueKey]);
+    if (autoOpenedForKeyRef.current === unseenKey) return;
+    autoOpenedForKeyRef.current = unseenKey;
+    markShootingFingerprintsSeen(userId, unseenFingerprints);
+    setOpen(true);
+  }, [unseenKey, unseenFingerprints, userId, visible.length]);
 
-  const handleOpenChange = useCallback((next: boolean) => {
-    setOpen(next);
-    if (!next) suppressedRef.current = true;
-  }, []);
+  const handleOpenChange = useCallback(
+    (next: boolean) => {
+      setOpen(next);
+      if (!next && visible.length > 0) {
+        markShootingQueueSeen(userId, visible);
+      }
+    },
+    [userId, visible],
+  );
 
   if (initialQueue.length === 0) return null;
 

@@ -184,6 +184,21 @@
     box-shadow: none;
   }
 
+  .kanban-column-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, hsl(var(--border)) 55%, transparent) transparent;
+  }
+  .kanban-column-scroll::-webkit-scrollbar {
+    width: 6px;
+  }
+  .kanban-column-scroll::-webkit-scrollbar-thumb {
+    border-width: 1px;
+    @apply rounded-full bg-[color:hsl(var(--border)/0.35)];
+  }
+  .kanban-column-scroll::-webkit-scrollbar-thumb:hover {
+    @apply bg-[color:hsl(var(--border)/0.5)];
+  }
+
   .btn-supra-cta-icon {
     @apply inline-block h-4 w-4 shrink-0 transition-transform duration-200;
   }

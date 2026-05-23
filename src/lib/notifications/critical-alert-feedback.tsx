@@ -140,6 +140,16 @@ export function summarizeCriticalAlerts(alerts: CriticalActiveAlertDTO[]): strin
     .join(' · ');
 }
 
+/** Ne déclenche pas le son pour des empreintes déjà absentes des alertes actives. */
+export function filterNewCriticalFingerprints(
+  fingerprints: string[],
+  active: CriticalActiveAlertsResponse | null,
+): string[] {
+  if (!active) return fingerprints;
+  const live = new Set(active.alerts.filter((a) => a.severity === 'critical').map((a) => `ca:${a.id}`));
+  return fingerprints.filter((fp) => live.has(fp));
+}
+
 function buildContentFromActiveApi(p: CriticalActiveAlertsResponse): {
   title: string;
   message: string;
@@ -158,7 +168,7 @@ function buildContentFromActiveApi(p: CriticalActiveAlertsResponse): {
     };
   }
   return {
-    title: `${p.criticalCount} alertes critiques à traiter`,
+    title: `${p.alerts.length} actions à traiter`,
     message: summarizeCriticalAlerts(p.alerts),
     href: '/dashboard',
     tone: 'critical',
@@ -230,7 +240,7 @@ function showCriticalToast(content: {
                   'text-[#7A4A42] dark:text-[#C9B8AE]',
                 )}
               >
-                Alerte critique
+                À traiter
               </p>
               <p
                 className={cn(
@@ -297,7 +307,7 @@ export function triggerCriticalAlertFeedbackFromActiveApi(
   if (isBarSnoozed()) return;
 
   const state = loadFingerprintsState();
-  const fps = criticalActiveFingerprints(p);
+  const fps = filterNewCriticalFingerprints(criticalActiveFingerprints(p), p);
   if (fps.length === 0) return;
 
   const newFps = fps.filter((fp) => !state.seen.has(fp));
@@ -318,8 +328,8 @@ export function triggerCriticalAlertFeedbackFromActiveApi(
 
   const content =
     buildContentFromActiveApi(p) ?? {
-      title: 'Alertes critiques',
-      message: 'Des éléments requièrent votre attention immédiate.',
+      title: 'Actions à traiter',
+      message: 'Des éléments requièrent encore votre attention.',
       href: '/dashboard',
       tone: 'critical' as const,
     };

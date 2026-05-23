@@ -41,9 +41,9 @@ export function CriticalAlertsBreakdown({ rows }: { rows: CriticalAlertChartRow[
 
   return (
     <ChartCard
-      title="Alertes actives — par type"
-      subtitle="Même liste que la bannière critique et l’API /api/notifications/critical-active (aperçu synthétique)."
-      badge={total > 0 ? `${total} alerte${total > 1 ? 's' : ''}` : undefined}
+      title="Actions à traiter — par type"
+      subtitle="Même logique que la bannière et l’API /api/notifications/critical-active (état live uniquement)."
+      badge={total > 0 ? `${total} action${total > 1 ? 's' : ''}` : undefined}
       bodyClassName="space-y-0"
     >
       {total === 0 ? (

@@ -17,6 +17,12 @@ import { joinedRelationName } from '@/lib/supabase/joined-name';
 import { getCronEmailPrefs } from '@/lib/cron/user-notification-prefs';
 import { getAgencyDisplayCurrencyWithClient } from '@/lib/data/agency-settings-db';
 import { formatAgencyMoneyCompact } from '@/lib/money/format-money';
+import {
+  isTaskActiveForCriticalAlerts,
+  isTaskOverdueForAlert,
+  TASK_CRITICAL_ALERT_EXCLUDED_STATUSES_SQL,
+} from '@/lib/alerts/active-alert-rules';
+import type { TaskStatus } from '@/types/database';
 
 export type DeadlineAlertsResult = {
   success: boolean;
@@ -115,13 +121,21 @@ export async function runDeadlineAlerts(): Promise<DeadlineAlertsResult> {
   // Tasks due in 24h (not overdue yet)
   const { data: tasksSoon } = await admin
     .from('tasks')
-    .select('id,title,deadline,assignee_id,priority,client_id,clients(name)')
-    .not('status', 'in', '(done,archived)')
+    .select('id,title,deadline,status,assignee_id,priority,client_id,clients(name)')
+    .not('status', 'in', TASK_CRITICAL_ALERT_EXCLUDED_STATUSES_SQL)
     .not('deadline', 'is', null)
     .gt('deadline', now.toISOString())
     .lte('deadline', in24h.toISOString());
 
   for (const t of tasksSoon ?? []) {
+    if (
+      !isTaskActiveForCriticalAlerts({
+        status: t.status as TaskStatus,
+        deadline: t.deadline as string | null,
+      })
+    ) {
+      continue;
+    }
     const recipients = await taskRecipientEmployeeIds(t.id as string, (t.assignee_id as string | null) ?? null);
     const clientName = joinedRelationName(t.clients);
     const dl = format(new Date(t.deadline!), "d MMM yyyy HH:mm");
@@ -156,12 +170,15 @@ export async function runDeadlineAlerts(): Promise<DeadlineAlertsResult> {
   // Overdue tasks
   const { data: tasksOver } = await admin
     .from('tasks')
-    .select('id,title,deadline,assignee_id,priority,client_id,clients(name)')
-    .not('status', 'in', '(done,archived)')
+    .select('id,title,deadline,status,assignee_id,priority,client_id,clients(name)')
+    .not('status', 'in', TASK_CRITICAL_ALERT_EXCLUDED_STATUSES_SQL)
     .not('deadline', 'is', null)
     .lt('deadline', now.toISOString());
 
   for (const t of tasksOver ?? []) {
+    if (!isTaskOverdueForAlert({ status: t.status as TaskStatus, deadline: t.deadline as string | null, now })) {
+      continue;
+    }
     const recipients = await taskRecipientEmployeeIds(t.id as string, (t.assignee_id as string | null) ?? null);
     const clientName = joinedRelationName(t.clients);
     const dl = format(new Date(t.deadline!), "d MMM yyyy HH:mm");

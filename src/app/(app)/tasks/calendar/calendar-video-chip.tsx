@@ -17,7 +17,7 @@ export function CalendarVideoChip({
   density: 'month' | 'week';
 }) {
   const Icon = ev.kind === 'shoot' ? Clapperboard : Truck;
-  const kindLabel = ev.kind === 'shoot' ? 'Tournage' : 'Livraison';
+  const kindLabel = ev.shootLabel ?? (ev.kind === 'shoot' ? 'Tournage' : 'Livraison');
   const at = new Date(ev.at);
   const timeStr = format(at, 'HH:mm', { locale: fr });
   const titleLine =

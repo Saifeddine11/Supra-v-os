@@ -72,7 +72,7 @@ export async function runCriticalAlertsReminders(): Promise<CriticalAlertsCronRe
         .map((a) => a.message);
 
       const title =
-        criticalCount > 1 ? `${criticalCount} alertes critiques à traiter` : '1 alerte critique à traiter';
+        criticalCount > 1 ? `${criticalCount} actions à traiter` : '1 action à traiter';
       const message = criticalLines.slice(0, 5).join(' · ') || 'Consultez le tableau de bord.';
 
       const { inserted } = await createNotificationOnce(

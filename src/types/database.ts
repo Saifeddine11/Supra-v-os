@@ -57,6 +57,7 @@ export type VideoStatus =
   | 'brief_pending'
   | 'brief_validated'
   | 'shooting_planned'
+  | 'shooting_in_progress'
   | 'shooting_done'
   | 'rushes_received'
   | 'editing'
@@ -373,6 +374,8 @@ export interface Video {
   created_by: string | null;
   /** Confirmation « tournage fait » (passage montage). */
   shooting_completed_at?: string | null;
+  shooting_started_at?: string | null;
+  shooting_expected_end_at?: string | null;
   /** Dernier report de tournage. */
   shooting_postponed_at?: string | null;
   shooting_postponed_reason?: string | null;
@@ -382,9 +385,10 @@ export interface Video {
 export interface VideoShootingEvent {
   id: string;
   video_id: string;
-  event_type: 'confirmed' | 'postponed';
+  event_type: 'confirmed' | 'postponed' | 'in_progress';
   old_shooting_at: string | null;
   new_shooting_at: string | null;
+  expected_end_at?: string | null;
   reason: string | null;
   note: string | null;
   created_by: string | null;

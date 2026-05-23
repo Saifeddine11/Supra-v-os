@@ -13,6 +13,7 @@ export function taskStatusFromVideoStatus(status: VideoStatus): TaskStatus {
     case 'brief_validated':
       return 'todo';
     case 'shooting_planned':
+    case 'shooting_in_progress':
     case 'shooting_done':
     case 'rushes_received':
     case 'editing':

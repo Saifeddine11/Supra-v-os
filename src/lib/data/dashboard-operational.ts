@@ -20,6 +20,11 @@ import { formatAgencyMoneyCompact } from '@/lib/money/format-money';
 import { getAgencyDisplayCurrency } from '@/lib/data/agency-settings-db';
 import { fetchAssignmentsForTasks, formatTaskAssigneeSummary } from '@/lib/data/task-assignments';
 import { getClientColor } from '@/lib/ui/client-colors';
+import {
+  isTaskActiveForCriticalAlerts,
+  isTaskOverdueForAlert,
+  isTaskUrgentForAlert,
+} from '@/lib/alerts/active-alert-rules';
 
 const ACTIVE_PROJECT_STATUSES = ['in_progress', 'waiting_client', 'waiting_content', 'review'] as const;
 
@@ -291,6 +296,8 @@ export async function fetchDashboardOperational(ctx: AuthContext): Promise<Dashb
   const overdueTasks: TaskRowMock[] = [];
 
   for (const t of openTasks) {
+    const status = t.status as string;
+    if (!isTaskActiveForCriticalAlerts({ status, deadline: t.deadline as string | null })) continue;
     const dl = t.deadline as string | null;
     if (!dl) continue;
     const d = new Date(dl);
@@ -301,7 +308,7 @@ export async function fetchDashboardOperational(ctx: AuthContext): Promise<Dashb
       empName,
     );
     const pr = t.priority as TaskPriority;
-    const overdue = isBefore(d, dayStart);
+    const overdue = isTaskOverdueForAlert({ status, deadline: dl, now });
     const crow = (t as { clients?: { name?: string; color_hex?: string | null } | null }).clients;
     const clientName = crow?.name ?? null;
     const clientBrandHex = clientName
@@ -448,7 +455,7 @@ export async function fetchDashboardOperational(ctx: AuthContext): Promise<Dashb
   }
 
   for (const t of openTasks) {
-    if (t.priority !== 'urgent') continue;
+    if (!isTaskUrgentForAlert({ status: t.status as string, priority: t.priority as TaskPriority })) continue;
     const dl = t.deadline as string | null;
     const overdue = dl ? isBefore(new Date(dl), dayStart) : false;
     const assignee = labelTaskAssignees(

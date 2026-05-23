@@ -11,6 +11,7 @@ import {
   CRITICAL_BAR_SNOOZE_KEY,
   CRITICAL_BAR_SUPPRESS_FP_KEY,
 } from '@/lib/notifications/critical-bar-constants';
+import { CRITICAL_ALERTS_REFRESH_EVENT } from '@/lib/alerts/request-critical-alerts-refresh';
 import { summarizeCriticalAlerts, triggerCriticalAlertFeedbackFromActiveApi } from '@/lib/notifications/critical-alert-feedback';
 import { SUPRA_AUDIO_UNLOCK_EVENT } from '@/lib/notifications/critical-sound-events';
 import { cn } from '@/lib/utils/cn';
@@ -167,6 +168,18 @@ export function GlobalCriticalAlertBar() {
     };
   }, []);
 
+  useEffect(() => {
+    const onRefresh = () => {
+      void (async () => {
+        const p = await fetchCriticalActive();
+        setPayload(p);
+        payloadRef.current = p;
+      })();
+    };
+    window.addEventListener(CRITICAL_ALERTS_REFRESH_EVENT, onRefresh);
+    return () => window.removeEventListener(CRITICAL_ALERTS_REFRESH_EVENT, onRefresh);
+  }, []);
+
   if (!payload || payload.alerts.length === 0) return null;
   if (isSnoozed()) return null;
 
@@ -174,17 +187,18 @@ export function GlobalCriticalAlertBar() {
   const fp = criticalCount > 0 ? criticalFingerprint(payload) : '';
   const suppressed = typeof window !== 'undefined' && fp.length > 0 && readSuppressFp() === fp;
 
+  const actionCount = alerts.length;
   const shortTitle =
-    criticalCount > 0
-      ? criticalCount > 1
-        ? `${criticalCount} alertes critiques`
-        : '1 alerte critique'
-      : warningCount > 1
-        ? `${warningCount} alertes`
-        : '1 alerte';
+    actionCount > 1
+      ? `${actionCount} actions à traiter`
+      : actionCount === 1
+        ? '1 action à traiter'
+        : 'Points à suivre';
 
   const shortSubtitle =
-    criticalCount > 0 ? summarizeCriticalAlerts(alerts) : 'À surveiller — ouvrez le détail pour la liste.';
+    criticalCount > 0
+      ? summarizeCriticalAlerts(alerts)
+      : 'À traiter aujourd’hui — ouvrez le détail pour la liste.';
 
   const barSurface = cn(
     'border-b border-[rgba(255,61,10,0.18)] bg-[#FFF4F0]/[0.97] text-foreground',

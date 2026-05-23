@@ -13,6 +13,15 @@ export const SHOOTING_CONFIRM_VIDEO_STATUSES: VideoStatus[] = [
 
 const TERMINAL: VideoStatus[] = ['archived', 'cancelled', 'validated', 'published'];
 
+const POST_EDITING: VideoStatus[] = [
+  'editing',
+  'internal_review',
+  'sent_to_client',
+  'client_revision',
+  'validated',
+  'published',
+];
+
 export const SHOOTING_POSTPONE_REASON_PRESETS = [
   { value: 'client_indisponible', label: 'Client indisponible' },
   { value: 'lieu_indisponible', label: 'Lieu indisponible' },
@@ -44,20 +53,57 @@ export function viewerCanRespondToShootingConfirmation(
   return video.cameramen.some((c) => c.id === viewerEmployeeId);
 }
 
+export function isVideoShootingInProgressStatus(status: VideoStatus | string | null | undefined): boolean {
+  return status === 'shooting_in_progress';
+}
+
 export function videoNeedsShootingConfirmation(
-  video: Pick<
-    VideoWithClient,
-    'status' | 'shooting_date' | 'shooting_completed_at' | 'id' | 'title'
-  >,
+  video: Pick<VideoWithClient, 'status' | 'shooting_date' | 'shooting_completed_at'> & {
+    id?: string;
+    title?: string;
+  },
   now: Date,
 ): boolean {
   if (!video.shooting_date) return false;
   if (video.shooting_completed_at != null && video.shooting_completed_at !== '') return false;
+  if (isVideoShootingInProgressStatus(video.status)) return false;
   if (TERMINAL.includes(video.status)) return false;
+  if (POST_EDITING.includes(video.status)) return false;
   if (!SHOOTING_CONFIRM_VIDEO_STATUSES.includes(video.status)) return false;
   const sd = new Date(video.shooting_date);
   if (Number.isNaN(sd.getTime())) return false;
   return sd.getTime() <= now.getTime();
+}
+
+/** Peut confirmer « tournage fait » (depuis confirmation ou statut en cours). */
+export function videoCanConfirmShootingDone(
+  video: Pick<VideoWithClient, 'status' | 'shooting_date' | 'shooting_completed_at'>,
+  now: Date = new Date(),
+): boolean {
+  if (video.shooting_completed_at != null && video.shooting_completed_at !== '') return false;
+  if (TERMINAL.includes(video.status)) return false;
+  if (isVideoShootingInProgressStatus(video.status)) return true;
+  return videoNeedsShootingConfirmation(video, now);
+}
+
+/** Peut passer en « tournage en cours ». */
+export function videoCanMarkShootingInProgress(
+  video: Pick<VideoWithClient, 'status' | 'shooting_date' | 'shooting_completed_at'>,
+  now: Date = new Date(),
+): boolean {
+  if (isVideoShootingInProgressStatus(video.status)) return false;
+  return videoNeedsShootingConfirmation(video, now);
+}
+
+export function videoCanPostponeShooting(
+  video: Pick<VideoWithClient, 'status' | 'shooting_date' | 'shooting_completed_at'>,
+  now: Date = new Date(),
+): boolean {
+  if (video.shooting_completed_at != null && video.shooting_completed_at !== '') return false;
+  if (TERMINAL.includes(video.status)) return false;
+  if (POST_EDITING.includes(video.status)) return false;
+  if (isVideoShootingInProgressStatus(video.status)) return true;
+  return videoNeedsShootingConfirmation(video, now);
 }
 
 export function videoShowsShootingConfirmBadge(

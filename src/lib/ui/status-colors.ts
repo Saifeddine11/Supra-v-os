@@ -71,6 +71,8 @@ function shootingStateToKey(state: ShootingScheduleState): OperationalColorKey {
       return 'urgent';
     case 'overdue':
       return 'danger';
+    case 'in_progress':
+      return 'shoot';
     case 'done_field':
       return 'success';
     case 'done_post':
@@ -156,7 +158,7 @@ export function getVideoProductionColorKey(
   if (status === 'published' || status === 'validated') return 'success';
   if (status === 'archived' || status === 'cancelled') return 'muted';
   if (status === 'idea' || status === 'brief_pending') return 'muted';
-  if (status === 'shooting_planned') return 'shoot';
+  if (status === 'shooting_planned' || status === 'shooting_in_progress') return 'shoot';
   if (status === 'shooting_done' || status === 'rushes_received') return 'shoot';
   if (status === 'editing' || status === 'internal_review') return 'postProd';
   if (status === 'sent_to_client' || publicStatus === 'in_validation') return 'waitClient';
@@ -324,6 +326,12 @@ export function getCalendarVideoChipSurface(
 ): { border: string; bg: string } {
   if (kind === 'shoot') {
     const st = getShootingScheduleState(video.shooting_date ?? atIso, video.status, now).state;
+    if (st === 'in_progress') {
+      return {
+        border: 'border-l-[#FF6A2A] border-orange-500/40',
+        bg: 'bg-orange-500/[0.12] dark:bg-orange-500/[0.16]',
+      };
+    }
     if (st === 'overdue') {
       return {
         border: 'border-l-red-500 border-red-500/35',

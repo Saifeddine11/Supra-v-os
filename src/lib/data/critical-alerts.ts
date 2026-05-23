@@ -5,11 +5,11 @@ import { fr } from 'date-fns/locale';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { ServiceRoleClient } from '@/lib/supabase/admin';
 import type { AuthContext } from '@/lib/auth/permissions';
-import { canViewGlobalFinanceStats } from '@/lib/auth/capabilities';
+import { canViewGlobalFinanceStats, canViewInvoices } from '@/lib/auth/capabilities';
 import { effectiveRole, hasFullOrgDataAccess } from '@/lib/auth/data-scope';
-import type { UserRole, VideoStatus } from '@/types/database';
-import { effectiveClientDeliveryIso, isVideoDeliveryOverdue } from '@/lib/videos/video-schedule';
-import { getShootingScheduleState, isTodayCalendar, isTomorrowCalendar } from '@/lib/deadlines/deadline-state';
+import type { TaskStatus, UserRole, VideoStatus } from '@/types/database';
+import { effectiveClientDeliveryIso } from '@/lib/videos/video-schedule';
+import { isTodayCalendar, isTomorrowCalendar } from '@/lib/deadlines/deadline-state';
 import { fetchTaskIdsAssignedToEmployee } from '@/lib/data/task-assignments';
 import {
   fetchVideoIdsAssignedToEmployee,
@@ -20,10 +20,24 @@ import type {
   CriticalActiveAlertDTO,
   CriticalActiveAlertsResponse,
 } from '@/lib/notifications/critical-active-types';
+import {
+  isTaskOverdueForAlert,
+  TASK_CRITICAL_ALERT_EXCLUDED_STATUSES_SQL,
+  isVideoActiveForAlerts,
+  shouldShowClientValidationAlert,
+  shouldShowShootingConfirmationAlert,
+  shouldShowShootingScheduleOverdueAlert,
+  shouldShowShootingExpectedEndOverdueAlert,
+  shouldShowShootingInProgressInfoAlert,
+  shouldShowVideoDeliveryOverdueAlert,
+  shootingConfirmationSeverity,
+  isInvoiceOverdueForAlert,
+  type ActiveAlertSeverity,
+} from '@/lib/alerts/active-alert-rules';
 
 export type { CriticalActiveAlertDTO, CriticalActiveAlertsResponse };
 
-export type CriticalAlertSeverity = 'critical' | 'warning';
+export type CriticalAlertSeverity = ActiveAlertSeverity;
 
 export interface CriticalAlertItem {
   id: string;
@@ -38,7 +52,9 @@ export interface CriticalAlertItem {
 function parseCriticalAlertEntity(id: string): { entityType: string; entityId: string } {
   if (id === 'fin-inv-overdue') return { entityType: 'invoices', entityId: 'overdue' };
   if (id.startsWith('task-od-')) return { entityType: 'task', entityId: id.slice('task-od-'.length) };
+  if (id.startsWith('task-urg-')) return { entityType: 'task', entityId: id.slice('task-urg-'.length) };
   if (id.startsWith('vid-od-')) return { entityType: 'video', entityId: id.slice('vid-od-'.length) };
+  if (id.startsWith('vid-shoot-conf-')) return { entityType: 'video', entityId: id.slice('vid-shoot-conf-'.length) };
   if (id.startsWith('vid-shoot-tm-')) return { entityType: 'video', entityId: id.slice('vid-shoot-tm-'.length) };
   if (id.startsWith('vid-shoot-od-')) return { entityType: 'video', entityId: id.slice('vid-shoot-od-'.length) };
   if (id.startsWith('vid-shoot-')) return { entityType: 'video', entityId: id.slice('vid-shoot-'.length) };
@@ -55,7 +71,6 @@ export type CriticalAlertTypeBucket = {
   warning: number;
 };
 
-/** Répartition par libellé de type — alignée sur la bannière et `/api/notifications/critical-active`. */
 export function aggregateCriticalAlertsByType(items: CriticalAlertItem[]): CriticalAlertTypeBucket[] {
   const map = new Map<string, { count: number; critical: number; warning: number }>();
   for (const item of items) {
@@ -77,7 +92,7 @@ export function mapCriticalAlertsToActiveApi(items: CriticalAlertItem[]): Critic
       id: item.id,
       entityType,
       entityId,
-      severity: item.severity,
+      severity: item.severity === 'info' ? 'warning' : item.severity,
       title: item.typeLabel,
       message: `${item.title} — ${item.detail}`,
       href: item.href,
@@ -93,11 +108,11 @@ function scopeRole(role: UserRole): UserRole {
   return role === 'designer' ? 'developer' : role;
 }
 
+const TASK_OPEN_FILTER = TASK_CRITICAL_ALERT_EXCLUDED_STATUSES_SQL;
+const VIDEO_ACTIVE_FILTER = '(archived,cancelled,published,validated)';
+
 /**
- * Alertes visibles en haut du dashboard — respecte le périmètre du rôle (pas de finance globale hors droits).
- * `supabase` : passer **`createAdminClient()`** depuis routes/cron authentifiés : le périmètre est
- * appliqué ici (OR assignations, rôle finance, etc.). Un client session RLS masquait des lignes
- * déjà comptées par le dashboard.
+ * Alertes actives recalculées depuis l’état DB courant (pas is_read).
  */
 export async function fetchCriticalAlertsWithClient(
   supabase: ServiceRoleClient,
@@ -112,96 +127,165 @@ export async function fetchCriticalAlertsWithClient(
   const rk = scopeRole(ctx.role);
   const full = hasFullOrgDataAccess(ctx);
   const eid = ctx.employee.id;
+  const canSeeFinance = canViewInvoices(ctx.role) && (canViewGlobalFinanceStats(ctx.role) || ctx.role === 'finance');
+  const canSeeProductionAlerts = ctx.role !== 'finance';
 
   const push = (row: CriticalAlertItem) => {
     if (items.length >= 14) return;
     if (!items.some((x) => x.id === row.id)) items.push(row);
   };
 
-  /** Tâches en retard (échéance passée, hors terminé / archivé). */
+  async function taskScopeOr(): Promise<string | null> {
+    if (full) return null;
+    if (ctx.role === 'commercial') {
+      const pivot = await fetchTaskIdsAssignedToEmployee(supabase, eid);
+      const parts = [`assignee_id.eq.${eid}`];
+      if (pivot.length) parts.push(`id.in.(${pivot.join(',')})`);
+      return parts.join(',');
+    }
+    if (rk === 'editor' || rk === 'cameraman' || rk === 'community_manager') {
+      const pivot = await fetchTaskIdsAssignedToEmployee(supabase, eid);
+      const parts = [`assignee_id.eq.${eid}`];
+      if (pivot.length) parts.push(`id.in.(${pivot.join(',')})`);
+      return parts.join(',');
+    }
+    if (rk === 'developer' || rk === 'seo') return null;
+    return null;
+  }
+
+  async function videoScopeOr(): Promise<string | null> {
+    if (full) return null;
+    if (ctx.role === 'commercial') return null;
+    if (rk === 'editor' || rk === 'community_manager') {
+      const fromVa = await fetchVideoIdsAssignedToEmployee(supabase, eid);
+      const parts = [`editor_id.eq.${eid}`, `cameraman_id.eq.${eid}`];
+      if (fromVa.length) parts.push(`id.in.(${fromVa.join(',')})`);
+      return parts.join(',');
+    }
+    if (rk === 'cameraman') {
+      const fromVa = await fetchVideoIdsForAssignmentRole(supabase, eid, 'cameraman');
+      const parts = [`cameraman_id.eq.${eid}`];
+      if (fromVa.length) parts.push(`id.in.(${fromVa.join(',')})`);
+      return parts.join(',');
+    }
+    return null;
+  }
+
+  async function pushWaitingClientFollowUpScoped() {
+    const canSeeFollowUp =
+      ctx.role === 'admin' || ctx.role === 'project_manager' || ctx.role === 'commercial';
+    if (!canSeeFollowUp) return;
+
+    let q = supabase
+      .from('tasks')
+      .select('id,title,clients:client_id(name,color_hex)')
+      .eq('status', 'waiting_client')
+      .limit(8);
+
+    const scope = await taskScopeOr();
+    if (scope === null && !full && ctx.role !== 'project_manager' && ctx.role !== 'admin') return;
+    if (scope) q = q.or(scope);
+
+    const { data } = await q;
+    const rows = data ?? [];
+    if (rows.length === 0) return;
+
+    const n = rows.length;
+    const sample = rows[0] as {
+      id: string;
+      title?: string;
+      clients?: { name?: string; color_hex?: string | null } | null;
+    };
+    const client = sample.clients?.name;
+    push({
+      id: 'task-wait-client-digest',
+      severity: 'info',
+      typeLabel: 'Suivi client',
+      title: n > 1 ? `${n} tâches en attente client` : '1 tâche en attente client',
+      detail:
+        n === 1
+          ? client
+            ? `${String(sample.title ?? 'Tâche')} · ${client}`
+            : String(sample.title ?? 'Retour client attendu')
+          : 'Retour ou validation client attendus',
+      href: `${base}?status=waiting_client`,
+      clientBrandHex: client ? getClientColor({ name: client, color_hex: sample.clients?.color_hex ?? null }) : null,
+    });
+  }
+
   async function pushOverdueTasksScoped() {
     let q = supabase
       .from('tasks')
-      .select('id,title,deadline,clients:client_id(name,color_hex)')
-      .neq('status', 'done')
-      .neq('status', 'archived')
+      .select('id,title,deadline,status,clients:client_id(name,color_hex)')
+      .not('status', 'in', TASK_OPEN_FILTER)
       .not('deadline', 'is', null)
       .lt('deadline', now.toISOString())
       .order('deadline', { ascending: true })
-      .limit(8);
+      .limit(12);
 
-    if (!full && ctx.role !== 'commercial') {
-      const pivot = await fetchTaskIdsAssignedToEmployee(supabase, eid);
-      const parts = [`assignee_id.eq.${eid}`];
-      if (pivot.length) parts.push(`id.in.(${pivot.join(',')})`);
-      q = q.or(parts.join(','));
-    } else if (ctx.role === 'commercial') {
-      const parts = [`assignee_id.eq.${eid}`];
-      const pivot = await fetchTaskIdsAssignedToEmployee(supabase, eid);
-      if (pivot.length) parts.push(`id.in.(${pivot.join(',')})`);
-      q = q.or(parts.join(','));
-    }
+    const scope = await taskScopeOr();
+    if (scope === null && !full && ctx.role !== 'project_manager' && ctx.role !== 'admin') return;
+    if (scope) q = q.or(scope);
 
     const { data } = await q;
     for (const t of data ?? []) {
-      const cl = (t as { clients?: { name?: string; color_hex?: string | null } | null }).clients;
+      const row = t as {
+        id: string;
+        title?: string;
+        deadline: string;
+        status: TaskStatus;
+        clients?: { name?: string; color_hex?: string | null } | null;
+      };
+      if (!isTaskOverdueForAlert({ status: row.status, deadline: row.deadline, now })) continue;
+
+      const cl = row.clients;
       const client = cl?.name;
       push({
-        id: `task-od-${t.id}`,
+        id: `task-od-${row.id}`,
         severity: 'critical',
         typeLabel: 'Tâche en retard',
-        title: String((t as { title?: string }).title ?? 'Tâche'),
+        title: String(row.title ?? 'Tâche'),
         detail: client ? `${client} · échéance dépassée` : 'Échéance dépassée',
-        href: `${base}?highlight=${t.id}`,
+        href: `${base}?highlight=${row.id}`,
         clientBrandHex: client ? getClientColor({ name: client, color_hex: cl?.color_hex ?? null }) : null,
       });
     }
   }
 
-  /** Vidéos livraison en retard. */
   async function pushOverdueVideosScoped() {
-    if (rk === 'finance') return;
+    if (!canSeeProductionAlerts) return;
     let q = supabase
       .from('videos')
       .select(
-        'id,title,status,public_status,client_delivery_at,delivery_deadline,clients:client_id(name,color_hex)',
+        'id,title,status,public_status,client_delivery_at,delivery_deadline,shooting_date,shooting_completed_at,clients:client_id(name,color_hex)',
       )
-      .not('status', 'in', '(archived,cancelled,published,validated)')
+      .not('status', 'in', VIDEO_ACTIVE_FILTER)
       .limit(40);
 
-    if (!full && ctx.role !== 'commercial') {
-      if (rk === 'editor' || rk === 'community_manager') {
-        const fromVa = await fetchVideoIdsAssignedToEmployee(supabase, eid);
-        const parts = [`editor_id.eq.${eid}`, `cameraman_id.eq.${eid}`];
-        if (fromVa.length) parts.push(`id.in.(${fromVa.join(',')})`);
-        q = q.or(parts.join(','));
-      } else if (rk === 'cameraman') {
-        const fromVa = await fetchVideoIdsForAssignmentRole(supabase, eid, 'cameraman');
-        const parts = [`cameraman_id.eq.${eid}`];
-        if (fromVa.length) parts.push(`id.in.(${fromVa.join(',')})`);
-        q = q.or(parts.join(','));
-      } else if (effectiveRole(ctx.role) === 'developer' || rk === 'seo') {
-        return;
-      }
-    }
+    const scope = await videoScopeOr();
+    if (scope === null && !full && ctx.role !== 'project_manager' && ctx.role !== 'admin') return;
+    if (scope) q = q.or(scope);
 
     const { data } = await q;
     for (const v of data ?? []) {
       const row = v as {
         id: string;
         title: string;
-        status: string;
+        status: VideoStatus;
         public_status?: string;
         client_delivery_at?: string | null;
         delivery_deadline?: string | null;
+        shooting_date?: string | null;
+        shooting_completed_at?: string | null;
         clients?: { name?: string; color_hex?: string | null } | null;
       };
+      if (!isVideoActiveForAlerts(row)) continue;
       if (
-        !isVideoDeliveryOverdue({
+        !shouldShowVideoDeliveryOverdueAlert({
           status: row.status,
-          public_status: row.public_status ?? 'topic_proposed',
-          client_delivery_at: row.client_delivery_at ?? null,
-          delivery_deadline: row.delivery_deadline ?? null,
+          public_status: row.public_status,
+          client_delivery_at: row.client_delivery_at,
+          delivery_deadline: row.delivery_deadline,
         })
       ) {
         continue;
@@ -210,9 +294,9 @@ export async function fetchCriticalAlertsWithClient(
       push({
         id: `vid-od-${row.id}`,
         severity: 'critical',
-        typeLabel: 'Livraison vidéo',
+        typeLabel: 'Livraison en retard',
         title: row.title,
-        detail: client ? `${client} · livraison en retard` : 'Livraison en retard',
+        detail: client ? `${client} · livraison dépassée` : 'Livraison dépassée',
         href: '/videos',
         clientBrandHex: client
           ? getClientColor({ name: client, color_hex: row.clients?.color_hex ?? null })
@@ -221,25 +305,19 @@ export async function fetchCriticalAlertsWithClient(
     }
   }
 
-  /** Tournages et livraisons aujourd’hui (aperçu). */
   async function pushTodayVideoDatesScoped() {
-    if (rk === 'finance') return;
+    if (!canSeeProductionAlerts) return;
     let q = supabase
       .from('videos')
       .select(
-        'id,title,shooting_date,client_delivery_at,delivery_deadline,status,clients:client_id(name,color_hex)',
+        'id,title,shooting_date,shooting_completed_at,shooting_expected_end_at,client_delivery_at,delivery_deadline,status,public_status,clients:client_id(name,color_hex)',
       )
       .not('status', 'in', '(archived,cancelled)')
       .limit(60);
 
-    if (!full && ctx.role !== 'commercial') {
-      if (rk === 'editor' || rk === 'cameraman' || rk === 'community_manager') {
-        const fromVa = await fetchVideoIdsAssignedToEmployee(supabase, eid);
-        const parts = [`editor_id.eq.${eid}`, `cameraman_id.eq.${eid}`];
-        if (fromVa.length) parts.push(`id.in.(${fromVa.join(',')})`);
-        q = q.or(parts.join(','));
-      } else return;
-    }
+    const scope = await videoScopeOr();
+    if (scope === null && !full && ctx.role !== 'project_manager' && ctx.role !== 'admin') return;
+    if (scope) q = q.or(scope);
 
     const { data } = await q;
     for (const raw of data ?? []) {
@@ -247,47 +325,83 @@ export async function fetchCriticalAlertsWithClient(
         id: string;
         title: string;
         status: VideoStatus;
+        public_status?: string;
         shooting_date?: string | null;
+        shooting_completed_at?: string | null;
+        shooting_expected_end_at?: string | null;
         client_delivery_at?: string | null;
         delivery_deadline?: string | null;
         clients?: { name?: string; color_hex?: string | null } | null;
       };
+      if (!isVideoActiveForAlerts(v)) continue;
+
       const client = v.clients?.name ?? '';
       const clientBrandHex = client
         ? getClientColor({ name: client, color_hex: v.clients?.color_hex ?? null })
         : null;
-      if (v.shooting_date) {
-        const shootState = getShootingScheduleState(v.shooting_date, v.status, now).state;
-        if (shootState === 'overdue') {
-          push({
-            id: `vid-shoot-od-${v.id}`,
-            severity: 'critical',
-            typeLabel: 'Tournage dépassé',
-            title: v.title,
-            detail: client ? `${client} · date de tournage dépassée` : 'Date de tournage dépassée',
-            href: '/videos',
-            clientBrandHex,
-          });
-        } else if (shootState === 'today') {
-          push({
-            id: `vid-shoot-${v.id}`,
-            severity: 'warning',
-            typeLabel: 'Tournage aujourd’hui',
-            title: v.title,
-            detail: client ? `${client} · ${todayLabel}` : todayLabel,
-            href: '/videos',
-            clientBrandHex,
-          });
-        }
+
+      if (shouldShowShootingExpectedEndOverdueAlert(v, now)) {
+        push({
+          id: `vid-shoot-end-od-${v.id}`,
+          severity: 'critical',
+          typeLabel: 'Fin de tournage dépassée',
+          title: v.title,
+          detail: client
+            ? `${client} · confirmer la fin ou reprogrammer`
+            : 'Confirmer la fin ou reprogrammer',
+          href: '/videos',
+          clientBrandHex,
+        });
+      } else if (shouldShowShootingInProgressInfoAlert(v, now)) {
+        push({
+          id: `vid-shoot-ip-${v.id}`,
+          severity: 'info',
+          typeLabel: 'Tournage en cours',
+          title: v.title,
+          detail: client ? `${client} · en cours` : 'Tournage en cours',
+          href: '/videos',
+          clientBrandHex,
+        });
+      } else if (v.shooting_date && shouldShowShootingConfirmationAlert(v, now)) {
+        push({
+          id: `vid-shoot-conf-${v.id}`,
+          severity: shootingConfirmationSeverity(v.shooting_date, now),
+          typeLabel: 'Confirmation tournage',
+          title: v.title,
+          detail: client ? `${client} · confirmer le tournage` : 'Confirmer le tournage',
+          href: '/videos',
+          clientBrandHex,
+        });
+      } else if (v.shooting_date && shouldShowShootingScheduleOverdueAlert(v, now)) {
+        push({
+          id: `vid-shoot-od-${v.id}`,
+          severity: 'critical',
+          typeLabel: 'Tournage dépassé',
+          title: v.title,
+          detail: client ? `${client} · date dépassée` : 'Date de tournage dépassée',
+          href: '/videos',
+          clientBrandHex,
+        });
+      } else if (v.shooting_date && isTodayCalendar(v.shooting_date, now)) {
+        push({
+          id: `vid-shoot-${v.id}`,
+          severity: 'warning',
+          typeLabel: 'Tournage aujourd’hui',
+          title: v.title,
+          detail: client ? `${client} · ${todayLabel}` : todayLabel,
+          href: '/videos',
+          clientBrandHex,
+        });
       }
+
       const del = effectiveClientDeliveryIso({
         client_delivery_at: v.client_delivery_at ?? null,
         delivery_deadline: v.delivery_deadline ?? null,
       });
-      if (del && isTodayCalendar(del, now)) {
+      if (del && isTodayCalendar(del, now) && !shouldShowVideoDeliveryOverdueAlert(v)) {
         push({
           id: `vid-del-${v.id}`,
-          severity: 'critical',
+          severity: 'warning',
           typeLabel: 'Livraison aujourd’hui',
           title: v.title,
           detail: client ? `${client} · ${todayLabel}` : todayLabel,
@@ -298,121 +412,140 @@ export async function fetchCriticalAlertsWithClient(
     }
   }
 
-  /** Validations client (pipeline). */
   async function pushValidationsScoped() {
+    if (!canSeeProductionAlerts) return;
     if (!full && rk !== 'editor' && rk !== 'community_manager' && ctx.role !== 'project_manager') return;
+
     let q = supabase
       .from('videos')
-      .select('id,title,clients:client_id(name,color_hex)')
-      .or('status.eq.sent_to_client,public_status.eq.in_validation')
-      .not('status', 'in', '(archived,cancelled)')
-      .limit(8);
+      .select('id,title,status,public_status,clients:client_id(name,color_hex)')
+      .not('status', 'in', VIDEO_ACTIVE_FILTER)
+      .limit(20);
 
-    if (!full && rk === 'editor') {
-      const fromVa = await fetchVideoIdsAssignedToEmployee(supabase, eid);
-      const parts = [`editor_id.eq.${eid}`];
-      if (fromVa.length) parts.push(`id.in.(${fromVa.join(',')})`);
-      q = q.or(parts.join(','));
-    }
+    const scope = await videoScopeOr();
+    if (scope) q = q.or(scope);
 
     const { data } = await q;
     for (const v of data ?? []) {
       const row = v as {
         id: string;
         title: string;
+        status: VideoStatus;
+        public_status?: string;
         clients?: { name?: string; color_hex?: string | null } | null;
       };
+      if (!shouldShowClientValidationAlert(row)) continue;
       const cn = row.clients?.name;
       push({
         id: `val-${row.id}`,
         severity: 'warning',
         typeLabel: 'Validation client',
         title: row.title,
-        detail: cn ? `${cn} · attente retour` : 'Attente retour client',
+        detail: cn ? `${cn} · retour attendu` : 'Retour client attendu',
         href: '/videos',
         clientBrandHex: cn ? getClientColor({ name: cn, color_hex: row.clients?.color_hex ?? null }) : null,
       });
     }
   }
 
-  /** Finance : factures en retard (montants réservés aux rôles autorisés). */
   async function pushFinanceOverdue() {
-    if (!canViewGlobalFinanceStats(ctx.role) && ctx.role !== 'finance') return;
-    const { count } = await supabase
+    if (!canSeeFinance) return;
+    const { data } = await supabase
       .from('invoices')
-      .select('id', { count: 'exact', head: true })
-      .eq('status', 'overdue');
-    const n = count ?? 0;
+      .select('id,status,due_date')
+      .in('status', ['overdue', 'sent', 'pending'])
+      .limit(200);
+    const n = (data ?? []).filter((inv) =>
+      isInvoiceOverdueForAlert({
+        status: inv.status as string,
+        due_date: (inv as { due_date?: string }).due_date,
+      }),
+    ).length;
     if (n > 0) {
       push({
         id: 'fin-inv-overdue',
         severity: 'critical',
         typeLabel: 'Facturation',
-        title: `${n} facture(s) en retard`,
-        detail: 'Relances et encaissements à traiter',
+        title: `${n} facture(s) à relancer`,
+        detail: 'Encaissements à suivre',
         href: '/invoices',
       });
     }
   }
 
   await pushOverdueTasksScoped();
+  await pushWaitingClientFollowUpScoped();
   await pushOverdueVideosScoped();
   await pushTodayVideoDatesScoped();
   await pushValidationsScoped();
   await pushFinanceOverdue();
 
-  /** Demain : tournage / livraison (rôles terrain & pilotage). */
-  if (full || ctx.role === 'project_manager' || rk === 'cameraman' || rk === 'editor') {
+  if (canSeeProductionAlerts && (full || ctx.role === 'project_manager' || rk === 'cameraman' || rk === 'editor')) {
     let q = supabase
       .from('videos')
-      .select('id,title,shooting_date,client_delivery_at,delivery_deadline,clients:client_id(name,color_hex)')
+      .select(
+        'id,title,shooting_date,shooting_completed_at,client_delivery_at,delivery_deadline,status,public_status,clients:client_id(name,color_hex)',
+      )
       .not('status', 'in', '(archived,cancelled)')
       .limit(80);
-    if (!full) {
-      const fromVa = await fetchVideoIdsAssignedToEmployee(supabase, eid);
-      const parts = [`editor_id.eq.${eid}`, `cameraman_id.eq.${eid}`];
-      if (fromVa.length) parts.push(`id.in.(${fromVa.join(',')})`);
-      q = q.or(parts.join(','));
-    }
-    const { data } = await q;
-    for (const raw of data ?? []) {
-      const v = raw as {
-        id: string;
-        title: string;
-        shooting_date?: string | null;
-        client_delivery_at?: string | null;
-        delivery_deadline?: string | null;
-        clients?: { name?: string; color_hex?: string | null } | null;
-      };
-      const client = v.clients?.name ?? '';
-      const clientBrandHex = client
-        ? getClientColor({ name: client, color_hex: v.clients?.color_hex ?? null })
-        : null;
-      if (v.shooting_date && isTomorrowCalendar(v.shooting_date, now) && (full || rk === 'cameraman' || rk === 'community_manager')) {
-        push({
-          id: `vid-shoot-tm-${v.id}`,
-          severity: 'warning',
-          typeLabel: 'Tournage demain',
-          title: v.title,
-          detail: client || 'Préparer le terrain',
-          href: '/videos',
-          clientBrandHex,
+    const scope = await videoScopeOr();
+    if (!scope && !full && ctx.role !== 'project_manager' && ctx.role !== 'admin') {
+      // skip tomorrow block
+    } else {
+      if (scope) q = q.or(scope);
+      const { data } = await q;
+      for (const raw of data ?? []) {
+        const v = raw as {
+          id: string;
+          title: string;
+          shooting_date?: string | null;
+          shooting_completed_at?: string | null;
+          client_delivery_at?: string | null;
+          delivery_deadline?: string | null;
+          status: VideoStatus;
+          public_status?: string;
+          clients?: { name?: string; color_hex?: string | null } | null;
+        };
+        if (!isVideoActiveForAlerts(v)) continue;
+        const client = v.clients?.name ?? '';
+        const clientBrandHex = client
+          ? getClientColor({ name: client, color_hex: v.clients?.color_hex ?? null })
+          : null;
+        if (
+          v.shooting_date &&
+          isTomorrowCalendar(v.shooting_date, now) &&
+          (full || rk === 'cameraman' || rk === 'community_manager')
+        ) {
+          push({
+            id: `vid-shoot-tm-${v.id}`,
+            severity: 'info',
+            typeLabel: 'Tournage demain',
+            title: v.title,
+            detail: client || 'Préparer le terrain',
+            href: '/videos',
+            clientBrandHex,
+          });
+        }
+        const del = effectiveClientDeliveryIso({
+          client_delivery_at: v.client_delivery_at ?? null,
+          delivery_deadline: v.delivery_deadline ?? null,
         });
-      }
-      const del = effectiveClientDeliveryIso({
-        client_delivery_at: v.client_delivery_at ?? null,
-        delivery_deadline: v.delivery_deadline ?? null,
-      });
-      if (del && isTomorrowCalendar(del, now) && (full || rk === 'editor' || rk === 'community_manager')) {
-        push({
-          id: `vid-del-tm-${v.id}`,
-          severity: 'warning',
-          typeLabel: 'Livraison demain',
-          title: v.title,
-          detail: client || 'Contrôler le livrable',
-          href: '/videos',
-          clientBrandHex,
-        });
+        if (
+          del &&
+          isTomorrowCalendar(del, now) &&
+          (full || rk === 'editor' || rk === 'community_manager') &&
+          !shouldShowVideoDeliveryOverdueAlert(v)
+        ) {
+          push({
+            id: `vid-del-tm-${v.id}`,
+            severity: 'info',
+            typeLabel: 'Livraison demain',
+            title: v.title,
+            detail: client || 'Contrôler le livrable',
+            href: '/videos',
+            clientBrandHex,
+          });
+        }
       }
     }
   }

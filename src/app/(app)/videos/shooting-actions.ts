@@ -18,7 +18,9 @@ import { logStaffActivity } from '@/lib/activity/log-activity';
 import { appBaseUrl } from '@/lib/cron/app-base-url';
 import {
   labelForPostponePreset,
-  videoNeedsShootingConfirmation,
+  videoCanConfirmShootingDone,
+  videoCanMarkShootingInProgress,
+  videoCanPostponeShooting,
   viewerCanRespondToShootingConfirmation,
 } from '@/lib/videos/shooting-confirmation';
 
@@ -36,6 +38,7 @@ type VideoShootRow = {
   status: VideoStatus;
   shooting_date: string | null;
   shooting_completed_at: string | null;
+  shooting_started_at?: string | null;
   client_id: string;
   editor_id: string | null;
   cameraman_id: string | null;
@@ -45,7 +48,9 @@ type VideoShootRow = {
 async function loadVideoForShooting(admin: ReturnType<typeof createAdminClient>, videoId: string) {
   const { data: v, error } = await admin
     .from('videos')
-    .select('id,title,status,shooting_date,shooting_completed_at,client_id,editor_id,cameraman_id,clients(name)')
+    .select(
+      'id,title,status,shooting_date,shooting_completed_at,shooting_started_at,client_id,editor_id,cameraman_id,clients(name)',
+    )
     .eq('id', videoId)
     .maybeSingle();
   if (error) throw new Error(error.message);
@@ -145,7 +150,7 @@ export async function confirmVideoShootingDoneAction(videoId: string): Promise<A
   if (!v) return actionError('Vidéo introuvable.');
 
   const now = new Date();
-  if (!videoNeedsShootingConfirmation(v, now)) {
+  if (!videoCanConfirmShootingDone(v, now)) {
     return actionError('Cette vidéo ne nécessite plus de confirmation de tournage.');
   }
 
@@ -232,6 +237,156 @@ export async function confirmVideoShootingDoneAction(videoId: string): Promise<A
 
   revalidatePath('/videos');
   revalidatePath('/tasks');
+  revalidatePath('/tasks/calendar');
+  revalidatePath('/dashboard');
+  return actionOk();
+}
+
+const MAX_SHOOTING_NOTE_LEN = 2000;
+
+export async function markVideoShootingInProgressAction(formData: FormData): Promise<ActionResult> {
+  const ctx = await getAuthContext();
+  if (!ctx) return actionError('Non authentifié.');
+  const empErr = assertEmployeeActive(ctx);
+  if (empErr) return actionError(empErr);
+
+  const id = String(formData.get('video_id') ?? '').trim();
+  if (!id || !UUID_RE.test(id)) return actionError('Identifiant vidéo invalide.');
+
+  const expectedEndRaw = String(formData.get('expected_end_at') ?? '').trim();
+  const internalNote = String(formData.get('internal_note') ?? '').trim();
+  if (internalNote.length > MAX_SHOOTING_NOTE_LEN) {
+    return actionError('La note est trop longue.');
+  }
+
+  let expectedEndAt: string | null = null;
+  if (expectedEndRaw) {
+    const ms = Date.parse(expectedEndRaw);
+    if (Number.isNaN(ms)) return actionError('Date de fin prévue invalide.');
+    expectedEndAt = new Date(ms).toISOString();
+  }
+
+  const userSb = await createClient();
+  if (!(await assertVideoRecordVisible(userSb, ctx, id))) {
+    return actionError('Vidéo introuvable ou accès refusé.');
+  }
+
+  let admin: ReturnType<typeof createAdminClient>;
+  try {
+    admin = createAdminClient();
+  } catch {
+    return actionError('Configuration serveur incomplète.');
+  }
+
+  const v = await loadVideoForShooting(admin, id);
+  if (!v) return actionError('Vidéo introuvable.');
+
+  const now = new Date();
+  if (!videoCanMarkShootingInProgress(v, now)) {
+    return actionError('Cette vidéo ne peut pas être marquée en tournage en cours.');
+  }
+
+  const { cameramen, cameraman_id } = await attachCameramen(admin, v);
+  if (!viewerCanRespondToShootingConfirmation(ctx.role, ctx.employee?.id, { cameramen, cameraman_id })) {
+    return actionError('Vous n’êtes pas autorisé à modifier ce tournage.');
+  }
+
+  const startedAt = now.toISOString();
+  const patch: Record<string, unknown> = {
+    status: 'shooting_in_progress' as VideoStatus,
+    public_status: 'in_production',
+    shooting_expected_end_at: expectedEndAt,
+    updated_at: startedAt,
+  };
+  if (!v.shooting_started_at) {
+    patch.shooting_started_at = startedAt;
+  }
+
+  const { error: upErr } = await admin.from('videos').update(patch).eq('id', id);
+  if (upErr) {
+    console.error('[markVideoShootingInProgressAction]', upErr);
+    return actionError(formatVideoShootingActionError(upErr));
+  }
+
+  try {
+    await admin.from('video_shooting_events').insert({
+      video_id: id,
+      event_type: 'in_progress',
+      old_shooting_at: v.shooting_date,
+      new_shooting_at: null,
+      expected_end_at: expectedEndAt,
+      reason: null,
+      note: internalNote || null,
+      created_by: ctx.userId,
+    });
+  } catch (e) {
+    console.error('[markVideoShootingInProgressAction] event', e);
+  }
+
+  const noteFr = `Tournage marqué en cours le ${new Date(startedAt).toLocaleString('fr-FR', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })}.${expectedEndAt ? ` Fin prévue : ${new Date(expectedEndAt).toLocaleString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}.` : ''}${internalNote ? ` ${internalNote}` : ''}`;
+  try {
+    await appendNoteToVideoProductionTask(admin, id, noteFr);
+  } catch {
+    /* best-effort */
+  }
+
+  try {
+    await syncVideoLinkedProductionTaskFromDb(admin, id);
+  } catch {
+    /* best-effort */
+  }
+
+  const base = appBaseUrl();
+  const editorIds = await collectEditorEmployeeIds(admin, id, v.editor_id);
+  const pmAdminIds = await getUserIdsByRoles(['admin', 'project_manager']);
+  const rows: Parameters<typeof insertNotifications>[0] = [];
+
+  for (const empId of editorIds) {
+    const uid = await getEmployeeUserId(empId);
+    if (uid && uid !== ctx.userId) {
+      rows.push({
+        recipient_user_id: uid,
+        type: 'system',
+        priority: 'normal',
+        title: 'Tournage en cours',
+        message: `Le tournage est en cours pour « ${v.title} ».`,
+        related_entity_type: 'video',
+        related_entity_id: id,
+        link_url: `${base}/videos`,
+      });
+    }
+  }
+  for (const uid of pmAdminIds) {
+    if (uid === ctx.userId) continue;
+    rows.push({
+      recipient_user_id: uid,
+      type: 'system',
+      priority: 'normal',
+      title: 'Tournage en cours',
+      message: `Tournage en cours — « ${v.title} » (${v.clients?.name ?? 'Client'}).`,
+      related_entity_type: 'video',
+      related_entity_id: id,
+      link_url: `${base}/videos`,
+    });
+  }
+  if (rows.length) await insertNotifications(rows);
+
+  await logStaffActivity(ctx, {
+    action: 'updated',
+    entityType: 'video',
+    entityId: id,
+    metadata: { shooting_in_progress: true },
+  });
+
+  revalidatePath('/videos');
+  revalidatePath('/tasks');
+  revalidatePath('/tasks/calendar');
   revalidatePath('/dashboard');
   return actionOk();
 }
@@ -279,7 +434,7 @@ export async function postponeVideoShootingAction(formData: FormData): Promise<A
   if (!v) return actionError('Vidéo introuvable.');
 
   const now = new Date();
-  if (!videoNeedsShootingConfirmation(v, now)) {
+  if (!videoCanPostponeShooting(v, now)) {
     return actionError('Cette vidéo ne nécessite plus de confirmation de tournage.');
   }
 
@@ -396,6 +551,7 @@ export async function postponeVideoShootingAction(formData: FormData): Promise<A
 
   revalidatePath('/videos');
   revalidatePath('/tasks');
+  revalidatePath('/tasks/calendar');
   revalidatePath('/dashboard');
   return actionOk();
 }

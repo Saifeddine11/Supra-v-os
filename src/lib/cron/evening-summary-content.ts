@@ -5,6 +5,8 @@ import { fr } from 'date-fns/locale';
 import type { UserRole, VideoPublicStatus } from '@/types/database';
 import { effectiveClientDeliveryIso, isVideoDeliveryOverdue } from '@/lib/videos/video-schedule';
 import { isTomorrowCalendar } from '@/lib/deadlines/deadline-state';
+import { isTaskOverdueForAlert } from '@/lib/alerts/active-alert-rules';
+import type { TaskStatus } from '@/types/database';
 
 export type EveningDigestLine = { text: string; url?: string };
 
@@ -68,7 +70,13 @@ export function buildEveningDigestForEmployee(opts: {
   const tomorrowStr = new Date(now.getTime() + 86400_000).toISOString().slice(0, 10);
 
   const remaining = tasks.filter((t) => t.status !== 'done' && t.status !== 'archived');
-  const overdueTasks = remaining.filter((t) => t.deadline && new Date(t.deadline) < now);
+  const overdueTasks = remaining.filter((t) =>
+    isTaskOverdueForAlert({
+      status: t.status as TaskStatus,
+      deadline: t.deadline ?? null,
+      now,
+    }),
+  );
   const tomorrowTasks = remaining.filter((t) => {
     if (!t.deadline) return false;
     return new Date(t.deadline).toISOString().slice(0, 10) === tomorrowStr;

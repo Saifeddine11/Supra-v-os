@@ -27,7 +27,6 @@ export const ALLOWED_TASK_STATUSES: readonly TaskStatus[] = [
   'todo',
   'in_progress',
   'waiting_client',
-  'waiting_team',
   'review',
   'blocked',
   'done',

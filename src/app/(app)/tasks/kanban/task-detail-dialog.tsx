@@ -21,6 +21,7 @@ import { ConfirmTaskActionDialog, type TaskConfirmActionMode } from '../confirm-
 import { updateTaskStatusAction } from '../actions';
 import { hrefVideosOpenDetail } from '@/lib/videos/video-deep-link';
 import { toast } from 'sonner';
+import { requestCriticalAlertsRefresh } from '@/lib/alerts/request-critical-alerts-refresh';
 
 function isOverdue(task: TaskEnriched): boolean {
   if (!task.deadline || task.status === 'done') return false;
@@ -60,6 +61,7 @@ export function TaskDetailDialog({
     setConfirmAction(null);
     onOpenChange(false);
     onMutated?.();
+    requestCriticalAlertsRefresh();
     router.refresh();
   }
   const od = isOverdue(task);
@@ -251,6 +253,7 @@ export function TaskDetailDialog({
                     return;
                   }
                   toast.success('Statut mis à jour');
+                  requestCriticalAlertsRefresh();
                   router.refresh();
                 });
               }}

@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { startOfDay } from 'date-fns';
 import { createClient } from '@/lib/supabase/server';
 import type { AuthContext } from '@/lib/auth/permissions';
 import { effectiveRole, hasFullOrgDataAccess } from '@/lib/auth/data-scope';
@@ -25,8 +26,12 @@ export interface CalendarVideoEvent {
   status: VideoStatus;
   public_status: VideoPublicStatus;
   shooting_date: string | null;
+  shooting_started_at?: string | null;
+  shooting_expected_end_at?: string | null;
   client_delivery_at: string | null;
   delivery_deadline: string | null;
+  /** Libellé court (ex. tournage en cours). */
+  shootLabel?: string;
 }
 
 function inRange(iso: string, startMs: number, endMs: number): boolean {
@@ -50,7 +55,7 @@ export async function listCalendarVideoEvents(
   let q = supabase
     .from('videos')
     .select(
-      'id, title, status, public_status, shooting_date, client_delivery_at, delivery_deadline, editor_id, cameraman_id, clients(name, color_hex)',
+      'id, title, status, public_status, shooting_date, shooting_started_at, shooting_expected_end_at, client_delivery_at, delivery_deadline, editor_id, cameraman_id, clients(name, color_hex)',
     )
     .not('status', 'in', '(archived,cancelled)');
 
@@ -131,7 +136,37 @@ export async function listCalendarVideoEvents(
       }
     }
 
-    if (showShoot && shoot && inRange(shoot, startMs, endMs)) {
+    if (showShoot && status === 'shooting_in_progress') {
+      const started = (row.shooting_started_at as string | null) ?? shoot;
+      const rangeStartIso = started ?? shoot;
+      const rangeEndIso =
+        (row.shooting_expected_end_at as string | null) ?? new Date().toISOString();
+      if (rangeStartIso) {
+        const rs = startOfDay(new Date(rangeStartIso)).getTime();
+        const re = startOfDay(new Date(rangeEndIso)).getTime();
+        for (let t = rs; t <= re; t += 86400000) {
+          const dayIso = new Date(t + 12 * 3600000).toISOString();
+          if (!inRange(dayIso, startMs, endMs)) continue;
+          out.push({
+            id: `vshoot-ip-${id}-${t}`,
+            videoId: id,
+            kind: 'shoot',
+            title,
+            clientName,
+            client_brand_hex,
+            at: dayIso,
+            status,
+            public_status,
+            shooting_date: shoot,
+            shooting_started_at: row.shooting_started_at as string | null,
+            shooting_expected_end_at: row.shooting_expected_end_at as string | null,
+            client_delivery_at: row.client_delivery_at as string | null,
+            delivery_deadline: row.delivery_deadline as string | null,
+            shootLabel: 'Tournage en cours',
+          });
+        }
+      }
+    } else if (showShoot && shoot && inRange(shoot, startMs, endMs)) {
       out.push({
         id: `vshoot-${id}`,
         videoId: id,

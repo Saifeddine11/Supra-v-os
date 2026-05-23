@@ -18,8 +18,8 @@ export function CriticalAlertsBanner({ items }: { items: CriticalAlertItem[] }) 
 
   return (
     <SectionCard
-      title="Alertes critiques"
-      description="Retards, livraisons et tournages du jour — priorité lecture rapide."
+      title="Actions à traiter"
+      description="Retards, livraisons et tournages — uniquement les points encore ouverts."
       className="border-destructive/20 shadow-md shadow-destructive/[0.06] dark:shadow-destructive/[0.12]"
     >
       <ul className="space-y-2">

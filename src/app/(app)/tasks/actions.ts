@@ -20,6 +20,7 @@ import {
 } from '@/lib/auth/data-scope';
 import { actionError, actionOk, getPostgrestError, type ActionResult } from '@/lib/actions/types';
 import type { TaskPriority, TaskStatus } from '@/types/database';
+import { isTaskStatusAllowedInWorkflow } from '@/types/domain';
 import { notifyTaskAssignees, notifyTaskBlocked } from '@/lib/notifications/task-events';
 import { logStaffActivity } from '@/lib/activity/log-activity';
 import { requireAssignableEmployee } from '@/lib/data/employee-guards';
@@ -134,12 +135,17 @@ export async function createTaskAction(formData: FormData): Promise<ActionResult
 
   const primary = legacyPrimaryAssignee(assigneeIds);
 
+  const status = (String(formData.get('status') ?? 'todo') || 'todo') as TaskStatus;
+  if (!isTaskStatusAllowedInWorkflow(status)) {
+    return actionError('Statut non disponible dans le workflow.');
+  }
+
   const row = {
     title,
     description: String(formData.get('description') ?? '').trim() || null,
     client_id: clientId || null,
     assignee_id: primary.assignee_id,
-    status: (String(formData.get('status') ?? 'todo') || 'todo') as TaskStatus,
+    status,
     priority: (String(formData.get('priority') ?? 'normal') || 'normal') as TaskPriority,
     deadline: deadlineRaw ? new Date(deadlineRaw).toISOString() : null,
     created_by: user.id,
@@ -228,6 +234,11 @@ export async function updateTaskAction(id: string, formData: FormData): Promise<
 
   const primary = legacyPrimaryAssignee(assigneeIds);
 
+  const status = (String(formData.get('status') ?? 'todo') || 'todo') as TaskStatus;
+  if (!isTaskStatusAllowedInWorkflow(status)) {
+    return actionError('Statut non disponible dans le workflow.');
+  }
+
   const { error } = await writeSb
     .from('tasks')
     .update({
@@ -235,7 +246,7 @@ export async function updateTaskAction(id: string, formData: FormData): Promise<
       description: String(formData.get('description') ?? '').trim() || null,
       client_id: clientId || null,
       assignee_id: primary.assignee_id,
-      status: String(formData.get('status') ?? 'todo') as TaskStatus,
+      status,
       priority: String(formData.get('priority') ?? 'normal') as TaskPriority,
       deadline: deadlineRaw ? new Date(deadlineRaw).toISOString() : null,
       updated_at: new Date().toISOString(),
@@ -276,6 +287,9 @@ export async function updateTaskStatusAction(id: string, status: TaskStatus): Pr
   const ctx = await getAuthContext();
   if (!ctx) return actionError('Non authentifié.');
   if (!canChangeTaskStatus(ctx.role)) return actionError('Action non autorisée pour votre rôle.');
+  if (!isTaskStatusAllowedInWorkflow(status)) {
+    return actionError('Statut non disponible dans le workflow.');
+  }
 
   const readSb = await createClient();
   const writeSb = await resolveTaskMutationClient(ctx);

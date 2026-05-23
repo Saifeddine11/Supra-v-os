@@ -11,6 +11,13 @@ import {
 import { createNotificationOnce } from '@/lib/notifications/notify';
 import { getCronEmailPrefs } from '@/lib/cron/user-notification-prefs';
 import { fetchTaskIdsAssignedToEmployee } from '@/lib/data/task-assignments';
+import {
+  isTaskActiveForCriticalAlerts,
+  isTaskOverdueForAlert,
+  isTaskUrgentForAlert,
+  TASK_CRITICAL_ALERT_EXCLUDED_STATUSES_SQL,
+} from '@/lib/alerts/active-alert-rules';
+import type { TaskPriority, TaskStatus } from '@/types/database';
 
 export type MorningRemindersResult = {
   success: boolean;
@@ -72,7 +79,7 @@ export async function runMorningReminders(): Promise<MorningRemindersResult> {
       .from('tasks')
       .select('id,title,deadline,priority,status')
       .or(taskOrParts.join(','))
-      .not('status', 'in', '(done,archived)');
+      .not('status', 'in', TASK_CRITICAL_ALERT_EXCLUDED_STATUSES_SQL);
 
     const open = tasks ?? [];
     const overdue: typeof open = [];
@@ -80,10 +87,13 @@ export async function runMorningReminders(): Promise<MorningRemindersResult> {
     const urgentOpen: typeof open = [];
 
     for (const t of open) {
-      if (t.priority === 'urgent') urgentOpen.push(t);
-      if (!t.deadline) continue;
-      const d = new Date(t.deadline);
-      if (d.getTime() < now.getTime()) overdue.push(t);
+      const status = t.status as TaskStatus;
+      const deadline = t.deadline as string | null;
+      if (!isTaskActiveForCriticalAlerts({ status, deadline })) continue;
+      if (isTaskUrgentForAlert({ status, priority: t.priority as TaskPriority })) urgentOpen.push(t);
+      if (!deadline) continue;
+      const d = new Date(deadline);
+      if (isTaskOverdueForAlert({ status, deadline, now })) overdue.push(t);
       else if (isWithinInterval(d, { start: dayStart, end: dayEnd })) dueToday.push(t);
     }
 

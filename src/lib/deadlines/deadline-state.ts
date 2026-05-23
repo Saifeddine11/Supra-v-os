@@ -20,6 +20,7 @@ export type ShootingScheduleState =
   | 'tomorrow'
   | 'today'
   | 'overdue'
+  | 'in_progress'
   | 'done_field'
   | 'done_post';
 
@@ -75,6 +76,10 @@ export function getShootingScheduleState(
   const today = startOfDay(now);
   if (!shootDay) {
     return { state: 'unplanned', label: 'Tournage non planifié' };
+  }
+
+  if (videoStatus === 'shooting_in_progress') {
+    return { state: 'in_progress', label: 'Tournage en cours' };
   }
 
   if (shootingCompletedByStatus(videoStatus)) {

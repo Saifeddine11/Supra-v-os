@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { TASK_CRITICAL_ALERT_EXCLUDED_STATUSES_SQL } from '@/lib/alerts/active-alert-rules';
 import { canViewGlobalFinanceStats, canViewInvoices } from '@/lib/auth/capabilities';
 import type { AuthContext } from '@/lib/auth/permissions';
 import { resolveVisibleClientIds } from '@/lib/auth/data-scope';
@@ -332,16 +333,14 @@ async function fetchAgencyAggregates(
   const tasksOverdueQ = supabase
     .from('tasks')
     .select('id', { count: 'exact', head: true })
-    .neq('status', 'done')
-    .neq('status', 'archived')
+    .not('status', 'in', TASK_CRITICAL_ALERT_EXCLUDED_STATUSES_SQL)
     .lt('deadline', now);
 
   const tasksUrgentQ = supabase
     .from('tasks')
     .select('id', { count: 'exact', head: true })
     .eq('priority', 'urgent')
-    .neq('status', 'done')
-    .neq('status', 'archived');
+    .not('status', 'in', TASK_CRITICAL_ALERT_EXCLUDED_STATUSES_SQL);
 
   const vidQ = supabase
     .from('videos')
@@ -431,8 +430,7 @@ async function fetchPersonalWorkload(
     .from('tasks')
     .select('id', { count: 'exact', head: true })
     .or(taskScopeOr)
-    .neq('status', 'done')
-    .neq('status', 'archived')
+    .not('status', 'in', TASK_CRITICAL_ALERT_EXCLUDED_STATUSES_SQL)
     .lt('deadline', now);
 
   const myUrgentQ = supabase
@@ -440,8 +438,7 @@ async function fetchPersonalWorkload(
     .select('id', { count: 'exact', head: true })
     .or(taskScopeOr)
     .eq('priority', 'urgent')
-    .neq('status', 'done')
-    .neq('status', 'archived');
+    .not('status', 'in', TASK_CRITICAL_ALERT_EXCLUDED_STATUSES_SQL);
 
   const myDueTodayQ = supabase
     .from('tasks')

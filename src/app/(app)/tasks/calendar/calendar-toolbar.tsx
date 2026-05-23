@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { format, parseISO } from 'date-fns';
 import type { Client, Employee, TaskPriority, TaskStatus } from '@/types/database';
-import { TASK_STATUS_MAP, PRIORITY_MAP } from '@/types/domain';
+import { TASK_KANBAN_STATUSES, TASK_STATUS_MAP, PRIORITY_MAP } from '@/types/domain';
 import type { CalendarColorBy } from '@/lib/tasks/calendar-visual';
 import { getCalendarColorByLabel } from '@/lib/tasks/calendar-visual';
 import { Button } from '@/components/ui/button';
@@ -178,17 +178,7 @@ export function CalendarToolbar({
             className="h-11 min-w-[150px] shrink-0 rounded-lg border border-border bg-muted px-3 text-sm text-foreground"
           >
             <option value="all">Statut</option>
-            {(
-              [
-                'todo',
-                'in_progress',
-                'waiting_client',
-                'waiting_team',
-                'review',
-                'blocked',
-                'done',
-              ] as TaskStatus[]
-            ).map((s) => (
+            {TASK_KANBAN_STATUSES.map((s) => (
               <option key={s} value={s}>
                 {TASK_STATUS_MAP[s].label}
               </option>

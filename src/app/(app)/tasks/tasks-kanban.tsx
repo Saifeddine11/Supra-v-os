@@ -14,8 +14,9 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import type { Client, Employee, TaskStatus } from '@/types/database';
 import type { TaskEnriched } from '@/types/database';
-import { TASK_STATUS_MAP, TASK_KANBAN_STATUSES } from '@/types/domain';
+import { TASK_KANBAN_STATUSES, TASK_STATUS_MAP, taskStatusForKanbanBucket } from '@/types/domain';
 import { TaskKanbanColumn } from './kanban/task-kanban-column';
+import { requestCriticalAlertsRefresh } from '@/lib/alerts/request-critical-alerts-refresh';
 import { updateTaskStatusAction } from './actions';
 
 /** Intra-column reorder : possible plus tard avec @dnd-kit/sortable + champ `position`. */
@@ -77,7 +78,7 @@ export function TasksKanban({
     status,
     label: TASK_STATUS_MAP[status].label,
     color: TASK_STATUS_MAP[status].color,
-    items: localTasks.filter((t) => t.status === status),
+    items: localTasks.filter((t) => taskStatusForKanbanBucket(t.status) === status),
   }));
 
   const handleDragEnd = useCallback(
@@ -104,6 +105,7 @@ export function TasksKanban({
       }
 
       toast.success('Statut mis à jour', { duration: 2000 });
+      requestCriticalAlertsRefresh();
       router.refresh();
     },
     [dragEnabled, localTasks, router],
@@ -129,7 +131,7 @@ export function TasksKanban({
     >
       <div className="relative rounded-2xl border border-border/60 bg-muted/15 p-2 dark:bg-muted/10 md:p-3">
         <div className="overflow-x-auto scroll-smooth pb-2 [-webkit-overflow-scrolling:touch]">
-          <div className="flex w-max min-w-full gap-5 pr-1">
+          <div className="flex w-max min-w-full items-start gap-4 pr-1 md:gap-5">
             {byStatus.map((col) => (
               <TaskKanbanColumn
                 key={col.status}

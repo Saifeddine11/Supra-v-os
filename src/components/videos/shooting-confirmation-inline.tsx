@@ -11,9 +11,13 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { SHOOTING_POSTPONE_REASON_PRESETS } from '@/lib/videos/shooting-confirmation';
-import { confirmVideoShootingDoneAction, postponeVideoShootingAction } from '@/app/(app)/videos/shooting-actions';
+import {
+  confirmVideoShootingDoneAction,
+  markVideoShootingInProgressAction,
+  postponeVideoShootingAction,
+} from '@/app/(app)/videos/shooting-actions';
 
-type Mode = 'main' | 'postpone';
+type Mode = 'main' | 'postpone' | 'in_progress';
 
 export function ShootingConfirmationInline({ video, onDone }: { video: VideoWithClient; onDone?: () => void }) {
   const router = useRouter();
@@ -23,6 +27,8 @@ export function ShootingConfirmationInline({ video, onDone }: { video: VideoWith
   const [reasonDetail, setReasonDetail] = useState('');
   const [internalNote, setInternalNote] = useState('');
   const [newShootLocal, setNewShootLocal] = useState('');
+  const [expectedEndLocal, setExpectedEndLocal] = useState('');
+  const [inProgressNote, setInProgressNote] = useState('');
 
   const titleDate = video.shooting_date
     ? format(new Date(video.shooting_date), "d MMMM yyyy 'à' HH:mm", { locale: fr })
@@ -32,7 +38,55 @@ export function ShootingConfirmationInline({ video, onDone }: { video: VideoWith
 
   return (
     <div className="rounded-xl border border-primary/25 bg-primary/[0.04] p-4 dark:border-primary/30 dark:bg-primary/[0.06]">
-      {mode === 'postpone' ? (
+      {mode === 'in_progress' ? (
+        <div className="space-y-3">
+          <p className="text-sm font-medium text-foreground">Tournage en cours</p>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Date de fin prévue (optionnel)</Label>
+            <Input
+              type="datetime-local"
+              value={expectedEndLocal}
+              onChange={(e) => setExpectedEndLocal(e.target.value)}
+              className="text-xs"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Note interne (optionnel)</Label>
+            <Textarea value={inProgressNote} onChange={(e) => setInProgressNote(e.target.value)} rows={2} className="resize-none text-xs" />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" disabled={pending} onClick={() => setMode('main')}>
+              Retour
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              className="h-8 bg-[#FF3D0A] text-xs text-white hover:bg-[#FF450F]"
+              disabled={pending}
+              onClick={() => {
+                startTransition(async () => {
+                  const fd = new FormData();
+                  fd.set('video_id', video.id);
+                  if (expectedEndLocal.trim()) fd.set('expected_end_at', new Date(expectedEndLocal).toISOString());
+                  if (inProgressNote.trim()) fd.set('internal_note', inProgressNote.trim());
+                  const res = await markVideoShootingInProgressAction(fd);
+                  if (!res.ok) {
+                    toast.error(res.error);
+                    return;
+                  }
+                  toast.success('Tournage marqué en cours.');
+                  setMode('main');
+                  onDone?.();
+                  router.refresh();
+                });
+              }}
+            >
+              Enregistrer
+            </Button>
+          </div>
+        </div>
+      ) : mode === 'postpone' ? (
         <div className="space-y-3">
           <p className="text-sm font-medium text-foreground">Reporter le tournage</p>
           <div className="space-y-1.5">
@@ -107,9 +161,9 @@ export function ShootingConfirmationInline({ video, onDone }: { video: VideoWith
           <p className="text-sm text-muted-foreground">
             Le tournage de « <span className="font-medium text-foreground">{video.title}</span> » pour «{' '}
             <span className="font-medium text-foreground">{clientName}</span> » était prévu le{' '}
-            <span className="tabular-nums text-foreground">{titleDate}</span>. Confirmer le résultat.
+            <span className="tabular-nums text-foreground">{titleDate}</span>. Quel est l’état actuel ?
           </p>
-          <div className="flex flex-col gap-2 sm:flex-row">
+          <div className="flex flex-col gap-2">
             <Button
               type="button"
               variant="primary"
@@ -131,8 +185,18 @@ export function ShootingConfirmationInline({ video, onDone }: { video: VideoWith
             >
               Oui, tournage fait
             </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-9 text-xs"
+              disabled={pending}
+              onClick={() => setMode('in_progress')}
+            >
+              Tournage en cours
+            </Button>
             <Button type="button" variant="outline" size="sm" className="h-9 text-xs" disabled={pending} onClick={() => setMode('postpone')}>
-              Non, reprogrammer
+              Non, à reprogrammer
             </Button>
           </div>
         </div>

@@ -37,7 +37,8 @@ export const TASK_STATUS_MAP: Record<TaskStatus, StatusConfig> = {
   todo:            { label: 'À faire',          color: '#9CA3AF' },
   in_progress:     { label: 'En cours',         color: '#FF450F' },
   waiting_client:  { label: 'Attente client',   color: '#C4789B' },
-  waiting_team:    { label: 'Attente équipe',   color: '#7C8DB0' },
+  /** Legacy enum value — migrated to `blocked`; kept for badges on old rows. */
+  waiting_team:    { label: 'Bloqué',           color: '#E05252' },
   review:          { label: 'En révision',      color: '#E07B3A' },
   blocked:         { label: 'Bloqué',           color: '#E05252' },
   done:            { label: 'Terminé',          color: '#3DBD7D' },
@@ -55,8 +56,9 @@ export const VIDEO_STATUS_MAP: Record<VideoStatus, StatusConfig> = {
   idea:             { label: 'Idée',                color: '#525252' },
   brief_pending:    { label: 'Brief à préparer',    color: '#8B8B8B' },
   brief_validated:  { label: 'Brief validé',        color: '#7C8DB0' },
-  shooting_planned: { label: 'Tournage planifié',   color: '#D14A28' },
-  shooting_done:    { label: 'Tournage terminé',    color: '#FF450F' },
+  shooting_planned:      { label: 'Tournage planifié',    color: '#D14A28' },
+  shooting_in_progress:  { label: 'Tournage en cours',    color: '#FF6A2A' },
+  shooting_done:         { label: 'Tournage terminé',     color: '#FF450F' },
   rushes_received:  { label: 'Rushes reçus',        color: '#C4789B' },
   editing:          { label: 'Montage en cours',    color: '#6B9E7A' },
   internal_review:  { label: 'Révision interne',    color: '#7C8DB0' },
@@ -224,13 +226,19 @@ export const VIDEO_KANBAN_COLUMNS: Array<{
   color: string;
 }> = [
   { key: 'idea',          label: 'Idée / Brief',     statuses: ['idea', 'brief_pending', 'brief_validated'], color: '#7C8DB0' },
-  { key: 'shooting',      label: 'Tournage',          statuses: ['shooting_planned', 'shooting_done', 'rushes_received'], color: '#D14A28' },
+  {
+    key: 'shooting',
+    label: 'Tournage',
+    statuses: ['shooting_planned', 'shooting_in_progress', 'shooting_done', 'rushes_received'],
+    color: '#D14A28',
+  },
   { key: 'editing',       label: 'Montage',           statuses: ['editing', 'internal_review'], color: '#6B9E7A' },
   { key: 'client_review', label: 'Chez client',       statuses: ['sent_to_client', 'client_revision'], color: '#C4789B' },
   { key: 'validated',     label: 'Validé',            statuses: ['validated'], color: '#6B9E7A' },
   { key: 'published',     label: 'Publié',            statuses: ['published'], color: '#3DBD7D' },
 ];
 
+/** Colonnes visibles sur le kanban /tasks (ordre d’affichage). */
 export const TASK_KANBAN_COLUMNS: Array<{
   key: TaskStatus;
   label: string;
@@ -238,22 +246,27 @@ export const TASK_KANBAN_COLUMNS: Array<{
 }> = [
   { key: 'todo',           label: 'À faire',         color: '#9CA3AF' },
   { key: 'in_progress',    label: 'En cours',        color: '#FF450F' },
-  { key: 'review',         label: 'En révision',     color: '#E07B3A' },
   { key: 'waiting_client', label: 'Attente client',  color: '#C4789B' },
+  { key: 'review',         label: 'En révision',     color: '#E07B3A' },
   { key: 'blocked',        label: 'Bloqué',          color: '#E05252' },
   { key: 'done',           label: 'Terminé',         color: '#3DBD7D' },
 ];
 
-/** Column order on the task board (client-safe — no server imports). */
-export const TASK_KANBAN_STATUSES: TaskStatus[] = [
-  'todo',
-  'in_progress',
-  'waiting_client',
-  'waiting_team',
-  'review',
-  'blocked',
-  'done',
-];
+/** Statuts sélectionnables (kanban, formulaires, filtres calendrier). */
+export const TASK_KANBAN_STATUSES: TaskStatus[] = TASK_KANBAN_COLUMNS.map((c) => c.key);
+
+/** Ancien statut retiré du workflow — bucket d’affichage kanban avant/après migration DB. */
+export const TASK_KANBAN_LEGACY_BUCKET: Partial<Record<TaskStatus, TaskStatus>> = {
+  waiting_team: 'blocked',
+};
+
+export function taskStatusForKanbanBucket(status: TaskStatus): TaskStatus {
+  return TASK_KANBAN_LEGACY_BUCKET[status] ?? status;
+}
+
+export function isTaskStatusAllowedInWorkflow(status: TaskStatus): boolean {
+  return TASK_KANBAN_STATUSES.includes(status);
+}
 
 // ─── PERMISSION HELPERS ─────────────────────────────────────────────────────
 
