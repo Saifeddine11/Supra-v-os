@@ -2,6 +2,7 @@ import 'server-only';
 
 import { randomBytes } from 'crypto';
 import { createAdminClient, type ServiceRoleClient } from '@/lib/supabase/admin';
+import { mapSupabaseAuthEmailError } from '@/lib/employees/auth-email-errors';
 
 /**
  * Cible après clic sur le lien d’invitation / reset (doit figurer dans Redirect URLs Supabase).
@@ -134,20 +135,7 @@ export async function linkEmployeeToAuthUser(
 }
 
 function mapAuthError(msg: string): string {
-  const m = msg.trim();
-  if (/rate limit|too many/i.test(m)) return 'Trop de tentatives. Réessayez plus tard.';
-  if (/already|registered|exists|duplicate/i.test(m))
-    return 'Un compte existe peut-être déjà pour cet e-mail.';
-  if (/invalid.*redirect|redirect.*not allowed|redirect_to/i.test(m))
-    return (
-      'URL de redirection refusée par Supabase. Vérifiez Authentication → URL Configuration ' +
-      '(Site URL et Redirect URLs) et que NEXT_PUBLIC_APP_URL correspond à l’URL de production.'
-    );
-  if (/smtp|email.*send|mail delivery/i.test(m))
-    return (
-      'Envoi d’e-mail impossible côté Supabase. Vérifiez SMTP / fournisseur d’e-mail dans le dashboard du projet.'
-    );
-  return m || 'Une erreur est survenue.';
+  return mapSupabaseAuthEmailError(msg);
 }
 
 export type InviteEmployeeAuthResult =

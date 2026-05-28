@@ -6,6 +6,7 @@ import type { CalendarColorBy } from '@/lib/tasks/calendar-visual';
 import { getCalendarColorByLabel } from '@/lib/tasks/calendar-visual';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { QuickTaskCreateButton } from '@/components/tasks/quick-task-create-button';
 
 export type CalendarNav =
   | { view: 'month'; current: string; prev: string; next: string }
@@ -58,12 +59,14 @@ export function CalendarToolbar({
   title,
   employees,
   clients,
+  canCreate,
   filters,
 }: {
   nav: CalendarNav;
   title: string;
   employees: Pick<Employee, 'id' | 'full_name'>[];
   clients: Pick<Client, 'id' | 'name' | 'color_hex' | 'color_label'>[];
+  canCreate: boolean;
   filters: CalendarFilterBag;
 }) {
   const dayAnchor = anchorDayForLinks(nav);
@@ -200,6 +203,13 @@ export function CalendarToolbar({
           <Button type="submit" variant="outline" size="sm" className="min-h-11 rounded-full">
             Appliquer les filtres
           </Button>
+          {canCreate ? (
+            <QuickTaskCreateButton
+              clients={clients}
+              employees={employees}
+              className="min-h-11 gap-2"
+            />
+          ) : null}
           <Button variant="ghost" size="sm" className="min-h-11 rounded-full" asChild>
             <Link href="/tasks">Board</Link>
           </Button>

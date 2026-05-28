@@ -3,6 +3,7 @@
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import Link from 'next/link';
+import { hrefVideosOpenDetail } from '@/lib/videos/video-deep-link';
 import { Clapperboard, Truck } from 'lucide-react';
 import { cn } from '@/lib/utils/cn';
 import type { CalendarVideoEvent } from '@/lib/data/videos-calendar';
@@ -39,7 +40,7 @@ export function CalendarVideoChip({
 
   return (
     <Link
-      href="/videos"
+      href={hrefVideosOpenDetail(ev.videoId)}
       className={cn(
         'flex min-w-0 items-start gap-1.5 rounded-lg border border-l-[3px] px-1.5 py-1 text-left text-[11px] leading-tight text-foreground transition-colors hover:opacity-95',
         surface.border,

@@ -1,22 +1,23 @@
 'use client';
 
 import Link from 'next/link';
-import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { TaskFormDialog } from './task-form-dialog';
+import { QuickTaskCreateButton } from '@/components/tasks/quick-task-create-button';
 import type { Client, Employee, TaskPriority } from '@/types/database';
 import { PRIORITY_MAP } from '@/types/domain';
 
 export function TasksToolbar({
   clients,
   employees,
+  canCreate,
   defaultQ,
   defaultAssignee,
   defaultPriority,
 }: {
   clients: Pick<Client, 'id' | 'name' | 'color_hex' | 'color_label'>[];
   employees: Pick<Employee, 'id' | 'full_name'>[];
+  canCreate: boolean;
   defaultQ?: string;
   defaultAssignee?: string;
   defaultPriority?: string;
@@ -57,16 +58,9 @@ export function TasksToolbar({
         <Button variant="outline" size="sm" asChild>
           <Link href="/tasks/calendar">Calendrier</Link>
         </Button>
-        <TaskFormDialog
-          clients={clients}
-          employees={employees}
-          trigger={
-            <Button variant="primary" className="rounded-full">
-              <Plus className="h-4 w-4" />
-              Nouvelle tâche
-            </Button>
-          }
-        />
+        {canCreate ? (
+          <QuickTaskCreateButton clients={clients} employees={employees} className="gap-2" />
+        ) : null}
       </div>
     </div>
   );

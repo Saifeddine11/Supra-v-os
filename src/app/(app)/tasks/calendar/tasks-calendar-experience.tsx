@@ -15,8 +15,10 @@ import {
 import { getCalendarVideoDotClass } from '@/lib/ui/status-colors';
 import { CalendarTaskChip } from './calendar-task-chip';
 import { DayTasksDrawer } from './day-tasks-drawer';
-import { CalendarTaskDetailTrigger } from './calendar-task-detail-trigger';
+import { CalendarTaskAgendaActions } from './calendar-task-agenda-actions';
 import { Button } from '@/components/ui/button';
+import Link from 'next/link';
+import { hrefVideosOpenDetail } from '@/lib/videos/video-deep-link';
 import type { CalendarVideoEvent } from '@/lib/data/videos-calendar';
 import { CalendarVideoChip } from './calendar-video-chip';
 import { VIDEO_PUBLIC_STATUS_MAP, VIDEO_STATUS_MAP } from '@/types/domain';
@@ -89,6 +91,7 @@ function DayAgendaView({
   employees,
   colorBy,
   canDelete,
+  canEdit,
 }: {
   anchorDay: Date;
   tasks: TaskEnriched[];
@@ -97,6 +100,7 @@ function DayAgendaView({
   employees: Pick<Employee, 'id' | 'full_name'>[];
   colorBy: CalendarColorBy;
   canDelete: boolean;
+  canEdit: boolean;
 }) {
   const { overdue, active, done } = useMemo(() => dayAgendaGroups(tasks), [tasks]);
   const dayVideos = useMemo(() => videosOnDay(anchorDay, videoEvents), [anchorDay, videoEvents]);
@@ -154,12 +158,12 @@ function DayAgendaView({
                     </p>
                   ) : null}
                   <div className="mt-3">
-                    <CalendarTaskDetailTrigger
+                    <CalendarTaskAgendaActions
                       task={t}
                       clients={clients}
                       employees={employees}
                       canDelete={canDelete}
-                      label="Détails · modifier · archiver"
+                      canEdit={canEdit}
                     />
                   </div>
                 </div>
@@ -204,7 +208,7 @@ function DayAgendaView({
                   </p>
                   <div className="mt-3">
                     <Button type="button" variant="outline" size="sm" className="min-h-11 w-full rounded-full" asChild>
-                      <a href="/videos">Ouvrir les vidéos</a>
+                      <Link href={hrefVideosOpenDetail(ev.videoId)}>Ouvrir la production vidéo</Link>
                     </Button>
                   </div>
                 </div>
@@ -233,6 +237,7 @@ export function TasksCalendarExperience({
   employees,
   colorBy,
   canDelete,
+  canEdit,
 }: {
   view: 'month' | 'week' | 'day';
   filterStartISO: string;
@@ -244,6 +249,7 @@ export function TasksCalendarExperience({
   employees: Pick<Employee, 'id' | 'full_name'>[];
   colorBy: CalendarColorBy;
   canDelete: boolean;
+  canEdit: boolean;
 }) {
   const filterStart = useMemo(() => parseISO(filterStartISO), [filterStartISO]);
   const filterEnd = useMemo(() => parseISO(filterEndISO), [filterEndISO]);
@@ -277,6 +283,7 @@ export function TasksCalendarExperience({
         employees={employees}
         colorBy={colorBy}
         canDelete={canDelete}
+        canEdit={canEdit}
       />
     );
   }
@@ -529,6 +536,7 @@ export function TasksCalendarExperience({
         employees={employees}
         colorBy={colorBy}
         canDelete={canDelete}
+        canEdit={canEdit}
       />
     </>
   );

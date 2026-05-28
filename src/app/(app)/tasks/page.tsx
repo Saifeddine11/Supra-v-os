@@ -1,10 +1,12 @@
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
 import { listTasksEnriched, type TaskListFilters } from '@/lib/data/tasks';
 import { listClients } from '@/lib/data/clients';
 import { listEmployeesForSelect } from '@/lib/data/employees';
 import { getAuthContext } from '@/lib/auth/permissions';
 import { taskListingDenied } from '@/lib/auth/data-scope';
-import { canDeleteTask } from '@/lib/auth/capabilities';
+import { canCreateTasks, canDeleteTask } from '@/lib/auth/capabilities';
+import { TasksNewTaskOpener } from './tasks-new-task-opener';
 import type { TaskPriority } from '@/types/database';
 import { SectionCard } from '@/components/shared/section-card';
 import { EmptyState } from '@/components/shared/empty-state';
@@ -42,10 +44,14 @@ export default async function TasksPage({
     color_label: c.color_label,
   }));
   const canDelete = canDeleteTask(ctx?.role ?? null);
+  const canCreate = canCreateTasks(ctx?.role ?? null);
   const allowKanbanDrag = Boolean(ctx && !taskListingDenied(ctx));
 
   return (
     <div className="space-y-6">
+      <Suspense fallback={null}>
+        <TasksNewTaskOpener clients={clientOptions} employees={employees} />
+      </Suspense>
       <div>
         <h1 className="font-sans text-2xl font-semibold tracking-tight text-foreground">Tâches</h1>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -56,6 +62,7 @@ export default async function TasksPage({
       <TasksToolbar
         clients={clientOptions}
         employees={employees}
+        canCreate={canCreate}
         defaultQ={sp?.q}
         defaultAssignee={sp?.assignee}
         defaultPriority={sp?.priority}

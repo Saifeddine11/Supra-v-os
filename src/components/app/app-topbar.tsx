@@ -75,7 +75,7 @@ export function AppTopbar({
                 ) : null}
                 {showTasks ? (
                   <Button variant={nextVariant()} size="sm" className="rounded-full" asChild>
-                    <Link href="/tasks">
+                    <Link href="/tasks?new=task">
                       <Plus className="h-4 w-4" />
                       Tâche
                     </Link>

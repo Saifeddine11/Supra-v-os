@@ -16,7 +16,8 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { CalendarTaskDetailTrigger } from './calendar-task-detail-trigger';
+import { hrefVideosOpenDetail } from '@/lib/videos/video-deep-link';
+import { CalendarTaskAgendaActions } from './calendar-task-agenda-actions';
 import { ClientColorDot } from '@/components/shared/client-color-dot';
 import type { CalendarVideoEvent } from '@/lib/data/videos-calendar';
 
@@ -37,6 +38,7 @@ export function DayTasksDrawer({
   employees,
   colorBy,
   canDelete,
+  canEdit,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -47,6 +49,7 @@ export function DayTasksDrawer({
   employees: Pick<Employee, 'id' | 'full_name'>[];
   colorBy: CalendarColorBy;
   canDelete: boolean;
+  canEdit: boolean;
 }) {
   const hasAny = tasks.length > 0 || videoEvents.length > 0;
 
@@ -143,13 +146,13 @@ export function DayTasksDrawer({
                               ) : null}
                             </dl>
                             <div className="mt-3">
-                              <CalendarTaskDetailTrigger
+                              <CalendarTaskAgendaActions
                                 task={t}
                                 clients={clients}
                                 employees={employees}
                                 canDelete={canDelete}
-                                label="Détails · modifier · archiver"
-                                onOpenDetail={() => onOpenChange(false)}
+                                canEdit={canEdit}
+                                onDrawerClose={() => onOpenChange(false)}
                                 onMutated={() => onOpenChange(false)}
                               />
                             </div>
@@ -191,7 +194,7 @@ export function DayTasksDrawer({
                           </p>
                           <div className="mt-3">
                             <Button type="button" variant="outline" size="sm" className="min-h-11 w-full rounded-full" asChild>
-                              <Link href="/videos">Ouvrir la production vidéo</Link>
+                              <Link href={hrefVideosOpenDetail(ev.videoId)}>Ouvrir la production vidéo</Link>
                             </Button>
                           </div>
                         </div>

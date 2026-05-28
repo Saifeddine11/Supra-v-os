@@ -27,6 +27,10 @@ import {
   inviteEmployeeAuthAction,
   sendEmployeePasswordResetAction,
 } from './employee-auth-actions';
+import {
+  AUTH_EMAIL_RATE_LIMIT_USER_MESSAGE,
+  isAuthEmailRateLimitError,
+} from '@/lib/employees/auth-email-errors';
 
 type TempAccountSuccess = {
   message: string;
@@ -247,7 +251,24 @@ export function EmployeeAuthPanel({
           Cet employé n’a pas d’e-mail. Ajoutez un e-mail avant de créer le compte.
         </p>
       ) : null}
-      {err ? <p className="mt-3 text-sm text-destructive">{err}</p> : null}
+      {err ? (
+        <div
+          className={
+            isAuthEmailRateLimitError(err) || err === AUTH_EMAIL_RATE_LIMIT_USER_MESSAGE
+              ? 'mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-100'
+              : 'mt-3 text-sm text-destructive'
+          }
+          role="alert"
+        >
+          {err}
+          {isAuthEmailRateLimitError(err) || err === AUTH_EMAIL_RATE_LIMIT_USER_MESSAGE ? (
+            <p className="mt-2 text-xs opacity-90">
+              Configurez un SMTP personnalisé (ex. Resend) dans Supabase → Authentication → SMTP Settings, ou utilisez
+              « Créer accès (mot de passe temporaire) » ci-dessus.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
       {ok ? <p className="mt-3 text-sm text-emerald-700 dark:text-emerald-400">{ok}</p> : null}
 
       <AlertDialog open={confirmTemp} onOpenChange={setConfirmTemp}>

@@ -3,8 +3,8 @@
 import { revalidatePath } from 'next/cache';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/server';
-import { createAdminClient } from '@/lib/supabase/admin';
 import { getAuthContext, type AuthContext } from '@/lib/auth/permissions';
+import { resolveTaskMutationClient } from '@/lib/auth/task-mutation-client';
 import {
   canChangeTaskStatus,
   canCreateTasks,
@@ -43,18 +43,6 @@ function formatTaskMutationDbError(err: unknown): string {
     return TASK_MUTATION_DENIED;
   }
   return raw;
-}
-
-/** Admin / chef de projet : écritures via service role après contrôle métier (évite les écarts RLS). */
-async function resolveTaskMutationClient(ctx: AuthContext): Promise<SupabaseClient> {
-  if (canManageAllTasks(ctx.role)) {
-    try {
-      return createAdminClient();
-    } catch (e) {
-      console.error('[tasks] createAdminClient:', e);
-    }
-  }
-  return createClient();
 }
 
 function assertActiveEmployee(ctx: AuthContext): ActionResult<never> | null {
@@ -96,6 +84,11 @@ function parseAssigneeIdsFromForm(formData: FormData): string[] {
 export async function createTaskAction(formData: FormData): Promise<ActionResult<{ id: string }>> {
   const ctx = await getAuthContext();
   if (!ctx) return actionError('Non authentifié.');
+  if (!ctx.role) {
+    return actionError(
+      'Profil employé introuvable ou sans rôle : contactez un administrateur pour lier votre compte.',
+    );
+  }
   if (!canCreateTasks(ctx.role)) return actionError('Action non autorisée pour votre rôle.');
   if (taskListingDenied(ctx)) return actionError('Action non autorisée pour votre rôle.');
 

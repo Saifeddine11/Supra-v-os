@@ -590,7 +590,8 @@ export default async function DashboardPage() {
             type Quick = { href: string; label: string };
             const items: Quick[] = [];
             if (canModifyClients(ctx.role)) items.push({ href: '/clients', label: 'Nouveau client' });
-            if (navItemVisible('/tasks', ctx.employee.role)) items.push({ href: '/tasks', label: 'Nouvelle tâche' });
+            if (navItemVisible('/tasks', ctx.employee.role))
+              items.push({ href: '/tasks?new=task', label: 'Nouvelle tâche' });
             if (canModifyInvoices(ctx.role)) items.push({ href: '/invoices', label: 'Nouvelle facture' });
             return items.map((item, i) => (
               <ActionButton key={item.href} href={item.href} variant={i === 0 ? 'primary' : 'secondary'}>

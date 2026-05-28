@@ -114,7 +114,10 @@ export function VideosWorkspace({
       if (res.ok && res.data) {
         setDetail((prev) => (prev?.id === res.data!.id ? prev : res.data!));
       } else {
-        const msg = !res.ok ? res.error : 'Vidéo introuvable ou accès non autorisé.';
+        const msg =
+          !res.ok && res.error && !res.error.toLowerCase().includes('introuvable')
+            ? res.error
+            : 'Vidéo introuvable';
         toast.error(msg);
         setDetail(null);
         const p = new URLSearchParams(searchParamsRef.current.toString());

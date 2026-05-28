@@ -19,7 +19,7 @@ import {
 } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { getAuthContext } from '@/lib/auth/permissions';
-import { canDeleteTask } from '@/lib/auth/capabilities';
+import { canCreateTasks, canDeleteTask, canUpdateTasks } from '@/lib/auth/capabilities';
 import type { AuthContext } from '@/lib/auth/permissions';
 import { listTasksEnriched, type TaskListFilters } from '@/lib/data/tasks';
 import { listClients } from '@/lib/data/clients';
@@ -134,6 +134,8 @@ export default async function TasksCalendarPage({
 
   const calCtx = await getAuthContext();
   const canDelete = canDeleteTask(calCtx?.role ?? null);
+  const canEdit = canUpdateTasks(calCtx?.role ?? null);
+  const canCreate = canCreateTasks(calCtx?.role ?? null);
   const [tasks, employees, clients, videoEvents] = await Promise.all([
     listTasksEnriched(filters, calCtx),
     listEmployeesForSelect(calCtx),
@@ -170,7 +172,19 @@ export default async function TasksCalendarPage({
         {/* Glisser-déposer pour reprogrammer : non implémenté pour l’instant (TASK_CALENDAR_DND_TODO). */}
       </div>
 
-      <CalendarToolbar nav={nav} title={title} employees={employees} clients={clients} filters={filterBag} />
+      <CalendarToolbar
+        nav={nav}
+        title={title}
+        employees={employees}
+        clients={clients.map((c) => ({
+          id: c.id,
+          name: c.name,
+          color_hex: c.color_hex,
+          color_label: c.color_label,
+        }))}
+        canCreate={canCreate}
+        filters={filterBag}
+      />
 
       <SectionCard
         title={sectionTitle}
@@ -192,6 +206,7 @@ export default async function TasksCalendarPage({
           employees={employees}
           colorBy={colorBy}
           canDelete={canDelete}
+          canEdit={canEdit}
         />
         <p className="mt-4 text-xs text-muted-foreground">
           Les tâches sans échéance n&apos;apparaissent pas ici — utilisez le board pour la liste complète.

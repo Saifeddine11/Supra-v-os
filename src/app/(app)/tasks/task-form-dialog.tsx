@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils/cn';
+import { toast } from 'sonner';
 import { createTaskAction, updateTaskAction } from './actions';
 import { ClientColorDot } from '@/components/shared/client-color-dot';
 import { getClientColor } from '@/lib/ui/client-colors';
@@ -36,17 +37,25 @@ export function TaskFormDialog({
   clients,
   employees,
   trigger,
+  open: openProp,
+  onOpenChange: onOpenChangeProp,
   onSaved,
 }: {
   task?: Task | TaskEnriched | null;
   clients: Pick<Client, 'id' | 'name' | 'color_hex' | 'color_label'>[];
   employees: Pick<Employee, 'id' | 'full_name'>[];
-  trigger: React.ReactNode;
+  /** Omis en mode contrôlé (ex. agenda calendrier après fermeture du drawer). */
+  trigger?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   /** Appelé après enregistrement réussi (ex. fermer la fiche détail). */
   onSaved?: () => void;
 }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = openProp !== undefined;
+  const open = isControlled ? openProp : internalOpen;
+  const setOpen = isControlled ? (onOpenChangeProp ?? setInternalOpen) : setInternalOpen;
   const [err, setErr] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [assigneeSel, setAssigneeSel] = useState<Set<string>>(() => new Set());
@@ -77,7 +86,7 @@ export function TaskFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
       <DialogContent className="max-h-[min(90vh,800px)] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Modifier la tâche' : 'Nouvelle tâche'}</DialogTitle>
@@ -92,8 +101,10 @@ export function TaskFormDialog({
                 : await createTaskAction(formData);
               if (!res.ok) {
                 setErr(res.error);
+                toast.error(res.error);
                 return;
               }
+              toast.success(isEdit ? 'Tâche enregistrée' : 'Tâche créée');
               router.refresh();
               setOpen(false);
               onSaved?.();

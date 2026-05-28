@@ -24,8 +24,8 @@ const COPY: Record<
   delete: {
     title: 'Supprimer cette tâche ?',
     description:
-      'Cette action retirera la tâche du planning. Voulez-vous continuer ?',
-    confirm: 'Confirmer la suppression',
+      'Cette action supprimera la tâche du planning. Voulez-vous continuer ?',
+    confirm: 'Valider la suppression',
     loading: 'Suppression…',
     success: 'Tâche supprimée',
   },
@@ -33,7 +33,7 @@ const COPY: Record<
     title: 'Archiver cette tâche ?',
     description:
       'Cette tâche sera retirée du planning actif. Voulez-vous continuer ?',
-    confirm: 'Confirmer l’archivage',
+    confirm: 'Valider l’archivage',
     loading: 'Archivage…',
     success: 'Tâche archivée',
   },

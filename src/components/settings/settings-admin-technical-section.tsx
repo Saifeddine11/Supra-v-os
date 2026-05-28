@@ -50,9 +50,16 @@ export function SettingsAdminTechnicalSection() {
           </span>
         </li>
         <li className="flex justify-between gap-2 border-b border-border/60 py-2">
-          <span className="text-muted-foreground">Resend (emails)</span>
+          <span className="text-muted-foreground">Resend (notifications app)</span>
           <span className={integrations.resend ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}>
             {integrations.resend ? 'Configuré' : 'Optionnel / absent'}
+          </span>
+        </li>
+        <li className="flex flex-col gap-1 border-b border-border/60 py-2 sm:flex-row sm:justify-between">
+          <span className="text-muted-foreground">Supabase Auth SMTP (invitations / reset)</span>
+          <span className="text-xs text-muted-foreground sm:max-w-[55%] sm:text-right">
+            À configurer dans le dashboard Supabase (Resend SMTP). Voir docs/SUPABASE_AUTH_SMTP.md — distinct de Resend
+            ci-dessus.
           </span>
         </li>
         <li className="flex justify-between gap-2 border-b border-border/60 py-2">
