@@ -24,6 +24,11 @@ import {
   targetVideoStatusForKanbanColumn,
   type VideoKanbanDropColumnKey,
 } from '@/lib/videos/video-kanban-dnd';
+import {
+  KANBAN_BOARD_OUTER_CLASS,
+  KANBAN_COLUMNS_ROW_CLASS,
+  KANBAN_SCROLL_CLASS,
+} from '@/lib/ui/kanban-layout';
 
 const TERMINAL: VideoStatus[] = ['archived', 'cancelled'];
 
@@ -146,12 +151,12 @@ export function VideosKanban({
       onDragCancel={() => setActiveSourceColumn(null)}
       onDragEnd={handleDragEnd}
     >
-      <div className="relative rounded-2xl border border-border/60 bg-muted/15 p-2 dark:bg-muted/10 md:p-3">
-        <p className="mb-3 text-xs text-muted-foreground md:hidden">
+      <div className={KANBAN_BOARD_OUTER_CLASS}>
+        <p className="mb-3 px-1 text-xs text-muted-foreground md:hidden">
           Sur mobile, utilisez le menu de statut sur chaque carte pour changer l’étape.
         </p>
-        <div className="overflow-x-auto scroll-smooth pb-2 [-webkit-overflow-scrolling:touch]">
-          <div className="flex w-max min-w-full gap-5 pr-1">
+        <div className={KANBAN_SCROLL_CLASS}>
+          <div className={KANBAN_COLUMNS_ROW_CLASS}>
             {VIDEO_KANBAN_COLUMNS.map((col) => (
               <VideoKanbanColumn
                 key={col.key}

@@ -9,7 +9,14 @@ import { X } from 'lucide-react';
 import type { Client, UserRole, VideoPublicStatus, VideoStatus } from '@/types/database';
 import type { VideoWithClient } from '@/lib/data/videos';
 import type { VideoAssignEmployeeRow } from '@/lib/data/employees';
-import { VIDEO_STATUS_MAP, VIDEO_PUBLIC_STATUS_MAP, PRIORITY_MAP } from '@/types/domain';
+import { VIDEO_PUBLIC_STATUS_MAP, PRIORITY_MAP } from '@/types/domain';
+import {
+  videoStaffProductionStatusLabel,
+  videoStaffProductionStatusSelectOptions,
+  videoStaffProductionStatusSelectValue,
+  videoStaffPublicStatusLabel,
+  videoStaffShowsSingleDeliveredBadge,
+} from '@/lib/videos/video-staff-status';
 import { Dialog, DialogClose, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -28,7 +35,7 @@ import {
 import { ShootingConfirmationInline } from '@/components/videos/shooting-confirmation-inline';
 import { videoShowsShootingConfirmBadge } from '@/lib/videos/shooting-confirmation';
 
-const STATUSES = Object.keys(VIDEO_STATUS_MAP) as VideoStatus[];
+const STATUSES = videoStaffProductionStatusSelectOptions();
 const PUBLIC_STATUSES = Object.keys(VIDEO_PUBLIC_STATUS_MAP) as VideoPublicStatus[];
 
 function formatDt(iso: string | null | undefined, pattern: string): string {
@@ -142,24 +149,41 @@ export function VideoDetailDialog({
             </DialogTitle>
           </div>
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 sm:max-w-[min(100%,320px)]">
-            <Badge
-              variant="outline"
-              className={cn(
-                'border-border/80 text-[11px] font-medium',
-                getVideoProductionBadgeClass(video.status, video.public_status, {
-                  deliveryOverdue: od,
-                  video,
-                }),
-              )}
-            >
-              {VIDEO_STATUS_MAP[video.status].label}
-            </Badge>
-            <Badge
-              variant="outline"
-              className={cn('border-border/80 text-[11px] font-medium', getVideoPublicBadgeClass(video.public_status))}
-            >
-              {VIDEO_PUBLIC_STATUS_MAP[video.public_status].label}
-            </Badge>
+            {videoStaffShowsSingleDeliveredBadge(video.status, video.public_status) ? (
+              <Badge
+                variant="outline"
+                className={cn(
+                  'border-border/80 text-[11px] font-medium',
+                  getVideoProductionBadgeClass(video.status, video.public_status, {
+                    deliveryOverdue: od,
+                    video,
+                  }),
+                )}
+              >
+                {videoStaffProductionStatusLabel(video.status)}
+              </Badge>
+            ) : (
+              <>
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    'border-border/80 text-[11px] font-medium',
+                    getVideoProductionBadgeClass(video.status, video.public_status, {
+                      deliveryOverdue: od,
+                      video,
+                    }),
+                  )}
+                >
+                  {videoStaffProductionStatusLabel(video.status)}
+                </Badge>
+                <Badge
+                  variant="outline"
+                  className={cn('border-border/80 text-[11px] font-medium', getVideoPublicBadgeClass(video.public_status))}
+                >
+                  {videoStaffPublicStatusLabel(video.public_status)}
+                </Badge>
+              </>
+            )}
             <Badge variant="outline" className="border-border/80 text-[11px] font-medium" style={{ color: PRIORITY_MAP[video.priority].color }}>
               {PRIORITY_MAP[video.priority].label}
             </Badge>
@@ -320,7 +344,7 @@ export function VideoDetailDialog({
                   <select
                     id={`vd-status-${video.id}`}
                     className="h-10 rounded-lg border border-border bg-muted px-3 text-sm"
-                    value={video.status}
+                    value={videoStaffProductionStatusSelectValue(video.status)}
                     disabled={pending}
                     onChange={(e) => {
                       const s = e.target.value as VideoStatus;
@@ -330,9 +354,9 @@ export function VideoDetailDialog({
                       });
                     }}
                   >
-                    {STATUSES.map((s) => (
-                      <option key={s} value={s}>
-                        {VIDEO_STATUS_MAP[s].label}
+                    {STATUSES.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
                       </option>
                     ))}
                   </select>

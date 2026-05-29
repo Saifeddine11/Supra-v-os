@@ -6,7 +6,11 @@ import { X } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import type { Client, VideoPublicStatus, VideoStatus } from '@/types/database';
 import type { VideoWithClient } from '@/lib/data/videos';
-import { VIDEO_STATUS_MAP, VIDEO_PUBLIC_STATUS_MAP, PRIORITY_MAP } from '@/types/domain';
+import { VIDEO_PUBLIC_STATUS_MAP, PRIORITY_MAP } from '@/types/domain';
+import {
+  videoStaffProductionStatusSelectOptions,
+  videoStaffProductionStatusSelectValue,
+} from '@/lib/videos/video-staff-status';
 import type { VideoAssignEmployeeRow } from '@/lib/data/employees';
 import { employeeCanBeVideoCameraman, employeeCanBeVideoEditor } from '@/lib/employees/operational-skills';
 import {
@@ -25,7 +29,7 @@ import { createVideoAction, updateVideoAction } from './actions';
 import { ClientColorDot } from '@/components/shared/client-color-dot';
 import { getClientColor } from '@/lib/ui/client-colors';
 
-const STATUSES = Object.keys(VIDEO_STATUS_MAP) as VideoStatus[];
+const STATUSES = videoStaffProductionStatusSelectOptions();
 const PUBLIC_STATUSES = Object.keys(VIDEO_PUBLIC_STATUS_MAP) as VideoPublicStatus[];
 const PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const;
 
@@ -279,12 +283,12 @@ export function VideoFormDialog({
                     <select
                       id="v-status"
                       name="status"
-                      defaultValue={video?.status ?? 'idea'}
+                      defaultValue={videoStaffProductionStatusSelectValue(video?.status ?? 'idea')}
                       className={fieldSelectClass}
                     >
-                      {STATUSES.map((s) => (
-                        <option key={s} value={s}>
-                          {VIDEO_STATUS_MAP[s].label}
+                      {STATUSES.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
                         </option>
                       ))}
                     </select>

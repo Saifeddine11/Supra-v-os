@@ -27,7 +27,7 @@ export function SectionCard({ id, title, description, action, children, classNam
         </div>
         {action ? <div className="flex shrink-0 flex-wrap gap-2">{action}</div> : null}
       </header>
-      <div className="p-5">{children}</div>
+      <div className="min-w-0 p-5">{children}</div>
     </section>
   );
 }

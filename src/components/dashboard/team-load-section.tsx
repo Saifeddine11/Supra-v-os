@@ -13,7 +13,7 @@ export function TeamLoadSection({ members }: { members: WorkloadMember[] }) {
       ) : (
         <div className="grid gap-5 sm:grid-cols-2">
           {members.map((m) => (
-            <WorkloadIndicator key={m.name} member={m} />
+            <WorkloadIndicator key={m.id} member={m} />
           ))}
         </div>
       )}

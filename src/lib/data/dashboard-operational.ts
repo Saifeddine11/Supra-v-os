@@ -24,6 +24,7 @@ import {
   isTaskActiveForCriticalAlerts,
   isTaskOverdueForAlert,
   isTaskUrgentForAlert,
+  TASK_CRITICAL_ALERT_EXCLUDED_STATUSES_SQL,
 } from '@/lib/alerts/active-alert-rules';
 
 const ACTIVE_PROJECT_STATUSES = ['in_progress', 'waiting_client', 'waiting_content', 'review'] as const;
@@ -201,7 +202,7 @@ export async function fetchDashboardOperational(ctx: AuthContext): Promise<Dashb
       .select(
         'id, title, deadline, priority, status, assignee_id, estimated_hours, client_id, clients(name, color_hex)',
       )
-      .not('status', 'in', '(done,archived)')
+      .not('status', 'in', TASK_CRITICAL_ALERT_EXCLUDED_STATUSES_SQL)
       .limit(500),
     supabase
       .from('videos')
@@ -363,6 +364,7 @@ export async function fetchDashboardOperational(ctx: AuthContext): Promise<Dashb
     const hours = hoursByAssignee.get(id) ?? 0;
     const pct = Math.min(100, Math.round((hours / cap) * 100));
     return {
+      id,
       name: e.full_name as string,
       role: ROLE_LABELS[e.role as UserRole] ?? String(e.role),
       percent: pct,
@@ -480,25 +482,6 @@ export async function fetchDashboardOperational(ctx: AuthContext): Promise<Dashb
       severity: 'high',
       clientBrandHex,
     });
-  }
-
-  for (const v of videoRows) {
-    const ps = v.public_status as string | undefined;
-    if (ps === 'in_validation' || v.status === 'sent_to_client') {
-      const cl = v.clients as { name?: string; color_hex?: string | null } | null;
-      const client = cl?.name ?? '';
-      const clientBrandHex = client
-        ? getClientColor({ name: client, color_hex: cl?.color_hex ?? null })
-        : null;
-      urgentAcc.push({
-        id: `vid-${v.id}`,
-        type: 'Validation',
-        title: `${v.title as string}${client ? ` — ${client}` : ''}`,
-        detail: 'Validation ou retour client attendu',
-        severity: 'medium',
-        clientBrandHex,
-      });
-    }
   }
 
   for (const r of reportsR.data ?? []) {

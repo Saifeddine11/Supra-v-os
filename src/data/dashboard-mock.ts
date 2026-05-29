@@ -54,6 +54,7 @@ export interface TaskRowMock {
 }
 
 export interface WorkloadMember {
+  id: string;
   name: string;
   role: string;
   percent: number;

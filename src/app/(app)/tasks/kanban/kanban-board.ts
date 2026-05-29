@@ -1,5 +1,8 @@
-/** Au-delà de ce seuil, les cartes passent en mode compact + scroll colonne. */
-export const KANBAN_COLUMN_COMPACT_THRESHOLD = 8;
-
-/** Hauteur fixe des colonnes (viewport − chrome page). */
-export const KANBAN_COLUMN_HEIGHT_CLASS = 'h-[min(calc(100dvh-14rem),720px)]';
+export {
+  KANBAN_COLUMN_COMPACT_THRESHOLD,
+  KANBAN_COLUMN_HEIGHT_CLASS,
+  KANBAN_COLUMN_WIDTH_CLASS,
+  KANBAN_BOARD_OUTER_CLASS,
+  KANBAN_SCROLL_CLASS,
+  KANBAN_COLUMNS_ROW_CLASS,
+} from '@/lib/ui/kanban-layout';

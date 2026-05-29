@@ -18,6 +18,11 @@ import { TASK_KANBAN_STATUSES, TASK_STATUS_MAP, taskStatusForKanbanBucket } from
 import { TaskKanbanColumn } from './kanban/task-kanban-column';
 import { requestCriticalAlertsRefresh } from '@/lib/alerts/request-critical-alerts-refresh';
 import { updateTaskStatusAction } from './actions';
+import {
+  KANBAN_BOARD_OUTER_CLASS,
+  KANBAN_COLUMNS_ROW_CLASS,
+  KANBAN_SCROLL_CLASS,
+} from '@/lib/ui/kanban-layout';
 
 /** Intra-column reorder : possible plus tard avec @dnd-kit/sortable + champ `position`. */
 
@@ -129,9 +134,9 @@ export function TasksKanban({
       onDragCancel={() => setActiveSourceStatus(null)}
       onDragEnd={handleDragEnd}
     >
-      <div className="relative rounded-2xl border border-border/60 bg-muted/15 p-2 dark:bg-muted/10 md:p-3">
-        <div className="overflow-x-auto scroll-smooth pb-2 [-webkit-overflow-scrolling:touch]">
-          <div className="flex w-max min-w-full items-start gap-4 pr-1 md:gap-5">
+      <div className={KANBAN_BOARD_OUTER_CLASS}>
+        <div className={KANBAN_SCROLL_CLASS}>
+          <div className={KANBAN_COLUMNS_ROW_CLASS}>
             {byStatus.map((col) => (
               <TaskKanbanColumn
                 key={col.status}

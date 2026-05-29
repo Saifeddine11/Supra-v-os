@@ -22,7 +22,9 @@ import type {
 } from '@/lib/notifications/critical-active-types';
 import {
   isTaskOverdueForAlert,
+  isActionRequiredNowAlertItem,
   TASK_CRITICAL_ALERT_EXCLUDED_STATUSES_SQL,
+  VIDEO_CRITICAL_ALERT_EXCLUDED_STATUSES_SQL,
   isVideoActiveForAlerts,
   shouldShowClientValidationAlert,
   shouldShowShootingConfirmationAlert,
@@ -86,7 +88,8 @@ export function aggregateCriticalAlertsByType(items: CriticalAlertItem[]): Criti
 }
 
 export function mapCriticalAlertsToActiveApi(items: CriticalAlertItem[]): CriticalActiveAlertsResponse {
-  const alerts: CriticalActiveAlertDTO[] = items.map((item) => {
+  const actionItems = items.filter(isActionRequiredNowAlertItem);
+  const alerts: CriticalActiveAlertDTO[] = actionItems.map((item) => {
     const { entityType, entityId } = parseCriticalAlertEntity(item.id);
     return {
       id: item.id,
@@ -109,7 +112,7 @@ function scopeRole(role: UserRole): UserRole {
 }
 
 const TASK_OPEN_FILTER = TASK_CRITICAL_ALERT_EXCLUDED_STATUSES_SQL;
-const VIDEO_ACTIVE_FILTER = '(archived,cancelled,published,validated)';
+const VIDEO_ACTIVE_FILTER = VIDEO_CRITICAL_ALERT_EXCLUDED_STATUSES_SQL;
 
 /**
  * Alertes actives recalculées depuis l’état DB courant (pas is_read).
@@ -169,48 +172,6 @@ export async function fetchCriticalAlertsWithClient(
       return parts.join(',');
     }
     return null;
-  }
-
-  async function pushWaitingClientFollowUpScoped() {
-    const canSeeFollowUp =
-      ctx.role === 'admin' || ctx.role === 'project_manager' || ctx.role === 'commercial';
-    if (!canSeeFollowUp) return;
-
-    let q = supabase
-      .from('tasks')
-      .select('id,title,clients:client_id(name,color_hex)')
-      .eq('status', 'waiting_client')
-      .limit(8);
-
-    const scope = await taskScopeOr();
-    if (scope === null && !full && ctx.role !== 'project_manager' && ctx.role !== 'admin') return;
-    if (scope) q = q.or(scope);
-
-    const { data } = await q;
-    const rows = data ?? [];
-    if (rows.length === 0) return;
-
-    const n = rows.length;
-    const sample = rows[0] as {
-      id: string;
-      title?: string;
-      clients?: { name?: string; color_hex?: string | null } | null;
-    };
-    const client = sample.clients?.name;
-    push({
-      id: 'task-wait-client-digest',
-      severity: 'info',
-      typeLabel: 'Suivi client',
-      title: n > 1 ? `${n} tâches en attente client` : '1 tâche en attente client',
-      detail:
-        n === 1
-          ? client
-            ? `${String(sample.title ?? 'Tâche')} · ${client}`
-            : String(sample.title ?? 'Retour client attendu')
-          : 'Retour ou validation client attendus',
-      href: `${base}?status=waiting_client`,
-      clientBrandHex: client ? getClientColor({ name: client, color_hex: sample.clients?.color_hex ?? null }) : null,
-    });
   }
 
   async function pushOverdueTasksScoped() {
@@ -312,7 +273,7 @@ export async function fetchCriticalAlertsWithClient(
       .select(
         'id,title,shooting_date,shooting_completed_at,shooting_expected_end_at,client_delivery_at,delivery_deadline,status,public_status,clients:client_id(name,color_hex)',
       )
-      .not('status', 'in', '(archived,cancelled)')
+      .not('status', 'in', VIDEO_CRITICAL_ALERT_EXCLUDED_STATUSES_SQL)
       .limit(60);
 
     const scope = await videoScopeOr();
@@ -474,7 +435,6 @@ export async function fetchCriticalAlertsWithClient(
   }
 
   await pushOverdueTasksScoped();
-  await pushWaitingClientFollowUpScoped();
   await pushOverdueVideosScoped();
   await pushTodayVideoDatesScoped();
   await pushValidationsScoped();
@@ -486,7 +446,7 @@ export async function fetchCriticalAlertsWithClient(
       .select(
         'id,title,shooting_date,shooting_completed_at,client_delivery_at,delivery_deadline,status,public_status,clients:client_id(name,color_hex)',
       )
-      .not('status', 'in', '(archived,cancelled)')
+      .not('status', 'in', VIDEO_CRITICAL_ALERT_EXCLUDED_STATUSES_SQL)
       .limit(80);
     const scope = await videoScopeOr();
     if (!scope && !full && ctx.role !== 'project_manager' && ctx.role !== 'admin') {

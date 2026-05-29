@@ -8,7 +8,11 @@ import { toast } from 'sonner';
 import type { Client, UserRole } from '@/types/database';
 import type { VideoWithClient } from '@/lib/data/videos';
 import type { VideoAssignEmployeeRow } from '@/lib/data/employees';
-import { VIDEO_STATUS_MAP, VIDEO_PUBLIC_STATUS_MAP } from '@/types/domain';
+import {
+  videoStaffProductionStatusLabel,
+  videoStaffPublicStatusLabel,
+  videoStaffShowsSingleDeliveredBadge,
+} from '@/lib/videos/video-staff-status';
 import { VIDEO_DEEP_LINK_QUERY_PARAM } from '@/lib/videos/video-deep-link';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils/cn';
@@ -287,16 +291,20 @@ export function VideosWorkspace({
                         }),
                       )}
                     >
-                      {VIDEO_STATUS_MAP[v.status].label}
+                      {videoStaffProductionStatusLabel(v.status)}
                     </Badge>
                   </td>
                   <td className="px-4 py-3">
-                    <Badge
-                      variant="outline"
-                      className={cn('text-[10px] font-medium', getVideoPublicBadgeClass(v.public_status))}
-                    >
-                      {VIDEO_PUBLIC_STATUS_MAP[v.public_status].label}
-                    </Badge>
+                    {videoStaffShowsSingleDeliveredBadge(v.status, v.public_status) ? (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    ) : (
+                      <Badge
+                        variant="outline"
+                        className={cn('text-[10px] font-medium', getVideoPublicBadgeClass(v.public_status))}
+                      >
+                        {videoStaffPublicStatusLabel(v.public_status)}
+                      </Badge>
+                    )}
                   </td>
                   <td className="max-w-[220px] px-4 py-3 text-xs text-muted-foreground">{videoMonteurTableCell(v)}</td>
                   <td

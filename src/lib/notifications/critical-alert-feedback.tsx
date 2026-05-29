@@ -8,7 +8,7 @@ import { NOTIFICATION_TYPE_LABELS } from '@/lib/notifications/labels';
 import { playMandatoryCriticalAlarm } from '@/lib/notifications/notification-sound';
 import { getNotificationSoundLevel, soundLevelRank } from '@/lib/notifications/notification-sound-level';
 import type { CriticalActiveAlertDTO, CriticalActiveAlertsResponse } from '@/lib/notifications/critical-active-types';
-import { CRITICAL_BAR_SNOOZE_KEY } from '@/lib/notifications/critical-bar-constants';
+import { CRITICAL_ALERT_TOAST_SEEN_KEY, CRITICAL_BAR_SNOOZE_KEY } from '@/lib/notifications/critical-bar-constants';
 import { cn } from '@/lib/utils/cn';
 
 const BUNDLE_LS_KEY = 'supra_critical_feedback_bundle_ms';
@@ -42,32 +42,69 @@ function safeSessionStorage(): Storage | null {
   }
 }
 
+function mergeLocalSeenFingerprints(seen: Set<string>): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const raw = localStorage.getItem(CRITICAL_ALERT_TOAST_SEEN_KEY);
+    if (!raw) return;
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return;
+    for (const x of arr) {
+      if (typeof x === 'string') seen.add(x);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+function persistLocalSeenFingerprints(seen: Set<string>): void {
+  if (typeof window === 'undefined') return;
+  const arr = [...seen].slice(-200);
+  localStorage.setItem(CRITICAL_ALERT_TOAST_SEEN_KEY, JSON.stringify(arr));
+}
+
 function loadFingerprintsState(): CriticalFingerprintsState {
   if (fpState.loaded) return fpState;
   fpState.loaded = true;
 
   const ss = safeSessionStorage();
-  if (!ss) return fpState;
-
-  fpState.played = ss.getItem(CRITICAL_SOUND_PLAYED_SESSION_KEY) === '1';
-  const raw = ss.getItem(CRITICAL_ALERT_FINGERPRINTS_SESSION_KEY);
-  if (raw) {
-    try {
-      const arr = JSON.parse(raw);
-      if (Array.isArray(arr)) fpState.seen = new Set(arr.filter((x) => typeof x === 'string'));
-    } catch {
-      // ignore
+  if (ss) {
+    fpState.played = ss.getItem(CRITICAL_SOUND_PLAYED_SESSION_KEY) === '1';
+    const raw = ss.getItem(CRITICAL_ALERT_FINGERPRINTS_SESSION_KEY);
+    if (raw) {
+      try {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) fpState.seen = new Set(arr.filter((x) => typeof x === 'string'));
+      } catch {
+        // ignore
+      }
     }
   }
+
+  mergeLocalSeenFingerprints(fpState.seen);
+  if (fpState.seen.size > 0) fpState.played = true;
 
   return fpState;
 }
 
 function persistFingerprintsState(state: CriticalFingerprintsState): void {
   const ss = safeSessionStorage();
-  if (!ss) return;
-  ss.setItem(CRITICAL_SOUND_PLAYED_SESSION_KEY, state.played ? '1' : '0');
-  ss.setItem(CRITICAL_ALERT_FINGERPRINTS_SESSION_KEY, JSON.stringify([...state.seen]));
+  if (ss) {
+    ss.setItem(CRITICAL_SOUND_PLAYED_SESSION_KEY, state.played ? '1' : '0');
+    ss.setItem(CRITICAL_ALERT_FINGERPRINTS_SESSION_KEY, JSON.stringify([...state.seen]));
+  }
+  persistLocalSeenFingerprints(state.seen);
+}
+
+/** Marque les alertes visibles dans la bannière comme déjà signalées (pas de toast doublon). */
+export function acknowledgeCriticalAlertsShownInBanner(p: CriticalActiveAlertsResponse): void {
+  if (typeof window === 'undefined') return;
+
+  const state = loadFingerprintsState();
+  const fps = criticalActiveFingerprints(p);
+  for (const fp of fps) state.seen.add(fp);
+  state.played = true;
+  persistFingerprintsState(state);
 }
 
 function criticalActiveFingerprints(p: CriticalActiveAlertsResponse): string[] {
@@ -125,17 +162,23 @@ function hrefForEntity(entityType: string): string {
 }
 
 export function summarizeCriticalAlerts(alerts: CriticalActiveAlertDTO[]): string {
-  const crit = alerts.filter((a) => a.severity === 'critical');
-  const tasks = crit.filter((a) => a.entityType === 'task').length;
-  const videos = crit.filter((a) => a.entityType === 'video').length;
-  const inv = crit.filter((a) => a.entityType === 'invoices').length;
+  const tasks = alerts.filter((a) => a.entityType === 'task').length;
+  const deliveries = alerts.filter((a) => a.id.startsWith('vid-od-')).length;
+  const shootings = alerts.filter(
+    (a) =>
+      a.id.startsWith('vid-shoot-conf-') ||
+      a.id.startsWith('vid-shoot-od-') ||
+      a.id.startsWith('vid-shoot-end-od-'),
+  ).length;
+  const inv = alerts.filter((a) => a.entityType === 'invoices').length;
   const parts: string[] = [];
   if (tasks) parts.push(`${tasks} tâche${tasks > 1 ? 's' : ''} en retard`);
-  if (videos) parts.push(`${videos} livraison${videos > 1 ? 's' : ''} / tournage`);
+  if (deliveries) parts.push(`${deliveries} livraison${deliveries > 1 ? 's' : ''}`);
+  if (shootings) parts.push(`${shootings} tournage${shootings > 1 ? 's' : ''}`);
   if (inv) parts.push(`${inv} facturation`);
   if (parts.length) return parts.join(' · ');
-  return crit
-    .slice(0, 4)
+  return alerts
+    .slice(0, 3)
     .map((a) => a.message)
     .join(' · ');
 }
@@ -288,15 +331,17 @@ function showCriticalToast(content: {
 }
 
 export type TriggerCriticalFeedbackOptions = {
-  /** Après déblocage audio : rejouer toast + son même si fenêtre 10 s. */
+  /** Après déblocage audio : rejouer le son même si fenêtre 10 s. */
   bypassBundleThrottle?: boolean;
   /** Ne pas lancer le son (rare ; défaut jouer). */
   skipSound?: boolean;
+  /** Ne pas afficher le toast (ex. bannière déjà visible). */
+  skipToast?: boolean;
 };
 
 /**
  * Toast + son critique synchronisés (anti-spam bundle commun).
- * Le toast s’affiche même si le navigateur bloque ensuite le son.
+ * Toast uniquement pour une alerte critique jamais vue — pas au chargement de page.
  */
 export function triggerCriticalAlertFeedbackFromActiveApi(
   p: CriticalActiveAlertsResponse | null,
@@ -305,21 +350,18 @@ export function triggerCriticalAlertFeedbackFromActiveApi(
 ): void {
   if (typeof window === 'undefined' || !p || p.criticalCount === 0) return;
   if (isBarSnoozed()) return;
+  // La bannière compacte couvre l’état courant ; pas de toast à la navigation.
+  if (mode === 'navigation') return;
+
+  if (!opts?.bypassBundleThrottle && isBundleThrottled(mode)) return;
 
   const state = loadFingerprintsState();
   const fps = filterNewCriticalFingerprints(criticalActiveFingerprints(p), p);
   if (fps.length === 0) return;
 
   const newFps = fps.filter((fp) => !state.seen.has(fp));
+  if (newFps.length === 0) return;
 
-  // Règle finale :
-  // - 1er passage (son jamais joué sur cette session) => son + toast
-  // - sinon => seulement si une vraie nouvelle alerte apparaît (fingerprint jamais vu)
-  const shouldPlay = !state.played || newFps.length > 0;
-  if (!shouldPlay) return;
-
-  // Anti-double-trigger (navigation + ambient dans la même seconde) :
-  // on met l’état en mémoire avant de jouer le son.
   state.played = true;
   for (const fp of fps) state.seen.add(fp);
   persistFingerprintsState(state);
@@ -334,8 +376,9 @@ export function triggerCriticalAlertFeedbackFromActiveApi(
       tone: 'critical' as const,
     };
 
-  // Toast : signal d’action (même si `skipSound` est forcé en test).
-  showCriticalToast(content);
+  if (!opts?.skipToast) {
+    showCriticalToast(content);
+  }
 
   if (!opts?.skipSound) {
     try {
@@ -368,10 +411,7 @@ export function triggerCriticalAlertFeedbackFromBellFresh(fresh: Notification[],
   const fps = bellFreshFingerprints(fresh);
   if (fps.length === 0) return;
   const newFps = fps.filter((fp) => !state.seen.has(fp));
-
-  // Même règle de rejet : pas de son sauf sur 1er passage ou nouvelle alerte jamais vue.
-  const shouldPlay = !state.played || newFps.length > 0;
-  if (!shouldPlay) return;
+  if (newFps.length === 0) return;
 
   state.played = true;
   for (const fp of fps) state.seen.add(fp);

@@ -184,6 +184,21 @@
     box-shadow: none;
   }
 
+  .kanban-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, hsl(var(--border)) 45%, transparent) transparent;
+  }
+  .kanban-scroll::-webkit-scrollbar {
+    height: 6px;
+  }
+  .kanban-scroll::-webkit-scrollbar-thumb {
+    border-width: 1px;
+    @apply rounded-full bg-[color:hsl(var(--border)/0.35)];
+  }
+  .kanban-scroll::-webkit-scrollbar-thumb:hover {
+    @apply bg-[color:hsl(var(--border)/0.5)];
+  }
+
   .kanban-column-scroll {
     scrollbar-width: thin;
     scrollbar-color: color-mix(in srgb, hsl(var(--border)) 55%, transparent) transparent;

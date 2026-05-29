@@ -233,10 +233,20 @@ export const VIDEO_KANBAN_COLUMNS: Array<{
     color: '#D14A28',
   },
   { key: 'editing',       label: 'Montage',           statuses: ['editing', 'internal_review'], color: '#6B9E7A' },
-  { key: 'client_review', label: 'Chez client',       statuses: ['sent_to_client', 'client_revision'], color: '#C4789B' },
-  { key: 'validated',     label: 'Validé',            statuses: ['validated'], color: '#6B9E7A' },
-  { key: 'published',     label: 'Publié',            statuses: ['published'], color: '#3DBD7D' },
+  { key: 'client_review', label: 'Chez l’équipe',    statuses: ['sent_to_client', 'client_revision'], color: '#C4789B' },
+  {
+    key: 'delivered',
+    label: 'Livré',
+    statuses: ['validated', 'published'],
+    color: '#3DBD7D',
+  },
 ];
+
+/** Statuts production affichés « Livré » dans l’UI staff (enum DB inchangé). */
+export const VIDEO_DELIVERED_STATUSES: readonly VideoStatus[] = ['validated', 'published'];
+
+/** Statut interne lors d’un drop / sélection « Livré » (`delivered` n’existe pas en base). */
+export const VIDEO_DELIVERED_TARGET_STATUS: VideoStatus = 'published';
 
 /** Colonnes visibles sur le kanban /tasks (ordre d’affichage). */
 export const TASK_KANBAN_COLUMNS: Array<{

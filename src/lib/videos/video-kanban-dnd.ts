@@ -1,5 +1,5 @@
 import type { VideoStatus } from '@/types/database';
-import { VIDEO_KANBAN_COLUMNS } from '@/types/domain';
+import { VIDEO_DELIVERED_TARGET_STATUS, VIDEO_KANBAN_COLUMNS } from '@/types/domain';
 
 /** Colonnes où le drop Kanban est autorisé (hors archivé / annulé). */
 export const VIDEO_KANBAN_DND_COLUMN_KEYS = VIDEO_KANBAN_COLUMNS.map((c) => c.key) as readonly string[];
@@ -31,5 +31,6 @@ export function targetVideoStatusForKanbanColumn(
   const col = VIDEO_KANBAN_COLUMNS.find((c) => c.key === columnKey);
   if (!col) return null;
   if (col.statuses.includes(currentStatus)) return currentStatus;
+  if (col.key === 'delivered') return VIDEO_DELIVERED_TARGET_STATUS;
   return col.statuses[0] ?? null;
 }
