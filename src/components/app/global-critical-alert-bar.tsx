@@ -21,6 +21,7 @@ import { cn } from '@/lib/utils/cn';
 
 const POLL_MS = 5 * 60 * 1000;
 const DETAIL_PREVIEW_LIMIT = 5;
+const SCROLL_COLLAPSE_THRESHOLD_PX = 8;
 
 async function fetchCriticalActive(): Promise<CriticalActiveAlertsResponse | null> {
   try {
@@ -81,6 +82,7 @@ export function GlobalCriticalAlertBar() {
   const payloadRef = useRef<CriticalActiveAlertsResponse | null>(null);
   const lastAlertFingerprintRef = useRef('');
   const lastAcknowledgedFingerprintRef = useRef('');
+  const scrollYAtDetailOpenRef = useRef(0);
 
   const maybePlayFeedback = useCallback((p: CriticalActiveAlertsResponse | null, mode: 'ambient') => {
     if (!p || p.criticalCount === 0 || isSnoozed()) return;
@@ -179,6 +181,21 @@ export function GlobalCriticalAlertBar() {
     return () => window.removeEventListener(CRITICAL_ALERTS_REFRESH_EVENT, onRefresh);
   }, []);
 
+  useEffect(() => {
+    if (!detailOpen) return;
+
+    scrollYAtDetailOpenRef.current = window.scrollY;
+
+    const onScroll = () => {
+      if (Math.abs(window.scrollY - scrollYAtDetailOpenRef.current) > SCROLL_COLLAPSE_THRESHOLD_PX) {
+        setDetailOpen(false);
+      }
+    };
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [detailOpen]);
+
   const fingerprint = useMemo(
     () => (payload && payload.totals.totalActionableCount > 0 ? alertFingerprint(payload) : ''),
     [payload],
@@ -195,10 +212,10 @@ export function GlobalCriticalAlertBar() {
     criticalCount > 0 ? summarizeCriticalAlertTotals(totals) : 'À traiter aujourd’hui';
 
   const barSurface = cn(
-    'border-b border-border/60 bg-muted/20 text-foreground',
+    'border-b border-border bg-background text-foreground',
     criticalCount > 0
-      ? 'dark:border-[rgba(255,106,42,0.12)] dark:bg-[color-mix(in_srgb,hsl(var(--card))_98%,#1a1008_2%)]'
-      : 'dark:bg-muted/10',
+      ? 'dark:border-[rgba(255,106,42,0.18)]'
+      : '',
   );
 
   const iconWrap = cn(
@@ -235,7 +252,7 @@ export function GlobalCriticalAlertBar() {
           <Button
             type="button"
             variant="outline"
-            className={cn(btnSm, 'border-border/70 bg-background/90')}
+            className={cn(btnSm, 'border-border bg-background')}
             onClick={() => setBarState('compact')}
           >
             Afficher
@@ -246,7 +263,7 @@ export function GlobalCriticalAlertBar() {
   }
 
   return (
-    <div className={cn(barSurface, 'relative z-0 shadow-none')} role="status" aria-live="polite">
+    <div className={cn(barSurface, 'relative shadow-none')} role="status" aria-live="polite">
       <div className="mx-auto max-w-[1600px] px-3 sm:px-6 lg:px-8">
         <div className="flex min-h-[44px] flex-col gap-2 py-2 sm:min-h-[48px] sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:py-2">
           <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-2.5">
@@ -273,7 +290,7 @@ export function GlobalCriticalAlertBar() {
               type="button"
               variant="outline"
               size="sm"
-              className={cn(btnSm, 'border-border/70 bg-background/90')}
+              className={cn(btnSm, 'border-border bg-background')}
               aria-expanded={detailOpen}
               onClick={toggleDetailPanel}
             >
@@ -293,7 +310,7 @@ export function GlobalCriticalAlertBar() {
               type="button"
               variant="outline"
               size="sm"
-              className={cn(btnSm, 'border-border/70 bg-background/90')}
+              className={cn(btnSm, 'border-border bg-background')}
               onClick={() => setBarState('hidden')}
             >
               Masquer
@@ -315,11 +332,11 @@ export function GlobalCriticalAlertBar() {
         </div>
 
         {detailOpen ? (
-          <div className="mb-2 max-h-[220px] overflow-y-auto rounded-xl border border-border/60 bg-background/60 py-2 pl-2 pr-1 dark:bg-black/15">
+          <div className="mb-2 max-h-[220px] overflow-y-auto rounded-xl border border-border bg-card py-2 pl-2 pr-1 shadow-sm">
             <ul className="space-y-1.5 pr-1">
               {previewAlerts.map((a: CriticalActiveAlertDTO) => (
                 <li key={a.id}>
-                  <div className="flex flex-col gap-1 rounded-lg px-2 py-1.5 hover:bg-black/[0.03] dark:hover:bg-white/[0.04] sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+                  <div className="flex flex-col gap-1 rounded-lg px-2 py-1.5 hover:bg-muted/60 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                     <div className="min-w-0">
                       <p
                         className={cn(
@@ -344,7 +361,7 @@ export function GlobalCriticalAlertBar() {
               ))}
             </ul>
             {hasMoreAlerts ? (
-              <div className="mt-2 border-t border-border/50 px-2 pt-2">
+              <div className="mt-2 border-t border-border px-2 pt-2">
                 <button
                   type="button"
                   className="text-xs font-medium text-primary underline-offset-2 hover:underline"
