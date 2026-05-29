@@ -4,6 +4,7 @@ import type { AiIntentType } from '@/lib/ai/intent-schema';
 import {
   isStructuredMessageTemplate,
   isStructuredTaskTemplate,
+  isStructuredTaskUpdateTemplate,
   isStructuredVideoTemplate,
 } from '@/lib/ai/parse-structured-template';
 
@@ -11,6 +12,7 @@ export type DetectedUserChatIntent = {
   type: AiIntentType | 'none';
   isCreateTask: boolean;
   isCreateVideo: boolean;
+  isUpdateTask: boolean;
   isDraftMessage: boolean;
 };
 
@@ -26,6 +28,19 @@ const CREATE_TASK_PATTERNS = [
   /\bje souhaite créer une tache\b/i,
   /\bje veux créer une tâche\b/i,
   /\bnouvelle tâche\b/i,
+];
+
+const UPDATE_TASK_PATTERNS = [
+  /\bmodifie(?:r)?\s+(?:cette\s+)?t[âa]che\b/i,
+  /\bmodifie(?:r)?\s+(?:la\s+)?t[âa]che\b/i,
+  /\bmets?\s+(?:à|a)\s+jour\s+(?:cette\s+)?t[âa]che\b/i,
+  /\bmettre\s+(?:à|a)\s+jour\s+(?:cette\s+)?t[âa]che\b/i,
+  /\bchange(?:r)?\s+(?:le\s+)?titre\s+(?:de\s+(?:la\s+)?t[âa]che)?\b/i,
+  /\bmets?\s+(?:la\s+)?t[âa]che\s+.+\s+en\s+(?:cours|faire|r[ée]vision|attente|bloqu[ée]|termin[ée])\b/i,
+  /\bje souhaite modifier une t[âa]che\b/i,
+  /\bassigne(?:r)?\s+(?:à|a)\s+.+\b/i,
+  /\bmets?\s+(?:le\s+)?client\s+.+\s+(?:sur|pour|à|a)\s+(?:la\s+)?t[âa]che\b/i,
+  /\b(?:échéance|echeance)\s+(?:de\s+(?:la\s+)?t[âa]che|à|a)\b/i,
 ];
 
 const CREATE_VIDEO_PATTERNS = [
@@ -61,7 +76,13 @@ const DRAFT_MESSAGE_PATTERNS = [
 export function detectUserChatIntent(message: string): DetectedUserChatIntent {
   const text = message.trim();
   if (!text) {
-    return { type: 'none', isCreateTask: false, isCreateVideo: false, isDraftMessage: false };
+    return {
+      type: 'none',
+      isCreateTask: false,
+      isCreateVideo: false,
+      isUpdateTask: false,
+      isDraftMessage: false,
+    };
   }
 
   if (isStructuredVideoTemplate(text)) {
@@ -69,6 +90,16 @@ export function detectUserChatIntent(message: string): DetectedUserChatIntent {
       type: 'create_video_draft',
       isCreateTask: false,
       isCreateVideo: true,
+      isUpdateTask: false,
+      isDraftMessage: false,
+    };
+  }
+  if (isStructuredTaskUpdateTemplate(text)) {
+    return {
+      type: 'update_task_draft',
+      isCreateTask: false,
+      isCreateVideo: false,
+      isUpdateTask: true,
       isDraftMessage: false,
     };
   }
@@ -77,6 +108,7 @@ export function detectUserChatIntent(message: string): DetectedUserChatIntent {
       type: 'create_task_draft',
       isCreateTask: true,
       isCreateVideo: false,
+      isUpdateTask: false,
       isDraftMessage: false,
     };
   }
@@ -85,20 +117,24 @@ export function detectUserChatIntent(message: string): DetectedUserChatIntent {
       type: 'draft_message',
       isCreateTask: false,
       isCreateVideo: false,
+      isUpdateTask: false,
       isDraftMessage: true,
     };
   }
 
   const isCreateVideo = CREATE_VIDEO_PATTERNS.some((p) => p.test(text));
+  const isUpdateTask =
+    !isCreateVideo && UPDATE_TASK_PATTERNS.some((p) => p.test(text));
   const isCreateTask =
-    !isCreateVideo && CREATE_TASK_PATTERNS.some((p) => p.test(text));
+    !isCreateVideo && !isUpdateTask && CREATE_TASK_PATTERNS.some((p) => p.test(text));
   const isDraftMessage =
-    !isCreateTask && !isCreateVideo && DRAFT_MESSAGE_PATTERNS.some((p) => p.test(text));
+    !isCreateTask && !isCreateVideo && !isUpdateTask && DRAFT_MESSAGE_PATTERNS.some((p) => p.test(text));
 
   let type: AiIntentType | 'none' = 'none';
   if (isCreateVideo) type = 'create_video_draft';
+  else if (isUpdateTask) type = 'update_task_draft';
   else if (isCreateTask) type = 'create_task_draft';
   else if (isDraftMessage) type = 'draft_message';
 
-  return { type, isCreateTask, isCreateVideo, isDraftMessage };
+  return { type, isCreateTask, isCreateVideo, isUpdateTask, isDraftMessage };
 }

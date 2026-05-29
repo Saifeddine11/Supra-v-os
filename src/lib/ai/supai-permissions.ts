@@ -6,7 +6,7 @@ import 'server-only';
 import type { AuthContext } from '@/lib/auth/permissions';
 import type { UserRole } from '@/types/database';
 import {
-  canCreateTasks,
+  canManageAllTasks,
   canManageVideos,
   canViewGlobalFinanceStats,
   canViewRevenue,
@@ -19,10 +19,13 @@ import {
   SUPAI_REFUSAL_GLOBAL_TEAM,
   SUPAI_REFUSAL_PERMISSION,
 } from '@/lib/ai/supai-copy';
+import { isExplicitGlobalCalendarRequest } from '@/lib/ai/calendar-intent';
 
 export type SupaiPermissions = {
   canUseSupAI: boolean;
   canUseSupAIOperationalChat: boolean;
+  /** Personal assigned work (all active internal staff). */
+  canUseSupAIPersonalWork: boolean;
   canUseSupAIReadTasks: boolean;
   canUseSupAIReadVideos: boolean;
   canUseSupAIReadClients: boolean;
@@ -33,6 +36,8 @@ export type SupaiPermissions = {
   canUseSupAIFinanceContext: boolean;
   canUseSupAIGlobalTeamContext: boolean;
   canUseSupAIDraftMessage: boolean;
+  canUseSupAIUpdateTaskDraft: boolean;
+  canUseSupAIConfirmTaskUpdate: boolean;
 };
 
 export function getSupaiPermissions(ctx: AuthContext): SupaiPermissions {
@@ -52,18 +57,23 @@ export function getSupaiPermissions(ctx: AuthContext): SupaiPermissions {
           navItemVisible('/clients', role)),
     );
 
-  const canCreateTask = canUseSupAI && Boolean(role && canCreateTasks(role));
+  /** SupAI create = pilotage opérationnel (admin / chef de projet), pas les rôles terrain. */
+  const canCreateTask = canUseSupAI && Boolean(role && canManageAllTasks(role));
   const canCreateVideo =
-    canUseSupAI && Boolean(role && canManageVideos(role) && role !== 'finance');
+    canUseSupAI &&
+    Boolean(role && hasFullOrgDataAccess(ctx) && canManageVideos(role) && role !== 'finance');
 
   const canFinance =
     canUseSupAI && Boolean(role && (canViewGlobalFinanceStats(role) || canViewRevenue(role)));
 
   const canGlobalTeam = canUseSupAI && hasFullOrgDataAccess(ctx);
+  const canUpdateTask =
+    canUseSupAI && Boolean(role && canManageAllTasks(role));
 
   return {
     canUseSupAI,
     canUseSupAIOperationalChat: canUseSupAI,
+    canUseSupAIPersonalWork: canUseSupAI,
     canUseSupAIReadTasks: canReadTasks,
     canUseSupAIReadVideos: canReadVideos,
     canUseSupAIReadClients: canReadClients,
@@ -74,6 +84,8 @@ export function getSupaiPermissions(ctx: AuthContext): SupaiPermissions {
     canUseSupAIFinanceContext: canFinance,
     canUseSupAIGlobalTeamContext: canGlobalTeam,
     canUseSupAIDraftMessage: canUseSupAI,
+    canUseSupAIUpdateTaskDraft: canUpdateTask,
+    canUseSupAIConfirmTaskUpdate: canUpdateTask,
   };
 }
 
@@ -117,6 +129,19 @@ export function canRunSupaiContextTool(
       return { ok: true };
     case 'getTodayPriorities':
       return { ok: true };
+    case 'getMyOperationalWork':
+      if (!perms.canUseSupAIPersonalWork) {
+        return { ok: false, reason: SUPAI_REFUSAL_PERMISSION };
+      }
+      return { ok: true };
+    case 'getScopedCalendarWork':
+      if (!perms.canUseSupAIOperationalChat) {
+        return { ok: false, reason: SUPAI_REFUSAL_PERMISSION };
+      }
+      if (request.scopeMode === 'global' && !perms.canUseSupAIGlobalTeamContext) {
+        return { ok: false, reason: SUPAI_REFUSAL_GLOBAL_TEAM };
+      }
+      return { ok: true };
     default:
       return { ok: false, reason: 'Outil non pris en charge.' };
   }
@@ -142,7 +167,10 @@ export function evaluateGlobalTeamGuardrail(
   message: string,
   perms: SupaiPermissions,
 ): string | null {
-  if (isGlobalTeamDataRequest(message) && !perms.canUseSupAIGlobalTeamContext) {
+  if (
+    (isGlobalTeamDataRequest(message) || isExplicitGlobalCalendarRequest(message)) &&
+    !perms.canUseSupAIGlobalTeamContext
+  ) {
     return SUPAI_REFUSAL_GLOBAL_TEAM;
   }
   return null;
@@ -152,47 +180,71 @@ export function getVisibleQuickActionIds(
   perms: SupaiPermissions,
   role: UserRole | null,
 ): QuickActionId[] {
-  if (!perms.canUseSupAI) return [];
+  if (!perms.canUseSupAI || !role) return [];
+
+  const withDraft = (ids: QuickActionId[]): QuickActionId[] =>
+    perms.canUseSupAIDraftMessage && !ids.includes('draft_message')
+      ? [...ids, 'draft_message']
+      : ids;
+
+  if (role === 'commercial') {
+    const ids: QuickActionId[] = [];
+    if (perms.canUseSupAIPersonalWork) ids.push('calendar_today', 'calendar_week', 'my_tasks');
+    if (perms.canUseSupAIReadClients) ids.push('my_clients', 'client_followup');
+    return withDraft(ids);
+  }
+
+  if (role === 'finance') {
+    return withDraft(
+      perms.canUseSupAIPersonalWork ? ['calendar_today', 'calendar_week', 'my_tasks'] : [],
+    );
+  }
+
+  if (role === 'cameraman') {
+    const ids: QuickActionId[] = [];
+    if (perms.canUseSupAIPersonalWork) ids.push('calendar_today', 'calendar_week', 'my_tasks');
+    if (perms.canUseSupAIReadVideos) ids.push('my_shootings', 'my_videos', 'calendar_shootings');
+    if (perms.canUseSupAIOperationalChat) ids.push('priorities');
+    return withDraft(ids);
+  }
+
+  if (role === 'editor' || role === 'community_manager') {
+    const ids: QuickActionId[] = [];
+    if (perms.canUseSupAIPersonalWork) ids.push('calendar_today', 'calendar_week', 'my_tasks');
+    if (perms.canUseSupAIReadVideos) ids.push('my_videos', 'calendar_deliveries');
+    if (perms.canUseSupAIOperationalChat) ids.push('priorities');
+    return withDraft(ids);
+  }
+
+  if (
+    role === 'designer' ||
+    role === 'developer' ||
+    role === 'seo'
+  ) {
+    const ids: QuickActionId[] = [];
+    if (perms.canUseSupAIPersonalWork) ids.push('calendar_today', 'calendar_week', 'my_tasks');
+    if (perms.canUseSupAIOperationalChat) ids.push('priorities');
+    return withDraft(ids);
+  }
+
+  if (!perms.canUseSupAIGlobalTeamContext) {
+    const ids: QuickActionId[] = [];
+    if (perms.canUseSupAIPersonalWork) ids.push('calendar_today', 'calendar_week', 'my_tasks');
+    if (perms.canUseSupAIReadVideos) ids.push('my_videos');
+    if (perms.canUseSupAIOperationalChat) ids.push('priorities');
+    return withDraft(ids);
+  }
 
   const ids: QuickActionId[] = [];
-
   if (perms.canUseSupAIOperationalChat) {
-    ids.push('priorities');
-    if (perms.canUseSupAIGlobalTeamContext) {
-      ids.push('overdue_tasks');
-    }
+    ids.push('calendar_today', 'calendar_week', 'calendar_month', 'priorities');
+    if (perms.canUseSupAIReadTasks) ids.push('overdue_tasks');
+    if (perms.canUseSupAIReadVideos) ids.push('calendar_shootings', 'calendar_deliveries');
   }
-
-  if (perms.canUseSupAIReadTasks && !perms.canUseSupAIGlobalTeamContext) {
-    ids.push('my_tasks');
-  }
-
-  if (perms.canUseSupAIReadVideos && !perms.canUseSupAIGlobalTeamContext) {
-    ids.push('my_videos');
-  }
-
-  if (perms.canUseSupAICreateTaskDraft) {
-    ids.push('create_task');
-  }
-
-  if (perms.canUseSupAICreateVideoDraft) {
-    ids.push('create_video');
-  }
-
-  if (perms.canUseSupAIReadClients) {
-    ids.push('search_client');
-    if (role === 'commercial') {
-      ids.push('client_followup');
-    }
-  }
-
-  if (perms.canUseSupAIReadVideos && perms.canUseSupAIGlobalTeamContext) {
-    ids.push('search_video');
-  }
-
-  if (perms.canUseSupAIDraftMessage) {
-    ids.push('draft_message');
-  }
-
-  return ids;
+  if (perms.canUseSupAICreateTaskDraft) ids.push('create_task');
+  if (perms.canUseSupAIUpdateTaskDraft) ids.push('update_task');
+  if (perms.canUseSupAICreateVideoDraft) ids.push('create_video');
+  if (perms.canUseSupAIReadClients) ids.push('search_client');
+  if (perms.canUseSupAIReadVideos) ids.push('search_video');
+  return withDraft(ids);
 }

@@ -11,12 +11,24 @@ import type { AiVideoDraftPayload } from '@/lib/ai/video-draft-schema';
 import {
   detectContextIntentFromMessage,
   formatContextBlockForPrompt,
+  isMyAssignedWorkContextRequest,
+  isScopedCalendarContextRequest,
 } from '@/lib/ai/detect-context-intent';
 import { runAiContextTool } from '@/lib/ai/context-tools';
 import type { AiContextLink } from '@/lib/ai/context-schema';
+import type { AiTaskUpdateDraftPayload } from '@/lib/ai/task-update-draft-schema';
+import { hasTaskUpdateChanges } from '@/lib/ai/task-update-draft-schema';
 import { buildTaskDraftReply, buildVideoDraftReply } from '@/lib/ai/build-draft-reply';
+import { buildCalendarReply } from '@/lib/ai/build-calendar-reply';
+import {
+  buildCalendarStructuredResponse,
+  buildMyWorkStructuredResponse,
+} from '@/lib/ai/build-result-groups';
+import type { SupaiResultGroup } from '@/lib/ai/result-groups-schema';
+import type { AiIntentType } from '@/lib/ai/intent-schema';
+import { buildTaskUpdateDraftReply, enrichTaskUpdateDraft } from '@/lib/ai/build-task-update-reply';
 import { evaluateSupaiGuardrails } from '@/lib/ai/guardrails';
-import { SUPAI_ERROR_GENERIC } from '@/lib/ai/supai-copy';
+import { SUPAI_ERROR_GENERIC, SUPAI_EMPTY_ASSIGNED_WORK, SUPAI_REFUSAL_FINANCE } from '@/lib/ai/supai-copy';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -39,8 +51,13 @@ function normalizeVideoDraft(
   return draft;
 }
 
-function financeDeniedBlock(): string {
-  return 'Demande finance refusée : cet utilisateur n\'a pas accès aux données financières globales. Ne jamais inventer de chiffres. Répondez uniquement par un refus poli en français.';
+function normalizeTaskUpdateDraft(
+  draft: AiTaskUpdateDraftPayload | null | undefined,
+  canUpdate: boolean,
+): AiTaskUpdateDraftPayload | null {
+  if (!canUpdate) return null;
+  if (!draft || !hasTaskUpdateChanges(draft.changes)) return null;
+  return draft;
 }
 
 export async function POST(request: Request) {
@@ -82,14 +99,38 @@ export async function POST(request: Request) {
   let contextTool: string | null = null;
   let contextEmpty = false;
   let contextTruncated = false;
+  let myWorkReply: string | null = null;
+  let calendarReply: string | null = null;
+  let calendarDenied: string | null = null;
+  let structuredResultGroups: SupaiResultGroup[] | undefined;
+  let structuredIntentType: AiIntentType | undefined;
 
   const detected = detectContextIntentFromMessage(lastUserMessage, auth.ctx);
   if (detected.action === 'finance_denied') {
-    operationalContext = financeDeniedBlock();
-  } else if (detected.action === 'fetch') {
+    return NextResponse.json({
+      message: { role: 'assistant' as const, content: SUPAI_REFUSAL_FINANCE },
+      intentType: 'general_chat' as const,
+      taskDraft: null,
+      videoDraft: null,
+    });
+  }
+
+  if (detected.action === 'clarify') {
+    return NextResponse.json({
+      message: { role: 'assistant' as const, content: detected.message },
+      intentType: 'general_chat' as const,
+      taskDraft: null,
+      videoDraft: null,
+    });
+  }
+
+  if (detected.action === 'fetch') {
     const toolGate = canRunSupaiContextTool(detected.request, auth.ctx.supai);
     if (!toolGate.ok) {
       operationalContext = `Accès refusé : ${toolGate.reason}`;
+      if (isScopedCalendarContextRequest(detected.request)) {
+        calendarDenied = toolGate.reason;
+      }
     } else {
       try {
         const toolResult = await runAiContextTool(auth.ctx, detected.request);
@@ -101,11 +142,104 @@ export async function POST(request: Request) {
           contextTool = toolResult.tool;
           contextEmpty = toolResult.empty;
           contextTruncated = toolResult.truncated;
+          if (
+            isMyAssignedWorkContextRequest(detected.request) &&
+            toolResult.payload &&
+            'myWork' in toolResult.payload
+          ) {
+            const structured = buildMyWorkStructuredResponse(
+              toolResult.payload.myWork,
+              detected.request.focus,
+            );
+            myWorkReply = structured.reply;
+            if (structured.resultGroups.length) {
+              structuredResultGroups = structured.resultGroups;
+              structuredIntentType =
+                'intentType' in structured ? structured.intentType : 'summarize_work';
+            }
+          }
+          if (
+            isScopedCalendarContextRequest(detected.request) &&
+            toolResult.payload &&
+            'calendar' in toolResult.payload
+          ) {
+            const structured = buildCalendarStructuredResponse(toolResult.payload.calendar);
+            calendarReply = structured.reply;
+            if (structured.resultGroups.length) {
+              structuredResultGroups = structured.resultGroups;
+              structuredIntentType =
+                'intentType' in structured ? structured.intentType : 'ask_calendar_scope';
+            }
+          }
         }
       } catch {
         operationalContext = 'Erreur lors du chargement du contexte opérationnel — répondez sans inventer de données.';
       }
     }
+  }
+
+  if (detected.action === 'fetch' && isScopedCalendarContextRequest(detected.request) && calendarDenied) {
+    return NextResponse.json({
+      message: { role: 'assistant' as const, content: calendarDenied },
+      intentType: 'general_chat' as const,
+      taskDraft: null,
+      videoDraft: null,
+    });
+  }
+
+  if (
+    detected.action === 'fetch' &&
+    isScopedCalendarContextRequest(detected.request) &&
+    (contextEmpty || calendarReply)
+  ) {
+    return NextResponse.json({
+      message: {
+        role: 'assistant' as const,
+        content:
+          calendarReply ??
+          buildCalendarReply({
+            scopeMode: detected.request.scopeMode ?? 'personal',
+            periodLabel: detected.request.periodLabel ?? 'la période demandée',
+            startDate: detected.request.startDate ?? new Date().toISOString(),
+            endDate: detected.request.endDate ?? new Date().toISOString(),
+            tasks: [],
+            shootings: [],
+            deliveries: [],
+            watchItems: [],
+          }),
+      },
+      intentType: structuredIntentType ?? ('ask_calendar_scope' as const),
+      taskDraft: null,
+      videoDraft: null,
+      resultGroups: structuredResultGroups,
+      contextMeta: {
+        tool: 'getScopedCalendarWork',
+        empty: contextEmpty,
+        truncated: contextTruncated,
+      },
+    });
+  }
+
+  if (
+    detected.action === 'fetch' &&
+    isMyAssignedWorkContextRequest(detected.request) &&
+    (contextEmpty || myWorkReply)
+  ) {
+    return NextResponse.json({
+      message: {
+        role: 'assistant' as const,
+        content: contextEmpty ? SUPAI_EMPTY_ASSIGNED_WORK : myWorkReply!,
+      },
+      intentType: structuredIntentType ?? ('summarize_work' as const),
+      taskDraft: null,
+      videoDraft: null,
+      resultGroups: structuredResultGroups,
+      contextMeta: {
+        tool: 'getMyOperationalWork',
+        empty: contextEmpty,
+        truncated: contextTruncated,
+      },
+    });
   }
 
   const messages = [
@@ -133,17 +267,27 @@ export async function POST(request: Request) {
       lastUserMessage,
       staffCtx.canCreateTasks,
       staffCtx.canCreateVideos,
+      staffCtx.supai.canUseSupAIUpdateTaskDraft,
     );
 
+    const taskUpdateDraft = normalizeTaskUpdateDraft(
+      structured.taskUpdateDraft,
+      staffCtx.supai.canUseSupAIUpdateTaskDraft,
+    );
     const taskDraft = normalizeTaskDraft(structured.taskDraft, staffCtx.canCreateTasks);
     const videoDraft = normalizeVideoDraft(structured.videoDraft, staffCtx.canCreateVideos);
 
     let intentType = structured.intentType;
-    if (videoDraft) intentType = 'create_video_draft';
+    if (taskUpdateDraft) intentType = 'update_task_draft';
+    else if (videoDraft) intentType = 'create_video_draft';
     else if (taskDraft) intentType = 'create_task_draft';
 
     let reply = structured.reply;
-    if (videoDraft) {
+    let outboundTaskUpdateDraft: AiTaskUpdateDraftPayload | null = null;
+    if (taskUpdateDraft) {
+      outboundTaskUpdateDraft = await enrichTaskUpdateDraft(auth.ctx, taskUpdateDraft);
+      reply = await buildTaskUpdateDraftReply(auth.ctx, outboundTaskUpdateDraft);
+    } else if (videoDraft) {
       reply = await buildVideoDraftReply(auth.ctx, videoDraft);
     } else if (taskDraft) {
       reply = await buildTaskDraftReply(auth.ctx, taskDraft);
@@ -154,6 +298,7 @@ export async function POST(request: Request) {
       intentType,
       taskDraft,
       videoDraft,
+      taskUpdateDraft: outboundTaskUpdateDraft,
       contextLinks: contextLinks.length ? contextLinks.slice(0, 8) : undefined,
       contextMeta: contextTool
         ? { tool: contextTool, empty: contextEmpty, truncated: contextTruncated }

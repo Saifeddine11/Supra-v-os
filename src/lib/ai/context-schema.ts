@@ -6,6 +6,8 @@ export const AI_CONTEXT_TOOL_TYPES = [
   'searchVideos',
   'getTodayPriorities',
   'getClientSummary',
+  'getMyOperationalWork',
+  'getScopedCalendarWork',
 ] as const;
 
 export type AiContextToolType = (typeof AI_CONTEXT_TOOL_TYPES)[number];
@@ -15,6 +17,12 @@ export const aiContextRequestSchema = z.object({
   query: z.string().trim().max(200).optional(),
   clientId: z.string().uuid('clientId invalide.').optional(),
   overdueOnly: z.boolean().optional(),
+  focus: z.enum(['all', 'tasks', 'videos', 'shootings', 'priorities', 'overdue']).optional(),
+  startDate: z.string().datetime().optional(),
+  endDate: z.string().datetime().optional(),
+  periodLabel: z.string().trim().max(120).optional(),
+  scopeMode: z.enum(['global', 'personal']).optional(),
+  eventFocus: z.enum(['all', 'tasks', 'shootings', 'deliveries']).optional(),
 });
 
 export type AiContextRequest = z.infer<typeof aiContextRequestSchema>;
@@ -37,6 +45,8 @@ export type AiTaskContextItem = {
   assigneeNames: string | null;
   description: string | null;
   href: string;
+  isOverdue?: boolean;
+  isDueToday?: boolean;
 };
 
 export type AiClientContextItem = {
@@ -59,7 +69,50 @@ export type AiVideoContextItem = {
   shootingDate: string | null;
   deliveryDate: string | null;
   teamNames: string | null;
+  roleOnVideo?: string | null;
   href: string;
+};
+
+export type AiMyOperationalWorkPayload = {
+  scopeHint: 'assigned_only' | 'personal';
+  employeeName: string;
+  tasks: AiTaskContextItem[];
+  videos: AiVideoContextItem[];
+  overdueTasks: AiTaskContextItem[];
+  dueTodayTasks: AiTaskContextItem[];
+  shootingsToday: AiVideoContextItem[];
+  deliveriesToday: AiVideoContextItem[];
+};
+
+export type AiCalendarShootingEvent = {
+  videoId: string;
+  title: string;
+  clientName: string;
+  at: string;
+  teamNames: string | null;
+  status: string;
+  shootLabel?: string | null;
+  href: string;
+};
+
+export type AiCalendarDeliveryEvent = {
+  videoId: string;
+  title: string;
+  clientName: string;
+  at: string;
+  status: string;
+  href: string;
+};
+
+export type AiScopedCalendarPayload = {
+  scopeMode: 'global' | 'personal';
+  periodLabel: string;
+  startDate: string;
+  endDate: string;
+  tasks: AiTaskContextItem[];
+  shootings: AiCalendarShootingEvent[];
+  deliveries: AiCalendarDeliveryEvent[];
+  watchItems: Array<{ label: string; detail: string; href: string }>;
 };
 
 export type AiTodayPrioritiesPayload = {
@@ -97,7 +150,9 @@ export type AiContextToolResult =
         | { clients: AiClientContextItem[] }
         | { videos: AiVideoContextItem[] }
         | { priorities: AiTodayPrioritiesPayload }
-        | { summary: AiClientSummaryPayload };
+        | { summary: AiClientSummaryPayload }
+        | { myWork: AiMyOperationalWorkPayload }
+        | { calendar: AiScopedCalendarPayload };
       links: AiContextLink[];
     }
   | {

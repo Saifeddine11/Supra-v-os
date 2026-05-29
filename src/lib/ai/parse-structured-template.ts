@@ -77,6 +77,12 @@ export function isStructuredMessageTemplate(message: string): boolean {
   );
 }
 
+export function isStructuredTaskUpdateTemplate(message: string): boolean {
+  return /je\s+souhaite\s+modifier\s+une\s+t[âa]che\s+avec\s+les\s+informations\s+suivantes/i.test(
+    message,
+  );
+}
+
 /** Cursor position after "Label :" for textarea focus (same line, before any prefilled value). */
 export function getTemplateCursorPosition(template: string, afterLabel?: string): number {
   if (!afterLabel) return template.length;

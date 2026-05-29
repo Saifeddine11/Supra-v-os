@@ -11,6 +11,7 @@ import {
   SUPAI_REFUSAL_FORBIDDEN_MVP,
   SUPAI_REFUSAL_PERMISSION,
   SUPAI_REFUSAL_SECRETS,
+  SUPAI_REFUSAL_TASK_UPDATE,
 } from '@/lib/ai/supai-copy';
 import { evaluateGlobalTeamGuardrail } from '@/lib/ai/supai-permissions';
 
@@ -20,7 +21,8 @@ export type GuardrailRefusalType =
   | 'forbidden_mvp_action'
   | 'auto_send'
   | 'secrets'
-  | 'permission_denied';
+  | 'permission_denied'
+  | 'task_update_denied';
 
 export type GuardrailRefusal = {
   type: GuardrailRefusalType;
@@ -152,6 +154,9 @@ export function getRoleBasedRefusal(
     case 'secrets':
       return SUPAI_REFUSAL_SECRETS;
     case 'permission_denied':
+      return SUPAI_REFUSAL_PERMISSION;
+    case 'task_update_denied':
+      return SUPAI_REFUSAL_TASK_UPDATE;
     default:
       return SUPAI_REFUSAL_PERMISSION;
   }
@@ -201,6 +206,11 @@ export function evaluateSupaiGuardrails(
   }
 
   const intent = detectUserChatIntent(text);
+
+  if (intent.isUpdateTask && !ctx.supai.canUseSupAIUpdateTaskDraft) {
+    return { type: 'task_update_denied', reply: getRoleBasedRefusal(ctx.role, 'task_update_denied') };
+  }
+
   if (intent.isCreateTask && !ctx.supai.canUseSupAICreateTaskDraft) {
     return { type: 'permission_denied', reply: getRoleBasedRefusal(ctx.role, 'permission_denied') };
   }

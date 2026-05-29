@@ -10,6 +10,11 @@ import {
   type AiTaskDraftPayload,
 } from '@/lib/ai/task-draft-schema';
 import {
+  aiTaskUpdateDraftPayloadSchema,
+  TASK_UPDATE_DRAFT_CONFIRM_REPLY,
+  type AiTaskUpdateDraftPayload,
+} from '@/lib/ai/task-update-draft-schema';
+import {
   aiVideoDraftPayloadSchema,
   VIDEO_DRAFT_CONFIRM_REPLY,
   type AiVideoDraftPayload,
@@ -99,7 +104,13 @@ function looseStructuredParse(json: unknown): AiStructuredResponse | null {
     videoDraft = draftParsed.success ? draftParsed.data : null;
   }
 
-  return { reply, intentType, taskDraft, videoDraft };
+  let taskUpdateDraft: AiTaskUpdateDraftPayload | null = null;
+  if (o.taskUpdateDraft != null && typeof o.taskUpdateDraft === 'object') {
+    const draftParsed = aiTaskUpdateDraftPayloadSchema.safeParse(o.taskUpdateDraft);
+    taskUpdateDraft = draftParsed.success ? draftParsed.data : null;
+  }
+
+  return { reply, intentType, taskDraft, videoDraft, taskUpdateDraft };
 }
 
 function normalizeCreateTaskDraftResponse(structured: AiStructuredResponse): AiStructuredResponse {
@@ -126,6 +137,37 @@ function normalizeCreateTaskDraftResponse(structured: AiStructuredResponse): AiS
     intentType: 'create_task_draft',
     taskDraft,
     videoDraft: null,
+    taskUpdateDraft: null,
+  };
+}
+
+function normalizeUpdateTaskDraftResponse(structured: AiStructuredResponse): AiStructuredResponse {
+  if (structured.intentType !== 'update_task_draft' && !structured.taskUpdateDraft) {
+    return structured;
+  }
+
+  const draftParsed = structured.taskUpdateDraft
+    ? aiTaskUpdateDraftPayloadSchema.safeParse(structured.taskUpdateDraft)
+    : null;
+  const taskUpdateDraft = draftParsed?.success
+    ? draftParsed.data
+    : structured.taskUpdateDraft ?? null;
+
+  if (!taskUpdateDraft) {
+    return structured;
+  }
+
+  const reply =
+    structured.reply && !looksLikeStructuredJson(structured.reply)
+      ? structured.reply
+      : TASK_UPDATE_DRAFT_CONFIRM_REPLY;
+
+  return {
+    reply,
+    intentType: 'update_task_draft',
+    taskDraft: null,
+    videoDraft: null,
+    taskUpdateDraft,
   };
 }
 
@@ -153,6 +195,7 @@ function normalizeCreateVideoDraftResponse(structured: AiStructuredResponse): Ai
     intentType: 'create_video_draft',
     taskDraft: null,
     videoDraft,
+    taskUpdateDraft: null,
   };
 }
 
@@ -166,6 +209,7 @@ function plainTextFallback(raw: string): AiStructuredResponse {
       intentType: 'general_chat',
       taskDraft: null,
       videoDraft: null,
+      taskUpdateDraft: null,
     };
   }
 
@@ -174,6 +218,7 @@ function plainTextFallback(raw: string): AiStructuredResponse {
     intentType: 'general_chat',
     taskDraft: null,
     videoDraft: null,
+    taskUpdateDraft: null,
   };
 }
 
@@ -182,12 +227,14 @@ export function parseAiStructuredResponse(raw: string): AiStructuredResponse {
   if (json) {
     const parsed = aiStructuredResponseSchema.safeParse(json);
     if (parsed.success) {
-      const withVideo = normalizeCreateVideoDraftResponse(parsed.data);
+      const withUpdate = normalizeUpdateTaskDraftResponse(parsed.data);
+      const withVideo = normalizeCreateVideoDraftResponse(withUpdate);
       return normalizeCreateTaskDraftResponse(withVideo);
     }
     const loose = looseStructuredParse(json);
     if (loose) {
-      const withVideo = normalizeCreateVideoDraftResponse(loose);
+      const withUpdate = normalizeUpdateTaskDraftResponse(loose);
+      const withVideo = normalizeCreateVideoDraftResponse(withUpdate);
       return normalizeCreateTaskDraftResponse(withVideo);
     }
   }
@@ -199,6 +246,7 @@ export function parseAiStructuredResponse(raw: string): AiStructuredResponse {
       intentType: 'general_chat',
       taskDraft: null,
       videoDraft: null,
+      taskUpdateDraft: null,
     };
   }
 

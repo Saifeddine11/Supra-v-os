@@ -57,18 +57,37 @@ function extractDeadlineText(text: string): string | undefined {
 }
 
 function isNoiseToken(value: string): boolean {
-  return DATE_WORDS.test(value) || /^(client|le|la|une|un|tâche|tache)$/i.test(value);
+  const v = value.trim().toLowerCase();
+  if (DATE_WORDS.test(value)) return true;
+  if (/^(client|le|la|une|un|tâche|tache|les|des|du|de la)$/i.test(v)) return true;
+  if (/^en\s+retard$/i.test(v)) return true;
+  return false;
 }
 
 function extractAssigneeName(text: string): string | undefined {
+  const pourClientColon = text.match(
+    /^pour\s+([a-zà-ÿ'-]+)\s+client\s+[a-zà-ÿ][\w\s.'-]+?\s*:/i,
+  );
+  if (pourClientColon?.[1] && !isNoiseToken(pourClientColon[1])) {
+    return capitalizeName(pourClientColon[1]);
+  }
+
   const beforeColon = text.match(/^pour\s+([a-zà-ÿ'-]+(?:\s+[a-zà-ÿ'-]+)?)\s*:/i);
   if (beforeColon?.[1] && !isNoiseToken(beforeColon[1])) {
-    return capitalizeName(beforeColon[1]);
+    const name = beforeColon[1].trim();
+    if (!/^client\b/i.test(name)) {
+      return capitalizeName(name);
+    }
   }
 
   const leadingPour = text.match(/^pour\s+([a-zà-ÿ'-]+)\s+/i);
   if (leadingPour?.[1] && !isNoiseToken(leadingPour[1])) {
     return capitalizeName(leadingPour[1]);
+  }
+
+  const assigneA = text.match(/\bassigne(?:r)?\s+(?:à|a)\s+([a-zà-ÿ'-]+(?:\s+[a-zà-ÿ'-]+)?)/i);
+  if (assigneA?.[1] && !isNoiseToken(assigneA[1])) {
+    return capitalizeName(assigneA[1]);
   }
 
   const patterns = [
@@ -88,6 +107,7 @@ function extractAssigneeName(text: string): string | undefined {
 
 function extractClientName(text: string): string | undefined {
   const patterns = [
+    /\bclient\s+([a-zà-ÿ][\w\s.'-]+?)\s*:/i,
     /\bclient\s*:\s*([a-zà-ÿ][\w\s.'-]*)/i,
     /\b(?:pour le client|client|chez)\s+([a-zà-ÿ][\w\s.'-]+?)(?:[.,]|$|\s+(?:avec|avant|demain|aujourd'hui))/i,
     /\bpour le client\s+([a-zà-ÿ][\w\s.'-]+?)\.?$/i,
@@ -98,6 +118,7 @@ function extractClientName(text: string): string | undefined {
     const m = text.match(pattern);
     const name = m?.[1]?.trim().replace(/\s*[.,]+\s*$/, '');
     if (name && name.length >= 2 && !isNoiseToken(name)) {
+      if (/^[A-Z0-9]{2,8}$/.test(name)) continue;
       return capitalizeName(name);
     }
   }
@@ -107,11 +128,15 @@ function extractClientName(text: string): string | undefined {
 function extractClientFromTitle(title: string): { title: string; clientName?: string } {
   const videoClient = title.match(/^(.+?)\s+(?:vidéo|video|vidéos)\s+([a-zà-ÿ][\w\s.'-]+)$/i);
   if (videoClient?.[1] && videoClient[2]) {
-    const action = cleanWhitespace(videoClient[1]);
-    return {
-      title: normalizeActionTitle(`${action} vidéos`),
-      clientName: capitalizeName(videoClient[2].trim()),
-    };
+    const clientPart = videoClient[2].trim();
+    const looksLikeProjectCode = /^[A-Z0-9]{2,8}$/.test(clientPart);
+    if (!looksLikeProjectCode && !isNoiseToken(clientPart)) {
+      const action = cleanWhitespace(videoClient[1]);
+      return {
+        title: normalizeActionTitle(`${action} vidéos`),
+        clientName: capitalizeName(clientPart),
+      };
+    }
   }
 
   const appelerNamed = title.match(/^appeler\s+(?!le client\b)([a-zà-ÿ][\w\s.'-]+)$/i);

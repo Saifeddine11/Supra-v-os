@@ -18,13 +18,21 @@ import {
 } from '@/lib/ai/task-draft-schema';
 import { hrefTasksOpenDetail } from '@/lib/tasks/task-deep-link';
 import {
-  DRAFT_ASSIGNEE_NOT_FOUND,
-  DRAFT_CLIENT_NOT_FOUND,
   DRAFT_VALUE_MISSING,
   DRAFT_VALUE_TO_CONFIRM,
   SUPAI_ERROR_NETWORK,
   SUPAI_ERROR_TASK_CREATE,
 } from '@/lib/ai/supai-copy';
+import {
+  draftReferenceBlockingWarning,
+  draftReferenceBlocksConfirm,
+  draftReferenceResolvedHint,
+  type DraftReferencePreview,
+} from '@/lib/ai/draft-resolution-ui';
+import {
+  DraftReferenceAmbiguousPicker,
+  DraftReferenceResolvedHint,
+} from '@/components/ai/draft-name-resolution';
 import { PRIORITY_MAP, TASK_STATUS_MAP } from '@/types/domain';
 
 type TaskDraftCardProps = {
@@ -37,20 +45,8 @@ type TaskDraftCardProps = {
 type FormOption = { id: string; name?: string; full_name?: string };
 
 type DraftResolutionPreview = {
-  client: {
-    status: string;
-    query?: string;
-    label?: string;
-    id?: string;
-    matches?: Array<{ id: string; label: string }>;
-  };
-  assignee: {
-    status: string;
-    query?: string;
-    label?: string;
-    id?: string;
-    matches?: Array<{ id: string; label: string }>;
-  };
+  client: DraftReferencePreview;
+  assignee: DraftReferencePreview;
 };
 
 function toDatetimeLocal(iso?: string): string {
@@ -70,25 +66,14 @@ function fromDatetimeLocal(value: string): string | undefined {
 
 function resolutionWarning(
   kind: 'client' | 'assignee',
-  preview: DraftResolutionPreview['client'] | undefined,
+  preview: DraftReferencePreview | undefined,
   name: string,
   selectedId: string,
 ): string | null {
-  if (!name.trim()) return null;
-  if (selectedId) return null;
-  if (!preview || preview.status === 'none') return null;
-  if (preview.status === 'resolved') return null;
-  if (preview.status === 'not_found') {
-    return kind === 'client'
-      ? `${DRAFT_CLIENT_NOT_FOUND} : ${name}`
-      : `${DRAFT_ASSIGNEE_NOT_FOUND} : ${name}`;
-  }
-  if (preview.status === 'ambiguous') {
-    const options = preview.matches?.map((m) => m.label).join(', ') ?? '';
-    return kind === 'client'
-      ? `Client ambigu : ${name} — choisissez dans la liste (${options}).`
-      : `Assigné ambigu : ${name} — choisissez dans la liste (${options}).`;
-  }
+  const blocking = draftReferenceBlockingWarning(kind, preview, name, selectedId);
+  if (blocking) return blocking;
+  if (!name.trim() || selectedId) return null;
+  if (!preview || preview.status === 'none' || preview.status === 'resolved') return null;
   return `${DRAFT_VALUE_TO_CONFIRM} : ${name}`;
 }
 
@@ -220,7 +205,16 @@ export function TaskDraftCard({
     assigneeName,
     assigneeIds.size > 0 ? [...assigneeIds][0] : '',
   );
-  const hasBlockingWarning = Boolean(clientWarning || assigneeWarning);
+  const clientResolvedHint = draftReferenceResolvedHint(resolution?.client, clientName);
+  const assigneeResolvedHint = draftReferenceResolvedHint(resolution?.assignee, assigneeName);
+  const hasBlockingWarning =
+    draftReferenceBlocksConfirm(resolution?.client, clientName, clientId) ||
+    draftReferenceBlocksConfirm(
+      resolution?.assignee,
+      assigneeName,
+      assigneeIds.size > 0 ? [...assigneeIds][0] : '',
+    ) ||
+    Boolean(clientWarning || assigneeWarning);
 
   async function handleConfirm() {
     if (!canCreate || confirming || hasBlockingWarning) return;
@@ -465,15 +459,41 @@ export function TaskDraftCard({
       ) : null}
 
       {clientWarning ? (
-        <p className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
+        <p className="mt-3 whitespace-pre-line rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
           {clientWarning}
         </p>
       ) : null}
+      {!clientWarning && clientResolvedHint ? (
+        <DraftReferenceResolvedHint hint={clientResolvedHint} />
+      ) : null}
+      {resolution?.client.status === 'ambiguous' && !clientId ? (
+        <DraftReferenceAmbiguousPicker
+          kind="client"
+          preview={resolution.client}
+          onSelect={(id, label) => {
+            setClientId(id);
+            setClientName(label);
+          }}
+        />
+      ) : null}
 
       {assigneeWarning ? (
-        <p className="mt-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
+        <p className="mt-2 whitespace-pre-line rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
           {assigneeWarning}
         </p>
+      ) : null}
+      {!assigneeWarning && assigneeResolvedHint ? (
+        <DraftReferenceResolvedHint hint={assigneeResolvedHint} />
+      ) : null}
+      {resolution?.assignee.status === 'ambiguous' && assigneeIds.size === 0 ? (
+        <DraftReferenceAmbiguousPicker
+          kind="assignee"
+          preview={resolution.assignee}
+          onSelect={(id, label) => {
+            setAssigneeIds(new Set([id]));
+            setAssigneeName(label);
+          }}
+        />
       ) : null}
 
       {!canCreate ? (

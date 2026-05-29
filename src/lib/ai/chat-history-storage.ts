@@ -1,7 +1,9 @@
 import { z } from 'zod';
 import { AI_CHAT_MAX_MESSAGE_CHARS, AI_CHAT_MAX_MESSAGES } from '@/lib/ai/chat-schema';
 import { AI_INTENT_TYPES } from '@/lib/ai/intent-schema';
+import { supaiResultGroupsSchema } from '@/lib/ai/result-groups-schema';
 import { aiTaskDraftPayloadSchema } from '@/lib/ai/task-draft-schema';
+import { aiTaskUpdateDraftPayloadSchema } from '@/lib/ai/task-update-draft-schema';
 import { aiVideoDraftPayloadSchema } from '@/lib/ai/video-draft-schema';
 
 export const AI_CHAT_HISTORY_KEY_PREFIX = 'supra_ai_chat_history_v1';
@@ -20,11 +22,15 @@ export const storedChatMessageSchema = z.object({
   intentType: z.enum(AI_INTENT_TYPES).optional(),
   taskDraft: aiTaskDraftPayloadSchema.nullish(),
   videoDraft: aiVideoDraftPayloadSchema.nullish(),
+  taskUpdateDraft: aiTaskUpdateDraftPayloadSchema.nullish(),
   contextLinks: z.array(contextLinkSchema).max(8).optional(),
+  resultGroups: supaiResultGroupsSchema.optional(),
   taskDraftStatus: z.enum(['pending', 'created', 'dismissed']).optional(),
   videoDraftStatus: z.enum(['pending', 'created', 'dismissed']).optional(),
+  taskUpdateDraftStatus: z.enum(['pending', 'updated', 'dismissed']).optional(),
   createdTaskId: z.string().uuid().optional(),
   createdVideoId: z.string().uuid().optional(),
+  updatedTaskId: z.string().uuid().optional(),
 });
 
 export const chatHistoryBlobSchema = z.object({

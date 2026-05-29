@@ -11,6 +11,17 @@ export const TASK_DRAFT_CONFIRM_REPLY =
 export const TASK_DRAFT_CONFIRM_REPLY_INCOMPLETE =
   'J’ai préparé un brouillon de tâche, mais certaines informations doivent être complétées avant la création.';
 
+export const TASK_UPDATE_DRAFT_CONFIRM_REPLY =
+  'J’ai préparé une modification de tâche. Vérifiez les changements avant de confirmer.';
+
+export const TASK_UPDATE_DRAFT_NOT_FOUND =
+  'Tâche introuvable : précisez le titre ou ouvrez la tâche depuis le board.';
+
+export const TASK_UPDATE_DRAFT_EMPTY_CHANGES = 'Aucune modification détectée.';
+
+export const SUPAI_REFUSAL_TASK_UPDATE =
+  'Vous n’avez pas les droits nécessaires pour modifier une tâche avec SupAI.';
+
 export const VIDEO_DRAFT_CONFIRM_REPLY =
   'J’ai préparé un brouillon de vidéo. Vérifiez les informations avant de confirmer.';
 
@@ -66,7 +77,16 @@ export const SUPAI_REFUSAL_PERMISSION =
   'Vous n’avez pas les droits nécessaires pour effectuer cette action avec SupAI.';
 
 export const SUPAI_REFUSAL_GLOBAL_TEAM =
-  'Votre accès SupAI est limité à vos tâches et vidéos assignées.';
+  'Votre accès SupAI est limité aux éléments qui vous sont assignés.';
+
+export const SUPAI_EMPTY_CALENDAR_PERSONAL =
+  'Je n’ai trouvé aucun élément assigné à votre profil sur cette période.';
+
+export const SUPAI_EMPTY_CALENDAR_GLOBAL =
+  'Je n’ai trouvé aucun élément opérationnel prévu sur cette période.';
+
+export const SUPAI_EMPTY_ASSIGNED_WORK =
+  'Je n’ai trouvé aucune tâche ou vidéo assignée à votre profil pour le moment.';
 
 export const SUPAI_REFUSAL_PORTAL =
   'SupAI est réservé à l’équipe interne.';

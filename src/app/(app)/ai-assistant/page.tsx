@@ -34,6 +34,7 @@ export default async function AiAssistantPage() {
         staffName={ctx.employee!.full_name}
         canCreateTasks={supai.canUseSupAICreateTaskDraft}
         canCreateVideos={supai.canUseSupAICreateVideoDraft}
+        canUpdateTasks={supai.canUseSupAIUpdateTaskDraft}
         visibleQuickActionIds={visibleQuickActionIds}
         historyUserKey={ctx.userId}
         employeeId={ctx.employee!.id}

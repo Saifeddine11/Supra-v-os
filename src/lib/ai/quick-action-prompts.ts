@@ -6,14 +6,22 @@ import {
 export type QuickActionId =
   | 'create_task'
   | 'create_video'
+  | 'update_task'
   | 'priorities'
   | 'overdue_tasks'
   | 'my_tasks'
   | 'my_videos'
+  | 'my_shootings'
+  | 'my_clients'
   | 'search_client'
   | 'search_video'
   | 'client_followup'
-  | 'draft_message';
+  | 'draft_message'
+  | 'calendar_today'
+  | 'calendar_week'
+  | 'calendar_month'
+  | 'calendar_shootings'
+  | 'calendar_deliveries';
 
 export type QuickActionMode = 'input' | 'send';
 
@@ -44,6 +52,21 @@ Instructions :
 - Si un champ n'est pas nécessaire, laissez-le vide.
 - SupAI doit préparer un brouillon, pas créer directement.
 - La création doit se faire uniquement après confirmation.`;
+
+const TASK_UPDATE_TEMPLATE = `Je souhaite modifier une tâche avec les informations suivantes :
+
+Tâche à modifier :
+Nouveau titre :
+Client :
+Assigné(s) :
+Échéance :
+Priorité :
+Statut :
+Description :
+
+Instructions :
+- SupAI doit préparer une modification, pas modifier directement.
+- La modification doit se faire uniquement après confirmation.`;
 
 const VIDEO_CREATE_TEMPLATE = `Je souhaite créer une vidéo avec les informations suivantes :
 
@@ -100,6 +123,16 @@ Pour chaque tâche, indique :
 
 Ne montre pas les tâches terminées, archivées, en attente client ou en révision.`;
 
+const MY_CLIENTS_TEMPLATE = `Montre-moi mes clients visibles et les relances à prévoir.
+
+Pour chaque client, indique :
+- nom
+- statut
+- prochaine action recommandée
+- échéances ouvertes si visibles
+
+Ne montre que les clients de mon périmètre commercial.`;
+
 const SEARCH_CLIENT_TEMPLATE = `Je cherche les informations sur ce client :
 
 Nom du client :
@@ -136,6 +169,17 @@ Pour chaque tâche, indique :
 
 Ne montre que les tâches qui me sont assignées.`;
 
+const MY_SHOOTINGS_TEMPLATE = `Montre-moi mes tournages assignés.
+
+Pour chaque tournage / vidéo, indique :
+- titre
+- client
+- statut de production
+- date de tournage
+- prochaines actions
+
+Ne montre que les tournages qui me sont assignés.`;
+
 const MY_VIDEOS_TEMPLATE = `Montre-moi mes vidéos et tournages assignés.
 
 Pour chaque vidéo, indique :
@@ -147,6 +191,16 @@ Pour chaque vidéo, indique :
 - prochaines actions
 
 Ne montre que ce qui me concerne directement.`;
+
+const CALENDAR_TODAY_TEMPLATE = `On a quoi aujourd'hui ?`;
+
+const CALENDAR_WEEK_TEMPLATE = `On a quoi cette semaine ?`;
+
+const CALENDAR_MONTH_TEMPLATE = `On a quoi ce mois-ci ?`;
+
+const CALENDAR_SHOOTINGS_TEMPLATE = `Quels tournages cette semaine ?`;
+
+const CALENDAR_DELIVERIES_TEMPLATE = `Quelles livraisons client cette semaine ?`;
 
 const CLIENT_FOLLOWUP_TEMPLATE = `Je souhaite préparer une relance client :
 
@@ -174,6 +228,13 @@ export const QUICK_ACTION_DEFINITIONS: QuickActionDefinition[] = [
     focusAfterLabel: 'Titre',
   },
   {
+    id: 'update_task',
+    label: 'Modifier une tâche',
+    mode: 'input',
+    prompt: TASK_UPDATE_TEMPLATE,
+    focusAfterLabel: 'Tâche à modifier',
+  },
+  {
     id: 'priorities',
     label: 'Mes priorités',
     mode: 'send',
@@ -196,6 +257,48 @@ export const QUICK_ACTION_DEFINITIONS: QuickActionDefinition[] = [
     label: 'Mes vidéos',
     mode: 'send',
     prompt: MY_VIDEOS_TEMPLATE,
+  },
+  {
+    id: 'my_shootings',
+    label: 'Mes tournages',
+    mode: 'send',
+    prompt: MY_SHOOTINGS_TEMPLATE,
+  },
+  {
+    id: 'calendar_today',
+    label: 'Aujourd’hui',
+    mode: 'send',
+    prompt: CALENDAR_TODAY_TEMPLATE,
+  },
+  {
+    id: 'calendar_week',
+    label: 'Cette semaine',
+    mode: 'send',
+    prompt: CALENDAR_WEEK_TEMPLATE,
+  },
+  {
+    id: 'calendar_month',
+    label: 'Ce mois-ci',
+    mode: 'send',
+    prompt: CALENDAR_MONTH_TEMPLATE,
+  },
+  {
+    id: 'calendar_shootings',
+    label: 'Tournages',
+    mode: 'send',
+    prompt: CALENDAR_SHOOTINGS_TEMPLATE,
+  },
+  {
+    id: 'calendar_deliveries',
+    label: 'Livraisons',
+    mode: 'send',
+    prompt: CALENDAR_DELIVERIES_TEMPLATE,
+  },
+  {
+    id: 'my_clients',
+    label: 'Mes clients',
+    mode: 'send',
+    prompt: MY_CLIENTS_TEMPLATE,
   },
   {
     id: 'search_client',

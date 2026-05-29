@@ -8,6 +8,7 @@ import {
   Copy,
   Loader2,
   MessageSquare,
+  Pencil,
   Send,
   Sparkles,
   Trash2,
@@ -17,12 +18,15 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { SectionCard } from '@/components/shared/section-card';
 import { TaskDraftCard } from '@/components/ai/task-draft-card';
+import { TaskUpdateDraftCard } from '@/components/ai/task-update-draft-card';
 import { VideoDraftCard } from '@/components/ai/video-draft-card';
+import { SupAIResultGroups } from '@/components/ai/supai-result-groups';
 import { cn } from '@/lib/utils/cn';
 import type { AiChatMessage } from '@/lib/ai/chat-schema';
 import { AI_CHAT_MAX_MESSAGE_CHARS, AI_CHAT_MAX_MESSAGES } from '@/lib/ai/chat-schema';
-import type { AiIntentType, AiTaskDraftPayload, AiVideoDraftPayload } from '@/lib/ai/intent-schema';
+import type { AiIntentType, AiTaskDraftPayload, AiTaskUpdateDraftPayload, AiVideoDraftPayload } from '@/lib/ai/intent-schema';
 import type { AiContextLink } from '@/lib/ai/context-schema';
+import type { SupaiResultGroup } from '@/lib/ai/result-groups-schema';
 import {
   SUPAI_FOOTER_NOTE,
   SUPAI_NAME,
@@ -56,11 +60,15 @@ type ChatMessage = AiChatMessage & {
   intentType?: AiIntentType;
   taskDraft?: AiTaskDraftPayload | null;
   videoDraft?: AiVideoDraftPayload | null;
+  taskUpdateDraft?: AiTaskUpdateDraftPayload | null;
   contextLinks?: AiContextLink[];
+  resultGroups?: SupaiResultGroup[];
   taskDraftStatus?: 'pending' | 'created' | 'dismissed';
   videoDraftStatus?: 'pending' | 'created' | 'dismissed';
+  taskUpdateDraftStatus?: 'pending' | 'updated' | 'dismissed';
   createdTaskId?: string;
   createdVideoId?: string;
+  updatedTaskId?: string;
 };
 
 const WELCOME_CONTENT = SUPAI_WELCOME_MESSAGE;
@@ -91,12 +99,15 @@ function resolveAssistantReply(
   intentType?: AiIntentType,
   taskDraft?: AiTaskDraftPayload | null,
   videoDraft?: AiVideoDraftPayload | null,
+  taskUpdateDraft?: AiTaskUpdateDraftPayload | null,
 ): string {
   const hasDraft =
     Boolean(taskDraft?.title?.trim()) ||
     Boolean(videoDraft?.title?.trim()) ||
+    Boolean(taskUpdateDraft && (taskUpdateDraft.taskSearchText || taskUpdateDraft.taskId)) ||
     intentType === 'create_task_draft' ||
-    intentType === 'create_video_draft';
+    intentType === 'create_video_draft' ||
+    intentType === 'update_task_draft';
 
   const trimmed = content?.trim() ?? '';
   if (hasDraft && trimmed && !looksLikeRawJsonReply(trimmed)) {
@@ -121,6 +132,22 @@ function shouldShowTaskDraftCard(m: ChatMessage): boolean {
 function shouldShowVideoDraftCard(m: ChatMessage): boolean {
   if (m.videoDraftStatus === 'created' || m.videoDraftStatus === 'dismissed') return false;
   return Boolean(m.videoDraft?.title?.trim());
+}
+
+function shouldShowTaskUpdateDraftCard(m: ChatMessage): boolean {
+  if (m.taskUpdateDraftStatus === 'updated' || m.taskUpdateDraftStatus === 'dismissed') {
+    return false;
+  }
+  return Boolean(m.taskUpdateDraft);
+}
+
+function shouldShowUpdatedTaskLink(m: ChatMessage): boolean {
+  return (
+    m.role === 'assistant' &&
+    m.taskUpdateDraftStatus === 'updated' &&
+    isValidUuid(m.updatedTaskId) &&
+    !shouldShowTaskUpdateDraftCard(m)
+  );
 }
 
 function shouldShowCreatedTaskLink(m: ChatMessage): boolean {
@@ -157,6 +184,13 @@ function sanitizeLoadedMessage(m: StoredChatMessage): StoredChatMessage {
   if (out.videoDraftStatus !== 'created') {
     delete out.createdVideoId;
   }
+  if (out.taskUpdateDraftStatus === 'updated' && !isValidUuid(out.updatedTaskId)) {
+    out.taskUpdateDraftStatus = out.taskUpdateDraft ? 'pending' : undefined;
+    delete out.updatedTaskId;
+  }
+  if (out.taskUpdateDraftStatus !== 'updated') {
+    delete out.updatedTaskId;
+  }
   return out;
 }
 
@@ -169,11 +203,15 @@ function toStoredMessage(m: ChatMessage): StoredChatMessage {
     intentType: m.intentType,
     taskDraft: m.taskDraft ?? undefined,
     videoDraft: m.videoDraft ?? undefined,
+    taskUpdateDraft: m.taskUpdateDraft ?? undefined,
     contextLinks: m.contextLinks?.slice(0, 8),
+    resultGroups: m.resultGroups?.slice(0, 8),
     taskDraftStatus: m.taskDraftStatus,
     videoDraftStatus: m.videoDraftStatus,
+    taskUpdateDraftStatus: m.taskUpdateDraftStatus,
     createdTaskId: m.createdTaskId,
     createdVideoId: m.createdVideoId,
+    updatedTaskId: m.updatedTaskId,
   };
 }
 
@@ -187,11 +225,15 @@ function fromStoredMessage(m: StoredChatMessage): ChatMessage {
     intentType: sanitized.intentType,
     taskDraft: sanitized.taskDraft ?? null,
     videoDraft: sanitized.videoDraft ?? null,
+    taskUpdateDraft: sanitized.taskUpdateDraft ?? null,
     contextLinks: sanitized.contextLinks,
+    resultGroups: sanitized.resultGroups,
     taskDraftStatus: sanitized.taskDraftStatus,
     videoDraftStatus: sanitized.videoDraftStatus,
+    taskUpdateDraftStatus: sanitized.taskUpdateDraftStatus,
     createdTaskId: sanitized.createdTaskId,
     createdVideoId: sanitized.createdVideoId,
+    updatedTaskId: sanitized.updatedTaskId,
   };
 }
 
@@ -202,20 +244,29 @@ function isWelcomeOnly(messages: ChatMessage[]): boolean {
 const QUICK_ACTION_ICONS = {
   create_task: ClipboardList,
   create_video: Sparkles,
+  update_task: Pencil,
   priorities: CalendarDays,
   overdue_tasks: ClipboardList,
   my_tasks: ClipboardList,
   my_videos: Sparkles,
+  my_shootings: CalendarDays,
+  my_clients: MessageSquare,
   search_client: MessageSquare,
   search_video: Sparkles,
   client_followup: MessageSquare,
   draft_message: Send,
+  calendar_today: CalendarDays,
+  calendar_week: CalendarDays,
+  calendar_month: CalendarDays,
+  calendar_shootings: CalendarDays,
+  calendar_deliveries: CalendarDays,
 } satisfies Record<QuickActionId, typeof ClipboardList>;
 
 type AiAssistantClientProps = {
   staffName: string;
   canCreateTasks: boolean;
   canCreateVideos: boolean;
+  canUpdateTasks: boolean;
   visibleQuickActionIds: QuickActionId[];
   historyUserKey?: string | null;
   employeeId?: string | null;
@@ -226,6 +277,7 @@ export function AiAssistantClient({
   staffName,
   canCreateTasks,
   canCreateVideos,
+  canUpdateTasks,
   visibleQuickActionIds,
   historyUserKey,
   employeeId,
@@ -339,7 +391,9 @@ export function AiAssistantClient({
         intentType?: AiIntentType;
         taskDraft?: AiTaskDraftPayload | null;
         videoDraft?: AiVideoDraftPayload | null;
+        taskUpdateDraft?: AiTaskUpdateDraftPayload | null;
         contextLinks?: AiContextLink[];
+        resultGroups?: SupaiResultGroup[];
         error?: string;
       };
 
@@ -359,6 +413,7 @@ export function AiAssistantClient({
 
       const hasTaskDraft = Boolean(data.taskDraft?.title?.trim());
       const hasVideoDraft = Boolean(data.videoDraft?.title?.trim());
+      const hasTaskUpdateDraft = Boolean(data.taskUpdateDraft);
       const assistantMsg: ChatMessage = {
         id: newChatMessageId(),
         role: 'assistant',
@@ -367,14 +422,18 @@ export function AiAssistantClient({
           data.intentType,
           data.taskDraft,
           data.videoDraft,
+          data.taskUpdateDraft,
         ),
         createdAt: new Date().toISOString(),
         intentType: data.intentType,
         taskDraft: data.taskDraft ?? null,
         videoDraft: data.videoDraft ?? null,
-        contextLinks: data.contextLinks,
+        taskUpdateDraft: data.taskUpdateDraft ?? null,
+        contextLinks: data.resultGroups?.length ? undefined : data.contextLinks,
+        resultGroups: data.resultGroups,
         taskDraftStatus: hasTaskDraft ? 'pending' : undefined,
         videoDraftStatus: hasVideoDraft ? 'pending' : undefined,
+        taskUpdateDraftStatus: hasTaskUpdateDraft ? 'pending' : undefined,
       };
 
       setMessages([...outbound, assistantMsg]);
@@ -461,6 +520,7 @@ export function AiAssistantClient({
           {AI_CHAT_MAX_MESSAGE_CHARS} caractères
           {!canCreateTasks ? ' · création tâche non autorisée pour votre rôle' : ''}
           {!canCreateVideos ? ' · création vidéo non autorisée pour votre rôle' : ''}
+          {!canUpdateTasks ? ' · modification tâche non autorisée pour votre rôle' : ''}
         </p>
         <Button type="button" variant="outline" size="sm" className="rounded-full" onClick={resetChat}>
           <Trash2 className="mr-1.5 h-3.5 w-3.5" aria-hidden />
@@ -475,9 +535,11 @@ export function AiAssistantClient({
         {messages.map((m) => {
           const showTaskDraft = m.role === 'assistant' && shouldShowTaskDraftCard(m);
           const showVideoDraft = m.role === 'assistant' && shouldShowVideoDraftCard(m);
+          const showTaskUpdateDraft = m.role === 'assistant' && shouldShowTaskUpdateDraftCard(m);
           const showCopy = m.role === 'assistant' && m.intentType === 'draft_message';
           const showCreatedTaskLink = shouldShowCreatedTaskLink(m);
           const showCreatedVideoLink = shouldShowCreatedVideoLink(m);
+          const showUpdatedTaskLink = shouldShowUpdatedTaskLink(m);
 
           return (
             <div
@@ -530,6 +592,13 @@ export function AiAssistantClient({
                     </Button>
                   </div>
                 ) : null}
+                {showUpdatedTaskLink && m.updatedTaskId ? (
+                  <div className="mt-2">
+                    <Button asChild variant="outline" size="sm" className="rounded-full text-xs">
+                      <Link href={hrefTasksOpenDetail(m.updatedTaskId!)}>Voir la tâche</Link>
+                    </Button>
+                  </div>
+                ) : null}
                 {showTaskDraft && m.taskDraft ? (
                   <TaskDraftCard
                     draft={m.taskDraft}
@@ -541,6 +610,21 @@ export function AiAssistantClient({
                       patchMessage(m.id, {
                         taskDraftStatus: 'created',
                         createdTaskId: taskId,
+                      })
+                    }
+                  />
+                ) : null}
+                {showTaskUpdateDraft && m.taskUpdateDraft ? (
+                  <TaskUpdateDraftCard
+                    draft={m.taskUpdateDraft}
+                    canUpdate={canUpdateTasks}
+                    onCancel={() =>
+                      patchMessage(m.id, { taskUpdateDraftStatus: 'dismissed' })
+                    }
+                    onTaskUpdated={(taskId) =>
+                      patchMessage(m.id, {
+                        taskUpdateDraftStatus: 'updated',
+                        updatedTaskId: taskId,
                       })
                     }
                   />
@@ -560,7 +644,13 @@ export function AiAssistantClient({
                     }
                   />
                 ) : null}
-                {m.role === 'assistant' && m.contextLinks && m.contextLinks.length > 0 ? (
+                {m.role === 'assistant' && m.resultGroups && m.resultGroups.length > 0 ? (
+                  <SupAIResultGroups groups={m.resultGroups} />
+                ) : null}
+                {m.role === 'assistant' &&
+                m.contextLinks &&
+                m.contextLinks.length > 0 &&
+                !m.resultGroups?.length ? (
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {m.contextLinks.map((link) => (
                       <Button

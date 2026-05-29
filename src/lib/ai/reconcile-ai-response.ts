@@ -10,13 +10,21 @@ import {
   type AiVideoDraftPayload,
 } from '@/lib/ai/video-draft-schema';
 import {
+  aiTaskUpdateDraftPayloadSchema,
+  hasTaskUpdateChanges,
+  type AiTaskUpdateDraftPayload,
+} from '@/lib/ai/task-update-draft-schema';
+import {
   TASK_DRAFT_CONFIRM_REPLY,
+  TASK_UPDATE_DRAFT_CONFIRM_REPLY,
   SUPAI_EMPTY_REPLY,
   VIDEO_DRAFT_CONFIRM_REPLY,
 } from '@/lib/ai/supai-copy';
 import { detectUserChatIntent } from '@/lib/ai/detect-user-intent';
 import { extractTaskDraftFromUserMessage } from '@/lib/ai/extract-task-draft-from-message';
+import { extractTaskUpdateFromUserMessage } from '@/lib/ai/extract-task-update-from-message';
 import { normalizeTaskDraft } from '@/lib/ai/normalize-task-draft';
+import { normalizeTaskUpdateDraft } from '@/lib/ai/normalize-task-update-draft';
 import { extractVideoDraftFromUserMessage, normalizeVideoDraft } from '@/lib/ai/extract-video-draft-from-message';
 import { looksLikeStructuredJson, stripModelArtifacts } from '@/lib/ai/parse-ai-response';
 
@@ -28,6 +36,34 @@ function impliesDirectTaskCreation(reply: string): boolean {
 
 function impliesDirectVideoCreation(reply: string): boolean {
   return /\b(je vais créer|je crée|vidéo créée|video created|production créée)\b/i.test(reply);
+}
+
+function impliesDirectTaskUpdate(reply: string): boolean {
+  return /\b(j'ai modifié|j'ai mis à jour|modification effectuée|tâche modifiée|task updated)\b/i.test(
+    reply,
+  );
+}
+
+function mergeTaskUpdateDraft(
+  fromModel: AiTaskUpdateDraftPayload | null | undefined,
+  fromUser: AiTaskUpdateDraftPayload | null,
+  userMessage: string,
+): AiTaskUpdateDraftPayload | null {
+  const modelOk = fromModel ? aiTaskUpdateDraftPayloadSchema.safeParse(fromModel) : null;
+  const userOk = fromUser ? aiTaskUpdateDraftPayloadSchema.safeParse(fromUser) : null;
+  if (!modelOk?.success && !userOk?.success) return null;
+
+  const merged: AiTaskUpdateDraftPayload = {
+    taskSearchText: userOk?.success ? userOk.data.taskSearchText : modelOk?.data?.taskSearchText,
+    taskId: modelOk?.success ? modelOk.data.taskId : userOk?.data?.taskId,
+    currentTitle: modelOk?.success ? modelOk.data.currentTitle : userOk?.data?.currentTitle,
+    changes: {
+      ...(modelOk?.success ? modelOk.data.changes : {}),
+      ...(userOk?.success ? userOk.data.changes : {}),
+    },
+  };
+
+  return normalizeTaskUpdateDraft(merged, userMessage);
 }
 
 function mergeTaskDraft(
@@ -95,6 +131,7 @@ export function reconcileAiResponse(
   userMessage: string,
   canCreateTasks: boolean,
   canCreateVideos: boolean,
+  canUpdateTasks: boolean,
 ): AiStructuredResponse {
   const userIntent = detectUserChatIntent(userMessage);
   const cleanedRaw = stripModelArtifacts(rawModelText);
@@ -103,6 +140,7 @@ export function reconcileAiResponse(
   let intentType = structured.intentType;
   let taskDraft = structured.taskDraft;
   let videoDraft = structured.videoDraft;
+  let taskUpdateDraft = structured.taskUpdateDraft;
 
   if (looksLikeStructuredJson(reply)) {
     reply = cleanedRaw.trim();
@@ -116,7 +154,43 @@ export function reconcileAiResponse(
     if (!reply) {
       reply = SUPAI_EMPTY_REPLY;
     }
-    return { reply, intentType: 'draft_message', taskDraft: null, videoDraft: null };
+    return { reply, intentType: 'draft_message', taskDraft: null, videoDraft: null, taskUpdateDraft: null };
+  }
+
+  const shouldHaveTaskUpdate =
+    canUpdateTasks &&
+    (userIntent.isUpdateTask ||
+      intentType === 'update_task_draft' ||
+      Boolean(taskUpdateDraft));
+
+  if (shouldHaveTaskUpdate) {
+    const synthesized = extractTaskUpdateFromUserMessage(userMessage);
+    taskUpdateDraft = mergeTaskUpdateDraft(taskUpdateDraft, synthesized, userMessage);
+
+    if (taskUpdateDraft && hasTaskUpdateChanges(taskUpdateDraft.changes)) {
+      intentType = 'update_task_draft';
+      reply = TASK_UPDATE_DRAFT_CONFIRM_REPLY;
+      return { reply, intentType, taskDraft: null, videoDraft: null, taskUpdateDraft };
+    }
+  }
+
+  if (intentType === 'update_task_draft' && taskUpdateDraft && hasTaskUpdateChanges(taskUpdateDraft.changes)) {
+    taskUpdateDraft = normalizeTaskUpdateDraft(taskUpdateDraft, userMessage);
+    reply = TASK_UPDATE_DRAFT_CONFIRM_REPLY;
+    return { reply, intentType, taskDraft: null, videoDraft: null, taskUpdateDraft };
+  }
+
+  if (reply && impliesDirectTaskUpdate(reply) && userIntent.isUpdateTask && canUpdateTasks) {
+    const synthesized = extractTaskUpdateFromUserMessage(userMessage);
+    if (synthesized && hasTaskUpdateChanges(synthesized.changes)) {
+      return {
+        reply: TASK_UPDATE_DRAFT_CONFIRM_REPLY,
+        intentType: 'update_task_draft',
+        taskDraft: null,
+        videoDraft: null,
+        taskUpdateDraft: normalizeTaskUpdateDraft(synthesized, userMessage),
+      };
+    }
   }
 
   const shouldHaveVideoDraft =
@@ -132,13 +206,13 @@ export function reconcileAiResponse(
     if (videoDraft) {
       intentType = 'create_video_draft';
       reply = VIDEO_DRAFT_CONFIRM_REPLY;
-      return { reply, intentType, taskDraft: null, videoDraft };
+      return { reply, intentType, taskDraft: null, videoDraft, taskUpdateDraft: null };
     }
   }
 
   if (intentType === 'create_video_draft' && videoDraft) {
     reply = VIDEO_DRAFT_CONFIRM_REPLY;
-    return { reply, intentType, taskDraft: null, videoDraft };
+    return { reply, intentType, taskDraft: null, videoDraft, taskUpdateDraft: null };
   }
 
   if (reply && impliesDirectVideoCreation(reply) && userIntent.isCreateVideo && canCreateVideos) {
@@ -149,6 +223,7 @@ export function reconcileAiResponse(
         intentType: 'create_video_draft',
         taskDraft: null,
         videoDraft: normalizeVideoDraft(synthesized, userMessage),
+        taskUpdateDraft: null,
       };
     }
   }
@@ -166,14 +241,14 @@ export function reconcileAiResponse(
     if (taskDraft) {
       intentType = 'create_task_draft';
       reply = TASK_DRAFT_CONFIRM_REPLY;
-      return { reply, intentType, taskDraft, videoDraft: null };
+      return { reply, intentType, taskDraft, videoDraft: null, taskUpdateDraft: null };
     }
   }
 
   if (intentType === 'create_task_draft' && taskDraft) {
     taskDraft = normalizeTaskDraft(taskDraft, userMessage);
     reply = TASK_DRAFT_CONFIRM_REPLY;
-    return { reply, intentType, taskDraft, videoDraft: null };
+    return { reply, intentType, taskDraft, videoDraft: null, taskUpdateDraft: null };
   }
 
   if (reply && impliesDirectTaskCreation(reply) && userIntent.isCreateTask && canCreateTasks) {
@@ -184,6 +259,7 @@ export function reconcileAiResponse(
         intentType: 'create_task_draft',
         taskDraft: normalizeTaskDraft(synthesized, userMessage),
         videoDraft: null,
+        taskUpdateDraft: null,
       };
     }
   }
@@ -197,5 +273,6 @@ export function reconcileAiResponse(
     intentType: intentType ?? 'general_chat',
     taskDraft: null,
     videoDraft: null,
+    taskUpdateDraft: null,
   };
 }

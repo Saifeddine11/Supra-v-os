@@ -6,21 +6,39 @@ import { assertClientRecordVisible } from '@/lib/auth/data-scope';
 import { actionError, actionOk, type ActionResult } from '@/lib/actions/types';
 import { listClients } from '@/lib/data/clients';
 import { listEmployeesForSelect } from '@/lib/data/employees';
+import { resolveEmployeeAlias } from '@/lib/ai/employee-aliases';
+import { resolveClientAlias } from '@/lib/ai/client-aliases';
+import type { AliasResolveResult } from '@/lib/ai/name-normalize';
 
 export type ResolveMatch = { id: string; label: string };
 
 export type ResolveReferenceResult =
   | { status: 'none' }
-  | { status: 'resolved'; id: string; label: string }
+  | {
+      status: 'resolved';
+      id: string;
+      label: string;
+      query: string;
+      matchedVia?: 'alias' | 'exact_full' | 'exact_first' | 'starts_with' | 'contains';
+    }
   | { status: 'not_found'; query: string }
   | { status: 'ambiguous'; query: string; matches: ResolveMatch[] };
 
-function normalizeName(value: string): string {
-  return value.trim().toLowerCase();
-}
-
-function firstNameOf(fullName: string): string {
-  return normalizeName(fullName).split(/\s+/)[0] ?? '';
+function mapAliasResult(result: AliasResolveResult): ResolveReferenceResult {
+  if (result.status === 'none') return { status: 'none' };
+  if (result.status === 'resolved') {
+    return {
+      status: 'resolved',
+      id: result.id,
+      label: result.label,
+      query: result.query,
+      matchedVia: result.matchedVia,
+    };
+  }
+  if (result.status === 'not_found') {
+    return { status: 'not_found', query: result.query };
+  }
+  return { status: 'ambiguous', query: result.query, matches: result.matches };
 }
 
 export async function resolveClientForTask(
@@ -68,46 +86,15 @@ export async function previewClientResolution(
   const name = clientName.trim();
   if (!name) return { status: 'none' };
 
-  const matches = await listClients({ search: name }, ctx);
-  if (matches.length === 0) return { status: 'not_found', query: name };
+  const clients = await listClients({}, ctx);
+  if (clients.length === 0) return { status: 'not_found', query: name };
 
-  const normalized = normalizeName(name);
-  const exact = matches.filter((m) => normalizeName(m.name) === normalized);
-  if (exact.length === 1) {
-    return { status: 'resolved', id: exact[0].id, label: exact[0].name };
-  }
-  if (exact.length > 1) {
-    return {
-      status: 'ambiguous',
-      query: name,
-      matches: exact.map((m) => ({ id: m.id, label: m.name })),
-    };
-  }
-
-  const wordStart = matches.filter((m) => {
-    const n = normalizeName(m.name);
-    return n.startsWith(normalized) || n.split(/\s+/).some((w) => w.startsWith(normalized));
-  });
-  if (wordStart.length === 1) {
-    return { status: 'resolved', id: wordStart[0].id, label: wordStart[0].name };
-  }
-  if (wordStart.length > 1) {
-    return {
-      status: 'ambiguous',
-      query: name,
-      matches: wordStart.slice(0, 5).map((m) => ({ id: m.id, label: m.name })),
-    };
-  }
-
-  if (matches.length === 1) {
-    return { status: 'resolved', id: matches[0].id, label: matches[0].name };
-  }
-
-  return {
-    status: 'ambiguous',
-    query: name,
-    matches: matches.slice(0, 5).map((m) => ({ id: m.id, label: m.name })),
-  };
+  return mapAliasResult(
+    resolveClientAlias(
+      name,
+      clients.map((c) => ({ id: c.id, name: c.name })),
+    ),
+  );
 }
 
 export async function resolveAssigneeForTask(
@@ -152,48 +139,12 @@ export async function previewAssigneeResolution(
   const employees = await listEmployeesForSelect(ctx);
   if (employees.length === 0) return { status: 'not_found', query };
 
-  const normalized = normalizeName(query);
-  const exact = employees.filter((e) => normalizeName(e.full_name) === normalized);
-  if (exact.length === 1) {
-    return { status: 'resolved', id: exact[0].id, label: exact[0].full_name };
-  }
-  if (exact.length > 1) {
-    return {
-      status: 'ambiguous',
+  return mapAliasResult(
+    resolveEmployeeAlias(
       query,
-      matches: exact.map((e) => ({ id: e.id, label: e.full_name })),
-    };
-  }
-
-  const firstNameMatches = employees.filter((e) => firstNameOf(e.full_name) === normalized);
-  if (firstNameMatches.length === 1) {
-    return {
-      status: 'resolved',
-      id: firstNameMatches[0].id,
-      label: firstNameMatches[0].full_name,
-    };
-  }
-  if (firstNameMatches.length > 1) {
-    return {
-      status: 'ambiguous',
-      query,
-      matches: firstNameMatches.map((e) => ({ id: e.id, label: e.full_name })),
-    };
-  }
-
-  const contains = employees.filter((e) => normalizeName(e.full_name).includes(normalized));
-  if (contains.length === 1) {
-    return { status: 'resolved', id: contains[0].id, label: contains[0].full_name };
-  }
-  if (contains.length > 1) {
-    return {
-      status: 'ambiguous',
-      query,
-      matches: contains.slice(0, 5).map((e) => ({ id: e.id, label: e.full_name })),
-    };
-  }
-
-  return { status: 'not_found', query };
+      employees.map((e) => ({ id: e.id, full_name: e.full_name })),
+    ),
+  );
 }
 
 export type TaskDraftResolutionPreview = {
