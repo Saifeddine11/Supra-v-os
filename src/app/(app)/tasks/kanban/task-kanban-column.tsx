@@ -16,6 +16,7 @@ export function TaskKanbanColumn({
   canDelete,
   dragEnabled,
   stackOnTop,
+  pulseTaskId,
 }: {
   status: TaskStatus;
   label: string;
@@ -26,6 +27,7 @@ export function TaskKanbanColumn({
   canDelete: boolean;
   dragEnabled: boolean;
   stackOnTop: boolean;
+  pulseTaskId?: string | null;
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: status,
@@ -91,6 +93,7 @@ export function TaskKanbanColumn({
               canDelete={canDelete}
               dragEnabled={dragEnabled}
               compact={compactCards}
+              pulseHighlight={pulseTaskId === t.id}
             />
           ))
         )}

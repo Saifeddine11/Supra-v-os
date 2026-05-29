@@ -19,11 +19,13 @@ import {
   taskListingDenied,
 } from '@/lib/auth/data-scope';
 import { actionError, actionOk, getPostgrestError, type ActionResult } from '@/lib/actions/types';
-import type { TaskPriority, TaskStatus } from '@/types/database';
+import type { TaskPriority, TaskStatus, TaskEnriched } from '@/types/database';
 import { isTaskStatusAllowedInWorkflow } from '@/types/domain';
+import { createTaskCore } from '@/lib/tasks/create-task-core';
 import { notifyTaskAssignees, notifyTaskBlocked } from '@/lib/notifications/task-events';
 import { logStaffActivity } from '@/lib/activity/log-activity';
 import { requireAssignableEmployee } from '@/lib/data/employee-guards';
+import { getTaskById } from '@/lib/data/tasks';
 import {
   fetchAssignmentsForTasks,
   legacyPrimaryAssignee,
@@ -95,82 +97,23 @@ export async function createTaskAction(formData: FormData): Promise<ActionResult
   const inactive = assertActiveEmployee(ctx);
   if (inactive) return inactive;
 
-  const readSb = await createClient();
-  const writeSb = await resolveTaskMutationClient(ctx);
-  const {
-    data: { user },
-  } = await readSb.auth.getUser();
-  if (!user) return actionError('Session expirée.');
-
   const title = String(formData.get('title') ?? '').trim();
   if (!title) return actionError('Le titre est requis.');
 
   const clientId = String(formData.get('client_id') ?? '').trim();
-  let assigneeIds = parseAssigneeIdsFromForm(formData);
+  const assigneeIds = parseAssigneeIdsFromForm(formData);
   const deadlineRaw = String(formData.get('deadline') ?? '').trim();
-
-  if (clientId && !(await assertClientRecordVisible(readSb, ctx, clientId))) {
-    return actionError('Client non autorisé pour cette tâche.');
-  }
-
-  if (shouldScopeTasksToAssignee(ctx) && ctx.employee) {
-    const eid = ctx.employee.id;
-    if (assigneeIds.some((id) => id && id !== eid)) {
-      return actionError('Vous ne pouvez vous assigner des tâches qu’à vous-même.');
-    }
-    if (assigneeIds.length === 0) assigneeIds = [eid];
-  }
-
-  for (const aid of assigneeIds) {
-    const assignCheck = await requireAssignableEmployee(readSb, aid);
-    if (!assignCheck.ok) return assignCheck;
-  }
-
-  const primary = legacyPrimaryAssignee(assigneeIds);
-
   const status = (String(formData.get('status') ?? 'todo') || 'todo') as TaskStatus;
-  if (!isTaskStatusAllowedInWorkflow(status)) {
-    return actionError('Statut non disponible dans le workflow.');
-  }
 
-  const row = {
+  return createTaskCore(ctx, {
     title,
     description: String(formData.get('description') ?? '').trim() || null,
-    client_id: clientId || null,
-    assignee_id: primary.assignee_id,
-    status,
+    clientId: clientId || null,
+    assigneeIds,
+    deadline: deadlineRaw || null,
     priority: (String(formData.get('priority') ?? 'normal') || 'normal') as TaskPriority,
-    deadline: deadlineRaw ? new Date(deadlineRaw).toISOString() : null,
-    created_by: user.id,
-  };
-
-  const { data, error } = await writeSb.from('tasks').insert(row).select('id').single();
-  if (error) {
-    console.error('[createTaskAction] insert tasks:', error);
-    return actionError(formatTaskMutationDbError(error));
-  }
-
-  try {
-    await replaceTaskAssignments(writeSb, data.id, assigneeIds);
-  } catch (e) {
-    await writeSb.from('tasks').delete().eq('id', data.id);
-    console.error('[createTaskAction] task_assignments:', e);
-    return actionError(formatTaskMutationDbError(e));
-  }
-
-  await logStaffActivity(ctx, {
-    action: 'created',
-    entityType: 'task',
-    entityId: data.id,
-    metadata: { title },
+    status,
   });
-
-  await notifyTaskAssignees(assigneeIds, data.id, title);
-
-  revalidatePath('/tasks');
-  revalidatePath('/tasks/calendar');
-  revalidatePath('/dashboard');
-  return actionOk({ id: data.id });
 }
 
 export async function updateTaskAction(id: string, formData: FormData): Promise<ActionResult> {
@@ -305,6 +248,8 @@ export async function updateTaskStatusAction(id: string, status: TaskStatus): Pr
     return actionError(formatTaskMutationDbError(error));
   }
 
+  const { data: linkedVideo } = await readSb.from('tasks').select('video_id').eq('id', id).maybeSingle();
+
   await logStaffActivity(ctx, {
     action: 'updated',
     entityType: 'task',
@@ -325,7 +270,30 @@ export async function updateTaskStatusAction(id: string, status: TaskStatus): Pr
   revalidatePath('/tasks');
   revalidatePath('/tasks/calendar');
   revalidatePath('/dashboard');
+  if (linkedVideo?.video_id) {
+    revalidatePath('/videos');
+  }
   return actionOk();
+}
+
+const TASK_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+/** Deep-link alerte / lien interne — ouvre la fiche tâche si visible pour l'utilisateur. */
+export async function getTaskEnrichedForHighlightAction(
+  taskId: string,
+): Promise<ActionResult<TaskEnriched>> {
+  const ctx = await getAuthContext();
+  if (!ctx) return actionError('Non authentifié.');
+  const id = String(taskId ?? '').trim();
+  if (!id || !TASK_UUID_RE.test(id)) return actionError('Identifiant tâche invalide.');
+  try {
+    const task = await getTaskById(id, ctx);
+    if (!task) return actionError('Tâche introuvable ou accès non autorisé.');
+    return actionOk(task);
+  } catch {
+    return actionError('Tâche introuvable ou accès non autorisé.');
+  }
 }
 
 export async function deleteTaskAction(id: string): Promise<ActionResult> {

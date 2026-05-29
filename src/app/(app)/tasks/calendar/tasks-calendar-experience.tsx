@@ -7,6 +7,7 @@ import type { Client, Employee, TaskEnriched } from '@/types/database';
 import { PRIORITY_MAP, TASK_STATUS_MAP } from '@/types/domain';
 import { cn } from '@/lib/utils/cn';
 import { getCalendarMobileTaskLabel } from '@/lib/tasks/calendar-mobile-label';
+import { isTaskOverdueForAlert } from '@/lib/alerts/active-alert-rules';
 import type { CalendarColorBy } from '@/lib/tasks/calendar-visual';
 import {
   calendarTaskOverdue,
@@ -74,7 +75,7 @@ function dayAgendaGroups(tasks: TaskEnriched[]) {
       done.push(t);
       continue;
     }
-    if (t.deadline && new Date(t.deadline).getTime() < now) overdue.push(t);
+    if (isTaskOverdueForAlert({ status: t.status, deadline: t.deadline, now: new Date(now) })) overdue.push(t);
     else active.push(t);
   }
   overdue.sort(sortByDeadline);

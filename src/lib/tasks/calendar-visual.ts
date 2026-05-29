@@ -1,4 +1,5 @@
 import type { TaskEnriched, TaskPriority, TaskStatus } from '@/types/database';
+import { isTaskOverdueForAlert } from '@/lib/alerts/active-alert-rules';
 import { getCalendarMobileTaskLabel } from '@/lib/tasks/calendar-mobile-label';
 
 export type CalendarColorBy = 'status' | 'priority' | 'assignee' | 'client';
@@ -28,8 +29,7 @@ export function assigneeAccentIndex(id: string): number {
 }
 
 export function calendarTaskOverdue(task: TaskEnriched): boolean {
-  if (!task.deadline || task.status === 'done') return false;
-  return new Date(task.deadline).getTime() < Date.now();
+  return isTaskOverdueForAlert({ status: task.status, deadline: task.deadline });
 }
 
 function statusAccent(status: TaskStatus, overdue: boolean): CalendarTaskAccent {

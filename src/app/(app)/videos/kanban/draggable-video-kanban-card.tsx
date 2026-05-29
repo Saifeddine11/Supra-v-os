@@ -21,7 +21,13 @@ import {
 import { effectiveClientDeliveryIso, isVideoDeliveryOverdue } from '@/lib/videos/video-schedule';
 import { videoKanbanAssigneeSummary } from '@/lib/videos/video-assignee-labels';
 import { cn } from '@/lib/utils/cn';
-import { getStatusBlockSurface, videoWorkflowToStatusTone } from '@/lib/ui/status-block-tone';
+import {
+  getKanbanCardPresentation,
+  getVideoStatusAccentColor,
+  KANBAN_CARD_SHELL,
+  KANBAN_STATUS_ACCENT_CLASS,
+  kanbanStatusAccentStyle,
+} from '@/lib/ui/kanban-card-colors';
 import {
   getClientDeliveryBadge,
   getShootingBadge,
@@ -174,7 +180,13 @@ export function DraggableVideoKanbanCard({
 
   const od = isVideoDeliveryOverdue(v);
   const needsShootingConfirm = videoShowsShootingConfirmBadge(v, scheduleNow, viewerRole, viewerEmployeeId);
-  const tone = videoWorkflowToStatusTone(v, { deliveryOverdue: Boolean(od) });
+  const clientHex = v.clients?.name
+    ? getClientColor({ name: v.clients.name, color_hex: v.clients.color_hex })
+    : null;
+  const kanbanColors = getKanbanCardPresentation({
+    clientHex,
+    statusAccentHex: getVideoStatusAccentColor(v.status),
+  });
   const deliveryIso = effectiveClientDeliveryIso(v);
   const shootB = getShootingBadge(v.shooting_date, v.status, scheduleNow);
   const delB = getClientDeliveryBadge(v, scheduleNow);
@@ -238,29 +250,22 @@ export function DraggableVideoKanbanCard({
   return (
     <article
       ref={setNodeRef}
-      style={style}
+      style={{ ...kanbanColors.style, ...style }}
       className={cn(
-        'relative shrink-0 max-w-full overflow-hidden rounded-xl border border-border/50 shadow-sm',
+        KANBAN_CARD_SHELL,
+        kanbanColors.className,
         compact ? 'min-h-[76px] p-2.5 pl-3' : 'min-h-[120px] p-3 pl-3.5',
-        getStatusBlockSurface(tone, { urgentGlow: Boolean(od) }),
         highlightVideoId === v.id && 'ring-1 ring-primary/40 ring-offset-0',
         isDragging && 'relative z-[200] !transition-none',
         isDragging &&
           'scale-[1.02] cursor-grabbing opacity-[0.98] shadow-2xl ring-1 ring-primary/25 dark:shadow-black/50 dark:ring-primary/30',
       )}
     >
-      {v.clients?.name ? (
-        <span
-          className="pointer-events-none absolute bottom-2 left-1 top-2 w-[3px] rounded-full opacity-95"
-          style={{
-            backgroundColor: getClientColor({
-              name: v.clients.name,
-              color_hex: v.clients.color_hex,
-            }),
-          }}
-          aria-hidden
-        />
-      ) : null}
+      <span
+        className={KANBAN_STATUS_ACCENT_CLASS}
+        style={kanbanStatusAccentStyle()}
+        aria-hidden
+      />
 
       {compact ? (
         <div className="flex items-stretch gap-1.5">

@@ -184,6 +184,7 @@ export function getTaskDeadlineState(
   now: Date = new Date(),
 ): TaskDeadlineState {
   if (!deadline || status === 'done' || status === 'archived') return 'none';
+  if (status === 'waiting_client' || status === 'review') return 'none';
   const dl = new Date(deadline).getTime();
   if (!Number.isFinite(dl)) return 'none';
   if (dl < now.getTime()) return 'overdue';

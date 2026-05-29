@@ -20,6 +20,7 @@ import {
   Globe,
   Bell,
   Settings,
+  Sparkles,
 } from 'lucide-react';
 
 const MAP: Record<NavIconName, LucideIcon> = {
@@ -40,6 +41,7 @@ const MAP: Record<NavIconName, LucideIcon> = {
   Globe,
   Bell,
   Settings,
+  Sparkles,
 };
 
 export function NavIcon({ name, className }: { name: NavIconName; className?: string }) {

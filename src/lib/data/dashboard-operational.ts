@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { endOfDay, format, formatDistanceToNow, isBefore, isWithinInterval, startOfDay } from 'date-fns';
+import { endOfDay, format, formatDistanceToNow, isWithinInterval, startOfDay } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { createClient } from '@/lib/supabase/server';
 import type { AuthContext } from '@/lib/auth/permissions';
@@ -459,7 +459,7 @@ export async function fetchDashboardOperational(ctx: AuthContext): Promise<Dashb
   for (const t of openTasks) {
     if (!isTaskUrgentForAlert({ status: t.status as string, priority: t.priority as TaskPriority })) continue;
     const dl = t.deadline as string | null;
-    const overdue = dl ? isBefore(new Date(dl), dayStart) : false;
+    const overdue = dl ? isTaskOverdueForAlert({ status: t.status as string, deadline: dl, now }) : false;
     const assignee = labelTaskAssignees(
       t.id as string,
       (t.assignee_id as string | null) ?? null,

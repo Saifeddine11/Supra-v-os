@@ -23,8 +23,8 @@ export async function GET(_request: Request) {
 
   try {
     const admin = createAdminClient();
-    const items = await fetchCriticalAlertsWithClient(admin, ctx);
-    const body = mapCriticalAlertsToActiveApi(items);
+    const bundle = await fetchCriticalAlertsWithClient(admin, ctx);
+    const body = mapCriticalAlertsToActiveApi(bundle);
 
     if (process.env.NODE_ENV === 'development') {
       console.log('[critical-active] user', ctx.employee.id, ctx.role);

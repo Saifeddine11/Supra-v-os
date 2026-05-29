@@ -121,7 +121,7 @@ export function VideosWorkspace({
         const msg =
           !res.ok && res.error && !res.error.toLowerCase().includes('introuvable')
             ? res.error
-            : 'Vidéo introuvable';
+            : 'Vidéo introuvable ou déjà résolue';
         toast.error(msg);
         setDetail(null);
         const p = new URLSearchParams(searchParamsRef.current.toString());

@@ -7,7 +7,7 @@ import type { Notification } from '@/types/database';
 import { NOTIFICATION_TYPE_LABELS } from '@/lib/notifications/labels';
 import { playMandatoryCriticalAlarm } from '@/lib/notifications/notification-sound';
 import { getNotificationSoundLevel, soundLevelRank } from '@/lib/notifications/notification-sound-level';
-import type { CriticalActiveAlertDTO, CriticalActiveAlertsResponse } from '@/lib/notifications/critical-active-types';
+import type { CriticalActiveAlertDTO, CriticalActiveAlertsResponse, CriticalActiveAlertTotals } from '@/lib/notifications/critical-active-types';
 import { CRITICAL_ALERT_TOAST_SEEN_KEY, CRITICAL_BAR_SNOOZE_KEY } from '@/lib/notifications/critical-bar-constants';
 import { cn } from '@/lib/utils/cn';
 
@@ -108,8 +108,8 @@ export function acknowledgeCriticalAlertsShownInBanner(p: CriticalActiveAlertsRe
 }
 
 function criticalActiveFingerprints(p: CriticalActiveAlertsResponse): string[] {
-  // Fingerprint minimal et stable : id serveur dérivé (task-od-*, vid-od-*, etc.)
-  return p.alerts
+  const source = p.allAlerts?.length ? p.allAlerts : p.alerts;
+  return source
     .filter((a) => a.severity === 'critical')
     .map((a) => `ca:${a.id}`)
     .sort();
@@ -161,6 +161,30 @@ function hrefForEntity(entityType: string): string {
   }
 }
 
+export function summarizeCriticalAlertTotals(totals: CriticalActiveAlertTotals): string {
+  const parts: string[] = [];
+  if (totals.taskOverdueTotalCount) {
+    parts.push(
+      `${totals.taskOverdueTotalCount} tâche${totals.taskOverdueTotalCount > 1 ? 's' : ''} en retard`,
+    );
+  }
+  if (totals.videoDeliveryTotalCount) {
+    parts.push(
+      `${totals.videoDeliveryTotalCount} livraison${totals.videoDeliveryTotalCount > 1 ? 's' : ''}`,
+    );
+  }
+  if (totals.shootingActionTotalCount) {
+    parts.push(
+      `${totals.shootingActionTotalCount} tournage${totals.shootingActionTotalCount > 1 ? 's' : ''}`,
+    );
+  }
+  if (totals.invoiceOverdueTotalCount) {
+    parts.push(`${totals.invoiceOverdueTotalCount} facturation`);
+  }
+  return parts.join(' · ');
+}
+
+/** @deprecated Préférer summarizeCriticalAlertTotals avec les totaux serveur. */
 export function summarizeCriticalAlerts(alerts: CriticalActiveAlertDTO[]): string {
   const tasks = alerts.filter((a) => a.entityType === 'task').length;
   const deliveries = alerts.filter((a) => a.id.startsWith('vid-od-')).length;
@@ -183,13 +207,28 @@ export function summarizeCriticalAlerts(alerts: CriticalActiveAlertDTO[]): strin
     .join(' · ');
 }
 
+export function formatActionableBannerTitle(
+  totals: CriticalActiveAlertTotals,
+  scopeHint: CriticalActiveAlertsResponse['scopeHint'],
+): string {
+  const scopeWord = scopeHint === 'team' ? 'équipe' : 'opérationnelles';
+  if (totals.totalActionableCount > 1) {
+    return `${totals.totalActionableCount} actions ${scopeWord} à traiter`;
+  }
+  if (totals.totalActionableCount === 1) {
+    return `1 action ${scopeWord} à traiter`;
+  }
+  return 'Points à suivre';
+}
+
 /** Ne déclenche pas le son pour des empreintes déjà absentes des alertes actives. */
 export function filterNewCriticalFingerprints(
   fingerprints: string[],
   active: CriticalActiveAlertsResponse | null,
 ): string[] {
   if (!active) return fingerprints;
-  const live = new Set(active.alerts.filter((a) => a.severity === 'critical').map((a) => `ca:${a.id}`));
+  const source = active.allAlerts?.length ? active.allAlerts : active.alerts;
+  const live = new Set(source.filter((a) => a.severity === 'critical').map((a) => `ca:${a.id}`));
   return fingerprints.filter((fp) => live.has(fp));
 }
 
@@ -211,8 +250,8 @@ function buildContentFromActiveApi(p: CriticalActiveAlertsResponse): {
     };
   }
   return {
-    title: `${p.alerts.length} actions à traiter`,
-    message: summarizeCriticalAlerts(p.alerts),
+    title: formatActionableBannerTitle(p.totals, p.scopeHint),
+    message: summarizeCriticalAlertTotals(p.totals),
     href: '/dashboard',
     tone: 'critical',
   };

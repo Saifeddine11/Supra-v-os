@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import {
   DndContext,
   PointerSensor,
@@ -10,21 +10,22 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import type { Client, Employee, TaskStatus } from '@/types/database';
 import type { TaskEnriched } from '@/types/database';
 import { TASK_KANBAN_STATUSES, TASK_STATUS_MAP, taskStatusForKanbanBucket } from '@/types/domain';
 import { TaskKanbanColumn } from './kanban/task-kanban-column';
+import { TaskDetailDialog } from './kanban/task-detail-dialog';
 import { requestCriticalAlertsRefresh } from '@/lib/alerts/request-critical-alerts-refresh';
-import { updateTaskStatusAction } from './actions';
+import { getTaskEnrichedForHighlightAction, updateTaskStatusAction } from './actions';
+import { isTaskPausedForAlerts, isTaskResolved } from '@/lib/alerts/active-alert-rules';
+import { TASK_HIGHLIGHT_QUERY_PARAM } from '@/lib/tasks/task-deep-link';
 import {
   KANBAN_BOARD_OUTER_CLASS,
   KANBAN_COLUMNS_ROW_CLASS,
   KANBAN_SCROLL_CLASS,
 } from '@/lib/ui/kanban-layout';
-
-/** Intra-column reorder : possible plus tard avec @dnd-kit/sortable + champ `position`. */
 
 function resolveDropStatus(overId: unknown, tasks: TaskEnriched[]): TaskStatus | null {
   if (overId == null || typeof overId !== 'string') return null;
@@ -43,30 +44,37 @@ function getDesktopMatches(): boolean {
   return window.matchMedia('(min-width: 768px)').matches;
 }
 
-/** Glisser-déposer uniquement sur desktop — sur mobile le menu statut suffit. */
 function useDesktopDragEnabled(): boolean {
   return useSyncExternalStore(subscribeMediaQuery, getDesktopMatches, () => false);
 }
 
-export function TasksKanban({
-  tasks,
-  clients,
-  employees,
-  canDelete,
-  allowKanbanDrag,
-}: {
+function scrollTaskCardIntoView(taskId: string) {
+  const el = document.querySelector(`[data-task-id="${taskId}"]`) as HTMLElement | null;
+  if (!el) return;
+  el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' });
+}
+
+type KanbanProps = {
   tasks: TaskEnriched[];
   clients: Pick<Client, 'id' | 'name' | 'color_hex' | 'color_label'>[];
   employees: Pick<Employee, 'id' | 'full_name'>[];
   canDelete: boolean;
   allowKanbanDrag: boolean;
-}) {
+};
+
+function TasksKanbanBoard({
+  tasks,
+  clients,
+  employees,
+  canDelete,
+  allowKanbanDrag,
+  pulseTaskId,
+}: KanbanProps & { pulseTaskId: string | null }) {
   const router = useRouter();
   const isDesktop = useDesktopDragEnabled();
   const dragEnabled = allowKanbanDrag && isDesktop;
 
   const [localTasks, setLocalTasks] = useState<TaskEnriched[]>(tasks);
-  /** Colonne d’origine : élévation du stacking pour que la carte ne passe pas sous les colonnes suivantes (flex paint order). */
   const [activeSourceStatus, setActiveSourceStatus] = useState<TaskStatus | null>(null);
 
   useEffect(() => {
@@ -149,11 +157,101 @@ export function TasksKanban({
                 canDelete={canDelete}
                 dragEnabled={dragEnabled}
                 stackOnTop={dragEnabled && activeSourceStatus === col.status}
+                pulseTaskId={pulseTaskId}
               />
             ))}
           </div>
         </div>
       </div>
     </DndContext>
+  );
+}
+
+function TasksKanbanDeepLink(props: KanbanProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const highlightId = (searchParams.get(TASK_HIGHLIGHT_QUERY_PARAM) ?? '').trim();
+  const [pulseTaskId, setPulseTaskId] = useState<string | null>(null);
+  const [deepLinkTask, setDeepLinkTask] = useState<TaskEnriched | null>(null);
+  const handledRef = useRef('');
+
+  const clearHighlightParam = useCallback(() => {
+    const p = new URLSearchParams(searchParams.toString());
+    p.delete(TASK_HIGHLIGHT_QUERY_PARAM);
+    const next = p.toString();
+    router.replace(next ? `${pathname}?${next}` : pathname, { scroll: false });
+  }, [pathname, router, searchParams]);
+
+  useEffect(() => {
+    if (!highlightId) {
+      handledRef.current = '';
+      setDeepLinkTask(null);
+      return;
+    }
+    if (handledRef.current === highlightId) return;
+
+    let cancelled = false;
+    let pulseTimer: number | undefined;
+
+    void (async () => {
+      let task = props.tasks.find((t) => t.id === highlightId) ?? null;
+      if (!task) {
+        const res = await getTaskEnrichedForHighlightAction(highlightId);
+        if (res.ok && res.data) task = res.data;
+      }
+
+      if (cancelled) return;
+
+      if (!task || isTaskResolved(task.status) || isTaskPausedForAlerts(task.status)) {
+        toast.error('Tâche introuvable ou déjà résolue');
+        clearHighlightParam();
+        return;
+      }
+
+      handledRef.current = highlightId;
+      setDeepLinkTask(task);
+      setPulseTaskId(task.id);
+
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => scrollTaskCardIntoView(task!.id));
+      });
+
+      pulseTimer = window.setTimeout(() => setPulseTaskId(null), 3000);
+    })();
+
+    return () => {
+      cancelled = true;
+      if (pulseTimer) window.clearTimeout(pulseTimer);
+    };
+  }, [highlightId, props.tasks, clearHighlightParam]);
+
+  return (
+    <>
+      <TasksKanbanBoard {...props} pulseTaskId={pulseTaskId} />
+      {deepLinkTask ? (
+        <TaskDetailDialog
+          task={deepLinkTask}
+          open
+          onOpenChange={(open) => {
+            if (!open) {
+              setDeepLinkTask(null);
+              clearHighlightParam();
+            }
+          }}
+          clients={props.clients}
+          employees={props.employees}
+          canDelete={props.canDelete}
+        />
+      ) : null}
+    </>
+  );
+}
+
+export function TasksKanban(props: KanbanProps) {
+  return (
+    <Suspense fallback={<TasksKanbanBoard {...props} pulseTaskId={null} />}>
+      <TasksKanbanDeepLink {...props} />
+    </Suspense>
   );
 }

@@ -13,7 +13,8 @@ import {
   resolveCriticalAlertBarUiState,
 } from '@/lib/notifications/critical-bar-state';
 import { CRITICAL_ALERTS_REFRESH_EVENT } from '@/lib/alerts/request-critical-alerts-refresh';
-import { summarizeCriticalAlerts, acknowledgeCriticalAlertsShownInBanner, triggerCriticalAlertFeedbackFromActiveApi } from '@/lib/notifications/critical-alert-feedback';
+import { summarizeCriticalAlertTotals, formatActionableBannerTitle, acknowledgeCriticalAlertsShownInBanner, triggerCriticalAlertFeedbackFromActiveApi } from '@/lib/notifications/critical-alert-feedback';
+import { CriticalAlertsAllDialog } from '@/components/app/critical-alerts-all-dialog';
 import { playMandatoryCriticalAlarm } from '@/lib/notifications/notification-sound';
 import { SUPRA_AUDIO_UNLOCK_EVENT } from '@/lib/notifications/critical-sound-events';
 import { cn } from '@/lib/utils/cn';
@@ -30,7 +31,15 @@ async function fetchCriticalActive(): Promise<CriticalActiveAlertsResponse | nul
     const ct = r.headers.get('content-type') ?? '';
     if (!r.ok || !ct.includes('application/json')) return null;
     const json = (await r.json()) as CriticalActiveAlertsResponse;
-    if (!Array.isArray(json.alerts) || typeof json.criticalCount !== 'number' || typeof json.warningCount !== 'number') {
+    if (
+      !Array.isArray(json.alerts) ||
+      !Array.isArray(json.allAlerts) ||
+      typeof json.criticalCount !== 'number' ||
+      typeof json.warningCount !== 'number' ||
+      !json.totals ||
+      typeof json.totals.totalActionableCount !== 'number' ||
+      typeof json.fingerprint !== 'string'
+    ) {
       return null;
     }
     return json;
@@ -56,10 +65,7 @@ function snoozeBarTwoHours() {
 }
 
 function alertFingerprint(p: CriticalActiveAlertsResponse): string {
-  return p.alerts
-    .map((a) => a.id)
-    .sort()
-    .join('|');
+  return p.fingerprint || p.allAlerts.map((a) => a.id).sort().join('|');
 }
 
 const btnSm =
@@ -71,6 +77,7 @@ export function GlobalCriticalAlertBar() {
   const [snoozeTick, setSnoozeTick] = useState(0);
   const [uiState, setUiState] = useState<'compact' | 'hidden'>('compact');
   const [detailOpen, setDetailOpen] = useState(false);
+  const [allDialogOpen, setAllDialogOpen] = useState(false);
   const payloadRef = useRef<CriticalActiveAlertsResponse | null>(null);
   const lastAlertFingerprintRef = useRef('');
   const lastAcknowledgedFingerprintRef = useRef('');
@@ -105,7 +112,7 @@ export function GlobalCriticalAlertBar() {
       lastAlertFingerprintRef.current = fp;
     }
 
-    if (!isSnoozed() && resolved === 'compact' && payload.alerts.length > 0) {
+    if (!isSnoozed() && resolved === 'compact' && payload.totals.totalActionableCount > 0) {
       if (fp !== lastAcknowledgedFingerprintRef.current) {
         acknowledgeCriticalAlertsShownInBanner(payload);
         lastAcknowledgedFingerprintRef.current = fp;
@@ -173,27 +180,19 @@ export function GlobalCriticalAlertBar() {
   }, []);
 
   const fingerprint = useMemo(
-    () => (payload && payload.alerts.length > 0 ? alertFingerprint(payload) : ''),
+    () => (payload && payload.totals.totalActionableCount > 0 ? alertFingerprint(payload) : ''),
     [payload],
   );
 
-  if (!payload || payload.alerts.length === 0) return null;
+  if (!payload || payload.totals.totalActionableCount === 0) return null;
   if (isSnoozed()) return null;
 
-  const { alerts, criticalCount } = payload;
-  const actionCount = alerts.length;
+  const { alerts, allAlerts, criticalCount, totals, scopeHint } = payload;
 
-  const shortTitle =
-    actionCount > 1
-      ? `${actionCount} actions à traiter`
-      : actionCount === 1
-        ? '1 action à traiter'
-        : 'Points à suivre';
+  const shortTitle = formatActionableBannerTitle(totals, scopeHint);
 
   const shortSubtitle =
-    criticalCount > 0
-      ? summarizeCriticalAlerts(alerts)
-      : 'À traiter aujourd’hui';
+    criticalCount > 0 ? summarizeCriticalAlertTotals(totals) : 'À traiter aujourd’hui';
 
   const barSurface = cn(
     'border-b border-border/60 bg-muted/20 text-foreground',
@@ -210,7 +209,7 @@ export function GlobalCriticalAlertBar() {
   );
 
   const previewAlerts = alerts.slice(0, DETAIL_PREVIEW_LIMIT);
-  const hasMoreAlerts = alerts.length > DETAIL_PREVIEW_LIMIT;
+  const hasMoreAlerts = totals.totalActionableCount > previewAlerts.length;
 
   function setBarState(next: 'compact' | 'hidden') {
     persistCriticalAlertBarUiState(next, fingerprint);
@@ -227,7 +226,9 @@ export function GlobalCriticalAlertBar() {
       <div className={cn(barSurface, 'shadow-none')} role="status">
         <div className="mx-auto flex h-11 max-w-[1600px] items-center justify-between gap-2 px-3 sm:h-12 sm:px-6 lg:px-8">
           <p className="min-w-0 truncate text-xs text-muted-foreground">
-            <span className="font-medium text-foreground">{shortTitle}</span>
+            <span className="font-medium text-foreground">
+              {formatActionableBannerTitle(payload.totals, payload.scopeHint)}
+            </span>
             {' · '}
             masquée — réapparaît si le jeu d’actions change
           </p>
@@ -344,17 +345,24 @@ export function GlobalCriticalAlertBar() {
             </ul>
             {hasMoreAlerts ? (
               <div className="mt-2 border-t border-border/50 px-2 pt-2">
-                <Link
-                  href="/dashboard"
+                <button
+                  type="button"
                   className="text-xs font-medium text-primary underline-offset-2 hover:underline"
+                  onClick={() => setAllDialogOpen(true)}
                 >
-                  Voir toutes les actions ({alerts.length})
-                </Link>
+                  Voir toutes les actions ({totals.totalActionableCount})
+                </button>
               </div>
             ) : null}
           </div>
         ) : null}
       </div>
+      <CriticalAlertsAllDialog
+        open={allDialogOpen}
+        onOpenChange={setAllDialogOpen}
+        alerts={allAlerts.length ? allAlerts : alerts}
+        totalCount={totals.totalActionableCount}
+      />
     </div>
   );
 }

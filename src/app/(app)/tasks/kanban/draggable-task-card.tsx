@@ -11,7 +11,13 @@ import { GripVertical, MoreHorizontal } from 'lucide-react';
 import type { Client, Employee, Task, TaskStatus, TaskEnriched } from '@/types/database';
 import { TASK_STATUS_MAP, PRIORITY_MAP, TASK_KANBAN_STATUSES } from '@/types/domain';
 import { cn } from '@/lib/utils/cn';
-import { getStatusBlockSurface, taskToStatusTone } from '@/lib/ui/status-block-tone';
+import {
+  getKanbanCardPresentation,
+  getTaskStatusAccentColor,
+  KANBAN_CARD_SHELL,
+  KANBAN_STATUS_ACCENT_CLASS,
+  kanbanStatusAccentStyle,
+} from '@/lib/ui/kanban-card-colors';
 import { getTaskDeadlineState } from '@/lib/deadlines/deadline-state';
 import { getTaskPriorityBadgeClass, getTaskStatusBadgeClass, operationalBadgeClass } from '@/lib/ui/status-colors';
 import { Badge } from '@/components/ui/badge';
@@ -34,10 +40,10 @@ import { archiveTaskAction, deleteTaskAction, updateTaskStatusAction } from '../
 import { hrefVideosOpenDetail } from '@/lib/videos/video-deep-link';
 import { ClientColorDot } from '@/components/shared/client-color-dot';
 import { requestCriticalAlertsRefresh } from '@/lib/alerts/request-critical-alerts-refresh';
+import { isTaskOverdueForAlert } from '@/lib/alerts/active-alert-rules';
 
 function overdue(task: Task): boolean {
-  if (!task.deadline || task.status === 'done') return false;
-  return new Date(task.deadline).getTime() < Date.now();
+  return isTaskOverdueForAlert({ status: task.status, deadline: task.deadline });
 }
 
 function TaskCardActionsMenu({
@@ -98,7 +104,10 @@ function TaskCardActionsMenu({
                 disabled={pending || task.status === s}
                 onSelect={() => {
                   startTransition(async () => {
-                    await updateTaskStatusAction(task.id, s);
+                    const res = await updateTaskStatusAction(task.id, s);
+                    if (res.ok) {
+                      requestCriticalAlertsRefresh();
+                    }
                     router.refresh();
                   });
                 }}
@@ -142,6 +151,7 @@ export function DraggableTaskCard({
   canDelete,
   dragEnabled,
   compact = false,
+  pulseHighlight = false,
 }: {
   task: TaskEnriched;
   clients: Pick<Client, 'id' | 'name' | 'color_hex' | 'color_label'>[];
@@ -149,13 +159,18 @@ export function DraggableTaskCard({
   canDelete: boolean;
   dragEnabled: boolean;
   compact?: boolean;
+  pulseHighlight?: boolean;
 }) {
   const [detailOpen, setDetailOpen] = useState(false);
   const [confirmAction, setConfirmAction] = useState<TaskConfirmActionMode | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
   const od = overdue(task);
-  const tone = taskToStatusTone(task);
+  const statusAccent = getTaskStatusAccentColor(task.status);
+  const kanbanColors = getKanbanCardPresentation({
+    clientHex: task.client_brand_hex,
+    statusAccentHex: statusAccent,
+  });
   const dlState = getTaskDeadlineState(task.deadline, task.status);
   const showDeadline =
     Boolean(task.deadline) &&
@@ -199,25 +214,41 @@ export function DraggableTaskCard({
     <>
       <article
         ref={setNodeRef}
-        style={style}
+        style={{ ...kanbanColors.style, ...style }}
+        data-task-id={task.id}
         className={cn(
-          'relative shrink-0 max-w-full overflow-hidden rounded-xl border border-border/50 shadow-sm',
+          KANBAN_CARD_SHELL,
+          kanbanColors.className,
           compact ? 'min-h-[68px] p-2.5 pl-3' : 'min-h-[100px] p-3 pl-3.5',
-          od && 'border-destructive/60 ring-1 ring-destructive/25',
-          getStatusBlockSurface(tone, { urgentGlow: od || task.priority === 'urgent' }),
+          pulseHighlight &&
+            'ring-2 ring-primary/55 shadow-[0_0_0_3px_rgba(255,61,10,0.12)] dark:ring-[#FF6A2A]/45',
           isDragging && 'relative z-[200]',
           isDragging && '!transition-none',
           isDragging &&
             'scale-[1.02] cursor-grabbing opacity-[0.98] shadow-2xl ring-1 ring-primary/25 dark:shadow-black/50 dark:ring-primary/30',
-          !compact && 'group',
+          !compact && 'group transition-[box-shadow,border-color] duration-200 hover:border-border/70 hover:shadow-md',
         )}
       >
-        {task.client_brand_hex ? (
-          <span
-            className="pointer-events-none absolute bottom-2 left-1 top-2 w-[3px] rounded-full opacity-95"
-            style={{ backgroundColor: task.client_brand_hex }}
-            aria-hidden
-          />
+        <span
+          className={KANBAN_STATUS_ACCENT_CLASS}
+          style={kanbanStatusAccentStyle()}
+          aria-hidden
+        />
+
+        {!compact ? (
+          <div
+            className="pointer-events-none absolute right-2 top-2 z-10 hidden opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 sm:flex"
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <TaskCardActionsMenu
+              task={task}
+              clients={clients}
+              employees={employees}
+              canDelete={canDelete}
+              onOpenDetail={() => setDetailOpen(true)}
+              onRequestConfirm={setConfirmAction}
+            />
+          </div>
         ) : null}
 
         {compact ? (
@@ -316,7 +347,9 @@ export function DraggableTaskCard({
                 )}
               >
                 <div className="flex items-start justify-between gap-2">
-                  <p className="min-w-0 flex-1 text-sm font-medium leading-snug text-foreground">{task.title}</p>
+                  <p className="line-clamp-2 min-w-0 flex-1 text-sm font-medium leading-snug text-foreground">
+                    {task.title}
+                  </p>
                   <Badge
                     variant="outline"
                     className="shrink-0 border-border text-[10px]"
@@ -407,22 +440,9 @@ export function DraggableTaskCard({
                   )}
                 </div>
               </div>
-              <div
-                className="hidden shrink-0 sm:flex sm:opacity-0 sm:transition-opacity sm:group-hover:opacity-100"
-                onPointerDown={(e) => e.stopPropagation()}
-              >
-                <TaskCardActionsMenu
-                  task={task}
-                  clients={clients}
-                  employees={employees}
-                  canDelete={canDelete}
-                  onOpenDetail={() => setDetailOpen(true)}
-                  onRequestConfirm={setConfirmAction}
-                />
-              </div>
             </div>
             <div
-              className="mt-3 flex flex-wrap gap-1 border-t border-border/60 pt-2 sm:group-hover:hidden"
+              className="mt-3 flex min-h-10 flex-wrap items-center gap-1 border-t border-border/60 pt-2"
               onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => e.stopPropagation()}
             >
@@ -468,7 +488,11 @@ export function DraggableTaskCard({
                       })
                     }
                   >
-                    <Button variant="ghost" size="sm" className="h-8 px-2 text-xs text-orange-300">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-2 text-xs text-orange-300 opacity-90 transition-opacity group-hover:opacity-100"
+                    >
                       Archiver
                     </Button>
                   </ConfirmDialog>
@@ -483,7 +507,11 @@ export function DraggableTaskCard({
                       })
                     }
                   >
-                    <Button variant="ghost" size="sm" className="h-8 px-2 text-xs text-destructive">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-2 text-xs text-destructive opacity-90 transition-opacity group-hover:opacity-100"
+                    >
                       Suppr.
                     </Button>
                   </ConfirmDialog>

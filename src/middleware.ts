@@ -84,6 +84,15 @@ export async function middleware(request: NextRequest) {
   if (!user && pathname === '/api/notifications/bell-sync') {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+  if (!user && pathname === '/api/ai/chat') {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  if (!user && pathname.startsWith('/api/ai/actions/')) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  if (!user && pathname === '/api/ai/context') {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 
   // Redirect to /login for protected routes if not authenticated
   if (!user && !isPublic(pathname) && pathname !== '/') {

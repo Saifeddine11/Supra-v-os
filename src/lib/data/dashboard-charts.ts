@@ -14,7 +14,6 @@ import {
   aggregateCriticalAlertsByType,
   fetchCriticalAlertsWithClient,
 } from '@/lib/data/critical-alerts';
-import { isActionRequiredNowAlertItem } from '@/lib/alerts/active-alert-rules';
 import { fetchTaskIdsAssignedToEmployee } from '@/lib/data/task-assignments';
 import {
   fetchVideoIdsAssignedToEmployee,
@@ -371,8 +370,8 @@ export async function fetchDashboardChartsPayload(
   }
 
   let criticalByType: DashboardChartsPayload['criticalByType'] = null;
-  const criticalItems = (await fetchCriticalAlertsWithClient(supabase, ctx)).filter(isActionRequiredNowAlertItem);
-  criticalByType = aggregateCriticalAlertsByType(criticalItems);
+  const bundle = await fetchCriticalAlertsWithClient(supabase, ctx);
+  criticalByType = aggregateCriticalAlertsByType(bundle.allActionItems);
 
   let clientPipeline: ClientPipelineRow[] | null = null;
   if (showPipeline) {

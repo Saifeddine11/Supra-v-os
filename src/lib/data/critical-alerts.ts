@@ -19,10 +19,13 @@ import { getClientColor } from '@/lib/ui/client-colors';
 import type {
   CriticalActiveAlertDTO,
   CriticalActiveAlertsResponse,
+  CriticalActiveAlertTotals,
+  CriticalAlertScopeHint,
 } from '@/lib/notifications/critical-active-types';
 import {
   isTaskOverdueForAlert,
   isActionRequiredNowAlertItem,
+  classifyCriticalAlertItem,
   TASK_CRITICAL_ALERT_EXCLUDED_STATUSES_SQL,
   VIDEO_CRITICAL_ALERT_EXCLUDED_STATUSES_SQL,
   isVideoActiveForAlerts,
@@ -36,6 +39,8 @@ import {
   isInvoiceOverdueForAlert,
   type ActiveAlertSeverity,
 } from '@/lib/alerts/active-alert-rules';
+import { hrefTasksOpenDetail } from '@/lib/tasks/task-deep-link';
+import { hrefVideosOpenDetailKanban } from '@/lib/videos/video-deep-link';
 
 export type { CriticalActiveAlertDTO, CriticalActiveAlertsResponse };
 
@@ -87,24 +92,65 @@ export function aggregateCriticalAlertsByType(items: CriticalAlertItem[]): Criti
     .sort((a, b) => b.count - a.count);
 }
 
-export function mapCriticalAlertsToActiveApi(items: CriticalAlertItem[]): CriticalActiveAlertsResponse {
-  const actionItems = items.filter(isActionRequiredNowAlertItem);
-  const alerts: CriticalActiveAlertDTO[] = actionItems.map((item) => {
-    const { entityType, entityId } = parseCriticalAlertEntity(item.id);
-    return {
-      id: item.id,
-      entityType,
-      entityId,
-      severity: item.severity === 'info' ? 'warning' : item.severity,
-      title: item.typeLabel,
-      message: `${item.title} — ${item.detail}`,
-      href: item.href,
-      dueAt: null,
-    };
-  });
-  const criticalCount = alerts.filter((a) => a.severity === 'critical').length;
-  const warningCount = alerts.filter((a) => a.severity === 'warning').length;
-  return { alerts, criticalCount, warningCount };
+export type CriticalAlertsBundle = {
+  allActionItems: CriticalAlertItem[];
+  previewItems: CriticalAlertItem[];
+  totals: CriticalActiveAlertTotals;
+  fingerprint: string;
+  scopeHint: CriticalAlertScopeHint;
+};
+
+const PREVIEW_ALERT_LIMIT = 14;
+const TASK_OVERDUE_FETCH_LIMIT = 300;
+const VIDEO_SCAN_LIMIT = 200;
+
+function computeAlertTotals(items: CriticalAlertItem[]): CriticalActiveAlertTotals {
+  const action = items.filter(isActionRequiredNowAlertItem);
+  return {
+    totalActionableCount: action.length,
+    taskOverdueTotalCount: action.filter((i) => i.id.startsWith('task-od-')).length,
+    videoDeliveryTotalCount: action.filter((i) => i.id.startsWith('vid-od-')).length,
+    shootingActionTotalCount: action.filter(
+      (i) =>
+        i.id.startsWith('vid-shoot-od-') ||
+        i.id.startsWith('vid-shoot-end-od-') ||
+        (i.id.startsWith('vid-shoot-conf-') && i.severity === 'critical'),
+    ).length,
+    invoiceOverdueTotalCount: action.filter((i) => i.id === 'fin-inv-overdue').length,
+  };
+}
+
+function criticalItemToDto(item: CriticalAlertItem): CriticalActiveAlertDTO {
+  const { entityType, entityId } = parseCriticalAlertEntity(item.id);
+  const category = classifyCriticalAlertItem(item);
+  return {
+    id: item.id,
+    entityType,
+    entityId,
+    severity: item.severity === 'info' ? 'warning' : item.severity,
+    category,
+    title: item.typeLabel,
+    message: `${item.title} — ${item.detail}`,
+    href: item.href,
+    dueAt: null,
+  };
+}
+
+export function mapCriticalAlertsToActiveApi(bundle: CriticalAlertsBundle): CriticalActiveAlertsResponse {
+  const allActionItems = bundle.allActionItems;
+  const allAlerts = allActionItems.map(criticalItemToDto);
+  const alerts = bundle.previewItems.map(criticalItemToDto);
+  const criticalCount = allAlerts.filter((a) => a.severity === 'critical').length;
+  const warningCount = allAlerts.filter((a) => a.severity === 'warning').length;
+  return {
+    alerts,
+    allAlerts,
+    criticalCount,
+    warningCount,
+    totals: bundle.totals,
+    fingerprint: bundle.fingerprint,
+    scopeHint: bundle.scopeHint,
+  };
 }
 
 function scopeRole(role: UserRole): UserRole {
@@ -120,22 +166,36 @@ const VIDEO_ACTIVE_FILTER = VIDEO_CRITICAL_ALERT_EXCLUDED_STATUSES_SQL;
 export async function fetchCriticalAlertsWithClient(
   supabase: ServiceRoleClient,
   ctx: AuthContext,
-): Promise<CriticalAlertItem[]> {
-  if (!ctx.employee || !ctx.role) return [];
+): Promise<CriticalAlertsBundle> {
+  if (!ctx.employee || !ctx.role) {
+    return {
+      allActionItems: [],
+      previewItems: [],
+      totals: {
+        totalActionableCount: 0,
+        taskOverdueTotalCount: 0,
+        videoDeliveryTotalCount: 0,
+        shootingActionTotalCount: 0,
+        invoiceOverdueTotalCount: 0,
+      },
+      fingerprint: '',
+      scopeHint: 'personal',
+    };
+  }
 
-  const items: CriticalAlertItem[] = [];
+  const candidates: CriticalAlertItem[] = [];
   const now = new Date();
   const todayLabel = format(now, 'd MMM', { locale: fr });
-  const base = '/tasks';
   const rk = scopeRole(ctx.role);
   const full = hasFullOrgDataAccess(ctx);
   const eid = ctx.employee.id;
   const canSeeFinance = canViewInvoices(ctx.role) && (canViewGlobalFinanceStats(ctx.role) || ctx.role === 'finance');
   const canSeeProductionAlerts = ctx.role !== 'finance';
+  const scopeHint: CriticalAlertScopeHint =
+    full || ctx.role === 'project_manager' || ctx.role === 'admin' ? 'team' : 'personal';
 
-  const push = (row: CriticalAlertItem) => {
-    if (items.length >= 14) return;
-    if (!items.some((x) => x.id === row.id)) items.push(row);
+  const pushCandidate = (row: CriticalAlertItem) => {
+    if (!candidates.some((x) => x.id === row.id)) candidates.push(row);
   };
 
   async function taskScopeOr(): Promise<string | null> {
@@ -182,7 +242,7 @@ export async function fetchCriticalAlertsWithClient(
       .not('deadline', 'is', null)
       .lt('deadline', now.toISOString())
       .order('deadline', { ascending: true })
-      .limit(12);
+      .limit(TASK_OVERDUE_FETCH_LIMIT);
 
     const scope = await taskScopeOr();
     if (scope === null && !full && ctx.role !== 'project_manager' && ctx.role !== 'admin') return;
@@ -201,13 +261,13 @@ export async function fetchCriticalAlertsWithClient(
 
       const cl = row.clients;
       const client = cl?.name;
-      push({
+      pushCandidate({
         id: `task-od-${row.id}`,
         severity: 'critical',
         typeLabel: 'Tâche en retard',
         title: String(row.title ?? 'Tâche'),
         detail: client ? `${client} · échéance dépassée` : 'Échéance dépassée',
-        href: `${base}?highlight=${row.id}`,
+        href: hrefTasksOpenDetail(row.id),
         clientBrandHex: client ? getClientColor({ name: client, color_hex: cl?.color_hex ?? null }) : null,
       });
     }
@@ -221,7 +281,7 @@ export async function fetchCriticalAlertsWithClient(
         'id,title,status,public_status,client_delivery_at,delivery_deadline,shooting_date,shooting_completed_at,clients:client_id(name,color_hex)',
       )
       .not('status', 'in', VIDEO_ACTIVE_FILTER)
-      .limit(40);
+      .limit(VIDEO_SCAN_LIMIT);
 
     const scope = await videoScopeOr();
     if (scope === null && !full && ctx.role !== 'project_manager' && ctx.role !== 'admin') return;
@@ -252,13 +312,13 @@ export async function fetchCriticalAlertsWithClient(
         continue;
       }
       const client = row.clients?.name;
-      push({
+      pushCandidate({
         id: `vid-od-${row.id}`,
         severity: 'critical',
         typeLabel: 'Livraison en retard',
         title: row.title,
         detail: client ? `${client} · livraison dépassée` : 'Livraison dépassée',
-        href: '/videos',
+        href: hrefVideosOpenDetailKanban(row.id),
         clientBrandHex: client
           ? getClientColor({ name: client, color_hex: row.clients?.color_hex ?? null })
           : null,
@@ -302,7 +362,7 @@ export async function fetchCriticalAlertsWithClient(
         : null;
 
       if (shouldShowShootingExpectedEndOverdueAlert(v, now)) {
-        push({
+        pushCandidate({
           id: `vid-shoot-end-od-${v.id}`,
           severity: 'critical',
           typeLabel: 'Fin de tournage dépassée',
@@ -310,47 +370,47 @@ export async function fetchCriticalAlertsWithClient(
           detail: client
             ? `${client} · confirmer la fin ou reprogrammer`
             : 'Confirmer la fin ou reprogrammer',
-          href: '/videos',
+          href: hrefVideosOpenDetailKanban(v.id),
           clientBrandHex,
         });
       } else if (shouldShowShootingInProgressInfoAlert(v, now)) {
-        push({
+        pushCandidate({
           id: `vid-shoot-ip-${v.id}`,
           severity: 'info',
           typeLabel: 'Tournage en cours',
           title: v.title,
           detail: client ? `${client} · en cours` : 'Tournage en cours',
-          href: '/videos',
+          href: hrefVideosOpenDetailKanban(v.id),
           clientBrandHex,
         });
       } else if (v.shooting_date && shouldShowShootingConfirmationAlert(v, now)) {
-        push({
+        pushCandidate({
           id: `vid-shoot-conf-${v.id}`,
           severity: shootingConfirmationSeverity(v.shooting_date, now),
           typeLabel: 'Confirmation tournage',
           title: v.title,
           detail: client ? `${client} · confirmer le tournage` : 'Confirmer le tournage',
-          href: '/videos',
+          href: hrefVideosOpenDetailKanban(v.id),
           clientBrandHex,
         });
       } else if (v.shooting_date && shouldShowShootingScheduleOverdueAlert(v, now)) {
-        push({
+        pushCandidate({
           id: `vid-shoot-od-${v.id}`,
           severity: 'critical',
           typeLabel: 'Tournage dépassé',
           title: v.title,
           detail: client ? `${client} · date dépassée` : 'Date de tournage dépassée',
-          href: '/videos',
+          href: hrefVideosOpenDetailKanban(v.id),
           clientBrandHex,
         });
       } else if (v.shooting_date && isTodayCalendar(v.shooting_date, now)) {
-        push({
+        pushCandidate({
           id: `vid-shoot-${v.id}`,
           severity: 'warning',
           typeLabel: 'Tournage aujourd’hui',
           title: v.title,
           detail: client ? `${client} · ${todayLabel}` : todayLabel,
-          href: '/videos',
+          href: hrefVideosOpenDetailKanban(v.id),
           clientBrandHex,
         });
       }
@@ -360,13 +420,13 @@ export async function fetchCriticalAlertsWithClient(
         delivery_deadline: v.delivery_deadline ?? null,
       });
       if (del && isTodayCalendar(del, now) && !shouldShowVideoDeliveryOverdueAlert(v)) {
-        push({
+        pushCandidate({
           id: `vid-del-${v.id}`,
           severity: 'warning',
           typeLabel: 'Livraison aujourd’hui',
           title: v.title,
           detail: client ? `${client} · ${todayLabel}` : todayLabel,
-          href: '/videos',
+          href: hrefVideosOpenDetailKanban(v.id),
           clientBrandHex,
         });
       }
@@ -397,13 +457,13 @@ export async function fetchCriticalAlertsWithClient(
       };
       if (!shouldShowClientValidationAlert(row)) continue;
       const cn = row.clients?.name;
-      push({
+      pushCandidate({
         id: `val-${row.id}`,
         severity: 'warning',
         typeLabel: 'Validation client',
         title: row.title,
         detail: cn ? `${cn} · retour attendu` : 'Retour client attendu',
-        href: '/videos',
+        href: hrefVideosOpenDetailKanban(row.id),
         clientBrandHex: cn ? getClientColor({ name: cn, color_hex: row.clients?.color_hex ?? null }) : null,
       });
     }
@@ -423,7 +483,7 @@ export async function fetchCriticalAlertsWithClient(
       }),
     ).length;
     if (n > 0) {
-      push({
+      pushCandidate({
         id: 'fin-inv-overdue',
         severity: 'critical',
         typeLabel: 'Facturation',
@@ -476,13 +536,13 @@ export async function fetchCriticalAlertsWithClient(
           isTomorrowCalendar(v.shooting_date, now) &&
           (full || rk === 'cameraman' || rk === 'community_manager')
         ) {
-          push({
+          pushCandidate({
             id: `vid-shoot-tm-${v.id}`,
             severity: 'info',
             typeLabel: 'Tournage demain',
             title: v.title,
             detail: client || 'Préparer le terrain',
-            href: '/videos',
+            href: hrefVideosOpenDetailKanban(v.id),
             clientBrandHex,
           });
         }
@@ -496,13 +556,13 @@ export async function fetchCriticalAlertsWithClient(
           (full || rk === 'editor' || rk === 'community_manager') &&
           !shouldShowVideoDeliveryOverdueAlert(v)
         ) {
-          push({
+          pushCandidate({
             id: `vid-del-tm-${v.id}`,
             severity: 'info',
             typeLabel: 'Livraison demain',
             title: v.title,
             detail: client || 'Contrôler le livrable',
-            href: '/videos',
+            href: hrefVideosOpenDetailKanban(v.id),
             clientBrandHex,
           });
         }
@@ -510,9 +570,24 @@ export async function fetchCriticalAlertsWithClient(
     }
   }
 
-  return items;
+  const allActionItems = candidates.filter(isActionRequiredNowAlertItem);
+  const totals = computeAlertTotals(allActionItems);
+  const previewItems = allActionItems.slice(0, PREVIEW_ALERT_LIMIT);
+  const fingerprint = allActionItems
+    .map((i) => i.id)
+    .sort()
+    .join('|');
+
+  return {
+    allActionItems,
+    previewItems,
+    totals,
+    fingerprint,
+    scopeHint,
+  };
 }
 
 export async function fetchCriticalAlertsForDashboard(ctx: AuthContext): Promise<CriticalAlertItem[]> {
-  return fetchCriticalAlertsWithClient(createAdminClient(), ctx);
+  const bundle = await fetchCriticalAlertsWithClient(createAdminClient(), ctx);
+  return bundle.allActionItems;
 }

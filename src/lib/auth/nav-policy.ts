@@ -43,6 +43,7 @@ export function navItemVisible(href: string, role: UserRole): boolean {
 
   switch (href) {
     case '/dashboard':
+    case '/ai-assistant':
       return true;
     case '/clients':
       return r === 'admin' || r === 'project_manager' || r === 'commercial';
@@ -134,7 +135,9 @@ export function canAccessPath(role: UserRole | null, pathname: string): boolean 
   const p = pathname.split('?')[0] ?? pathname;
   if (p.startsWith('/access-denied')) return true;
 
-  if (p === '/dashboard' || p === '/notifications' || p === '/settings') return true;
+  if (p === '/dashboard' || p === '/notifications' || p === '/settings' || p === '/ai-assistant') {
+    return true;
+  }
 
   if (p.startsWith('/tasks/calendar')) return navItemVisible('/tasks/calendar', role);
   if (p.startsWith('/tasks')) return navItemVisible('/tasks', role);

@@ -197,7 +197,7 @@ function individualStatCards(role: UserRole, p: Awaited<ReturnType<typeof getDas
       id: 'my-overdue',
       title: 'Mes tâches en retard',
       value: String(p.myOverdueTasks),
-      subtitle: 'échéance dépassée',
+      subtitle: 'assignées à vous · échéance dépassée',
       tone: p.myOverdueTasks > 0 ? 'negative' : 'default',
     },
     {
@@ -379,12 +379,19 @@ export default async function DashboardPage() {
       tone: summary.urgentTasks > 0 ? 'warning' : 'default',
     },
     'overdue-tasks': {
-      title: summary.scope === 'commercial' ? 'Tâches en retard (vous)' : 'Tâches en retard',
+      title:
+        summary.scope === 'commercial'
+          ? 'Tâches en retard (vous)'
+          : summary.scope === 'operations'
+            ? 'Tâches en retard (équipe)'
+            : 'Tâches en retard',
       value: String(summary.overdueTasks),
       subtitle:
         summary.scope === 'commercial' || summary.scope === 'individual'
           ? 'vos échéances dépassées'
-          : 'échéance dépassée',
+          : summary.scope === 'operations'
+            ? 'toute l’équipe · hors terminé / attente client / revue'
+            : 'échéance dépassée',
       trend: undefined,
       tone: summary.overdueTasks > 0 ? 'negative' : 'default',
     },
@@ -614,7 +621,7 @@ export default async function DashboardPage() {
       {(summary.scope === 'full' || summary.scope === 'operations') && variant === 'manager' ? (
         <SectionCard
           title="Charge personnelle"
-          description="Vos propres tâches et indicateurs — la vue détaillée équipe est dans les blocs ci-dessous."
+          description="Vos tâches assignées uniquement — les indicateurs « équipe » et la bannière couvrent l’ensemble de l’agence."
         >
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {individualStatCards(ctx.employee.role, summary.personal).slice(0, 4).map((s) => (

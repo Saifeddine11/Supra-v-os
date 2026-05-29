@@ -63,8 +63,8 @@ export async function runCriticalAlertsReminders(): Promise<CriticalAlertsCronRe
     };
 
     try {
-      const items = await fetchCriticalAlertsWithClient(admin, ctx);
-      const { alerts, criticalCount } = mapCriticalAlertsToActiveApi(items);
+      const bundle = await fetchCriticalAlertsWithClient(admin, ctx);
+      const { alerts, criticalCount, totals } = mapCriticalAlertsToActiveApi(bundle);
       if (criticalCount === 0) continue;
 
       const criticalLines = alerts
@@ -72,7 +72,9 @@ export async function runCriticalAlertsReminders(): Promise<CriticalAlertsCronRe
         .map((a) => a.message);
 
       const title =
-        criticalCount > 1 ? `${criticalCount} actions à traiter` : '1 action à traiter';
+        totals.totalActionableCount > 1
+          ? `${totals.totalActionableCount} actions à traiter`
+          : '1 action à traiter';
       const message = criticalLines.slice(0, 5).join(' · ') || 'Consultez le tableau de bord.';
 
       const { inserted } = await createNotificationOnce(

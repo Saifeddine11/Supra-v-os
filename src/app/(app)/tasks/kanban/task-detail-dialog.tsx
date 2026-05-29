@@ -23,9 +23,10 @@ import { hrefVideosOpenDetail } from '@/lib/videos/video-deep-link';
 import { toast } from 'sonner';
 import { requestCriticalAlertsRefresh } from '@/lib/alerts/request-critical-alerts-refresh';
 
+import { isTaskOverdueForAlert } from '@/lib/alerts/active-alert-rules';
+
 function isOverdue(task: TaskEnriched): boolean {
-  if (!task.deadline || task.status === 'done') return false;
-  return new Date(task.deadline).getTime() < Date.now();
+  return isTaskOverdueForAlert({ status: task.status, deadline: task.deadline });
 }
 
 function formatDt(iso: string | null | undefined, pattern: string): string {

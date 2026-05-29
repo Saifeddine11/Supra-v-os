@@ -20,7 +20,8 @@ export type NavIconName =
   | 'Files'
   | 'Globe'
   | 'Bell'
-  | 'Settings';
+  | 'Settings'
+  | 'Sparkles';
 
 export interface NavItem {
   href: string;
@@ -36,7 +37,10 @@ export interface NavGroup {
 export const APP_NAV_GROUPS: NavGroup[] = [
   {
     label: 'Vue d’ensemble',
-    items: [{ href: '/dashboard', label: 'Tableau de bord', icon: 'LayoutDashboard' }],
+    items: [
+      { href: '/dashboard', label: 'Tableau de bord', icon: 'LayoutDashboard' },
+      { href: '/ai-assistant', label: 'SupAI', icon: 'Sparkles' },
+    ],
   },
   {
     label: 'Production',
