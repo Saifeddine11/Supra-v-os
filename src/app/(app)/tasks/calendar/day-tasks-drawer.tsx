@@ -2,6 +2,9 @@
 
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useCallback, useState } from 'react';
 import type { Client, Employee, TaskEnriched } from '@/types/database';
 import { PRIORITY_MAP, TASK_STATUS_MAP, VIDEO_PUBLIC_STATUS_MAP, VIDEO_STATUS_MAP } from '@/types/domain';
 import { cn } from '@/lib/utils/cn';
@@ -15,11 +18,17 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import Link from 'next/link';
-import { hrefVideosOpenDetail } from '@/lib/videos/video-deep-link';
-import { CalendarTaskAgendaActions } from './calendar-task-agenda-actions';
+import { hrefVideosOpenDetailKanban } from '@/lib/videos/video-deep-link';
+import {
+  CalendarTaskAgendaActions,
+  type CalendarTaskAgendaAction,
+} from './calendar-task-agenda-actions';
 import { ClientColorDot } from '@/components/shared/client-color-dot';
 import type { CalendarVideoEvent } from '@/lib/data/videos-calendar';
+import { TaskDetailDialog } from '../kanban/task-detail-dialog';
+import { TaskFormDialog } from '../task-form-dialog';
+import { ConfirmTaskActionDialog, type TaskConfirmActionMode } from '../confirm-task-action-dialog';
+import { requestCriticalAlertsRefresh } from '@/lib/alerts/request-critical-alerts-refresh';
 
 function taskContextLine(task: TaskEnriched): string {
   const name = task.client_name?.trim();
@@ -27,6 +36,11 @@ function taskContextLine(task: TaskEnriched): string {
   if (task.internal_project_id) return 'Projet interne Supra v.';
   return 'Interne';
 }
+
+type DrawerTaskActionState = {
+  task: TaskEnriched;
+  mode: CalendarTaskAgendaAction;
+} | null;
 
 export function DayTasksDrawer({
   open,
@@ -51,162 +65,245 @@ export function DayTasksDrawer({
   canDelete: boolean;
   canEdit: boolean;
 }) {
+  const router = useRouter();
+  const [taskAction, setTaskAction] = useState<DrawerTaskActionState>(null);
   const hasAny = tasks.length > 0 || videoEvents.length > 0;
 
+  const closeDrawer = useCallback(() => {
+    onOpenChange(false);
+  }, [onOpenChange]);
+
+  const handleMutationSuccess = useCallback(() => {
+    setTaskAction(null);
+    closeDrawer();
+    requestCriticalAlertsRefresh();
+    router.refresh();
+  }, [closeDrawer, router]);
+
+  const openTaskAction = useCallback(
+    (task: TaskEnriched, mode: CalendarTaskAgendaAction) => {
+      closeDrawer();
+      requestAnimationFrame(() => {
+        setTaskAction({ task, mode });
+      });
+    },
+    [closeDrawer],
+  );
+
+  const confirmMode: TaskConfirmActionMode | null =
+    taskAction?.mode === 'archive' ? 'archive' : taskAction?.mode === 'delete' ? 'delete' : null;
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent
-        className={cn(
-          'flex max-h-[90vh] flex-col gap-0 p-0 sm:max-w-lg',
-          'max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:top-auto max-md:max-h-[min(88vh,100dvh)] max-md:translate-x-0 max-md:translate-y-0 max-md:rounded-b-none max-md:rounded-t-2xl max-md:border-x-0 max-md:border-b-0',
-        )}
-      >
-        <DialogHeader className="shrink-0 border-b border-border/60 px-5 pb-3 pt-5 text-left">
-          <DialogTitle className="text-base font-semibold">
-            {day ? `Agenda du ${format(day, 'EEEE d MMMM yyyy', { locale: fr })}` : ''}
-          </DialogTitle>
-        </DialogHeader>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-2">
-          {!hasAny ? (
-            <p className="text-sm text-muted-foreground">Aucun élément ce jour-là.</p>
-          ) : (
-            <div className="flex flex-col gap-6">
-              {tasks.length > 0 ? (
-                <div>
-                  <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Tâches</h3>
-                  <ul className="flex flex-col gap-3">
-                    {tasks.map((t) => {
-                      const od = calendarTaskOverdue(t);
-                      const accent = getCalendarTaskTone(t, colorBy);
-                      const dlU = t.deadline ? getTaskDeadlineState(t.deadline, t.status) : 'none';
-                      const urgency =
-                        dlU === 'overdue'
-                          ? 'En retard'
-                          : dlU === 'today'
-                            ? 'Échéance aujourd’hui'
-                            : dlU === 'tomorrow'
-                              ? 'Échéance demain'
-                              : dlU === 'soon'
-                                ? 'Échéance sous 3 jours'
-                                : null;
-                      return (
-                        <li key={t.id}>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent
+          className={cn(
+            'flex max-h-[90vh] flex-col gap-0 p-0 sm:max-w-lg',
+            'max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:top-auto max-md:max-h-[min(88vh,100dvh)] max-md:translate-x-0 max-md:translate-y-0 max-md:rounded-b-none max-md:rounded-t-2xl max-md:border-x-0 max-md:border-b-0',
+          )}
+        >
+          <DialogHeader className="shrink-0 border-b border-border/60 px-5 pb-3 pt-5 text-left">
+            <DialogTitle className="text-base font-semibold">
+              {day ? `Agenda du ${format(day, 'EEEE d MMMM yyyy', { locale: fr })}` : ''}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-2">
+            {!hasAny ? (
+              <p className="text-sm text-muted-foreground">Aucun élément ce jour-là.</p>
+            ) : (
+              <div className="flex flex-col gap-6">
+                {tasks.length > 0 ? (
+                  <div>
+                    <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                      Tâches
+                    </h3>
+                    <ul className="flex flex-col gap-3">
+                      {tasks.map((t) => {
+                        const od = calendarTaskOverdue(t);
+                        const accent = getCalendarTaskTone(t, colorBy);
+                        const dlU = t.deadline ? getTaskDeadlineState(t.deadline, t.status) : 'none';
+                        const urgency =
+                          dlU === 'overdue'
+                            ? 'En retard'
+                            : dlU === 'today'
+                              ? 'Échéance aujourd’hui'
+                              : dlU === 'tomorrow'
+                                ? 'Échéance demain'
+                                : dlU === 'soon'
+                                  ? 'Échéance sous 3 jours'
+                                  : null;
+                        return (
+                          <li key={t.id}>
+                            <div
+                              className={cn(
+                                'rounded-xl border border-border/80 border-l-[3px] bg-muted/20 px-3 py-3',
+                                accent.border,
+                                accent.tint,
+                              )}
+                            >
+                              <p className="text-sm font-semibold leading-snug text-foreground">{t.title}</p>
+                              <p className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
+                                {t.client_brand_hex ? (
+                                  <ClientColorDot hex={t.client_brand_hex} title={t.client_name ?? undefined} />
+                                ) : null}
+                                <span>{taskContextLine(t)}</span>
+                              </p>
+                              <dl className="mt-2 grid gap-1 text-sm text-muted-foreground">
+                                <div className="flex flex-wrap gap-x-2">
+                                  <dt className="font-medium text-foreground/80">Assignés</dt>
+                                  <dd className="min-w-0 flex-1">
+                                    {t.assignees?.length
+                                      ? t.assignees.map((p) => p.full_name).join(', ')
+                                      : (t.assignee_name ?? 'Non assigné')}
+                                  </dd>
+                                </div>
+                                <div className="flex flex-wrap gap-x-2">
+                                  <dt className="font-medium text-foreground/80">Priorité</dt>
+                                  <dd>{PRIORITY_MAP[t.priority].label}</dd>
+                                </div>
+                                <div className="flex flex-wrap gap-x-2">
+                                  <dt className="font-medium text-foreground/80">Statut</dt>
+                                  <dd>{TASK_STATUS_MAP[t.status].label}</dd>
+                                </div>
+                                {t.deadline ? (
+                                  <div className="flex flex-wrap gap-x-2">
+                                    <dt className="font-medium text-foreground/80">Échéance</dt>
+                                    <dd className={cn('tabular-nums', od && 'font-medium text-destructive')}>
+                                      {format(new Date(t.deadline), 'd MMM yyyy · HH:mm', { locale: fr })}
+                                    </dd>
+                                  </div>
+                                ) : null}
+                                {urgency ? (
+                                  <div className="flex flex-wrap gap-x-2">
+                                    <dt className="font-medium text-foreground/80">Urgence</dt>
+                                    <dd
+                                      className={cn(
+                                        od && 'font-medium text-destructive',
+                                        dlU === 'today' && !od && 'font-medium text-orange-600 dark:text-orange-400',
+                                        dlU === 'tomorrow' &&
+                                          !od &&
+                                          'font-medium text-amber-700 dark:text-amber-400',
+                                      )}
+                                    >
+                                      {urgency}
+                                    </dd>
+                                  </div>
+                                ) : null}
+                              </dl>
+                              <div className="mt-3">
+                                <CalendarTaskAgendaActions
+                                  task={t}
+                                  canDelete={canDelete}
+                                  canEdit={canEdit}
+                                  onAction={(task, mode) => openTaskAction(task, mode)}
+                                />
+                              </div>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                ) : null}
+
+                {videoEvents.length > 0 ? (
+                  <div>
+                    <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-primary">Vidéo</h3>
+                    <ul className="flex flex-col gap-3">
+                      {videoEvents.map((ev) => (
+                        <li key={ev.id}>
                           <div
                             className={cn(
-                              'rounded-xl border border-border/80 border-l-[3px] bg-muted/20 px-3 py-3',
-                              accent.border,
-                              accent.tint,
+                              'rounded-xl border border-border/80 border-l-[3px] bg-muted/15 px-3 py-3',
+                              ev.kind === 'shoot'
+                                ? 'border-l-violet-600 bg-violet-500/[0.06]'
+                                : 'border-l-primary bg-primary/[0.06]',
                             )}
                           >
-                            <p className="text-sm font-semibold leading-snug text-foreground">{t.title}</p>
-                            <p className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
-                              {t.client_brand_hex ? (
-                                <ClientColorDot hex={t.client_brand_hex} title={t.client_name ?? undefined} />
-                              ) : null}
-                              <span>{taskContextLine(t)}</span>
+                            <p className="text-sm font-semibold leading-snug text-foreground">
+                              {ev.kind === 'shoot' ? 'Tournage vidéo' : 'Livraison vidéo'} — {ev.title}
                             </p>
-                            <dl className="mt-2 grid gap-1 text-sm text-muted-foreground">
-                              <div className="flex flex-wrap gap-x-2">
-                                <dt className="font-medium text-foreground/80">Assignés</dt>
-                                <dd className="min-w-0 flex-1">
-                                  {t.assignees?.length
-                                    ? t.assignees.map((p) => p.full_name).join(', ')
-                                    : (t.assignee_name ?? 'Non assigné')}
-                                </dd>
-                              </div>
-                              <div className="flex flex-wrap gap-x-2">
-                                <dt className="font-medium text-foreground/80">Priorité</dt>
-                                <dd>{PRIORITY_MAP[t.priority].label}</dd>
-                              </div>
-                              <div className="flex flex-wrap gap-x-2">
-                                <dt className="font-medium text-foreground/80">Statut</dt>
-                                <dd>{TASK_STATUS_MAP[t.status].label}</dd>
-                              </div>
-                              {t.deadline ? (
-                                <div className="flex flex-wrap gap-x-2">
-                                  <dt className="font-medium text-foreground/80">Échéance</dt>
-                                  <dd className={cn('tabular-nums', od && 'font-medium text-destructive')}>
-                                    {format(new Date(t.deadline), 'd MMM yyyy · HH:mm', { locale: fr })}
-                                  </dd>
-                                </div>
-                              ) : null}
-                              {urgency ? (
-                                <div className="flex flex-wrap gap-x-2">
-                                  <dt className="font-medium text-foreground/80">Urgence</dt>
-                                  <dd
-                                    className={cn(
-                                      od && 'font-medium text-destructive',
-                                      dlU === 'today' && !od && 'font-medium text-orange-600 dark:text-orange-400',
-                                      dlU === 'tomorrow' && !od && 'font-medium text-amber-700 dark:text-amber-400',
-                                    )}
-                                  >
-                                    {urgency}
-                                  </dd>
-                                </div>
-                              ) : null}
-                            </dl>
+                            <p className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                              <span>Client :</span>
+                              <ClientColorDot hex={ev.client_brand_hex} title={ev.clientName} />
+                              <span>{ev.clientName}</span>
+                            </p>
+                            <p className="mt-1 text-xs tabular-nums text-muted-foreground">
+                              {format(new Date(ev.at), 'd MMM yyyy · HH:mm', { locale: fr })}
+                            </p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {VIDEO_STATUS_MAP[ev.status].label} ·{' '}
+                              {VIDEO_PUBLIC_STATUS_MAP[ev.public_status].label}
+                            </p>
                             <div className="mt-3">
-                              <CalendarTaskAgendaActions
-                                task={t}
-                                clients={clients}
-                                employees={employees}
-                                canDelete={canDelete}
-                                canEdit={canEdit}
-                                onDrawerClose={() => onOpenChange(false)}
-                                onMutated={() => onOpenChange(false)}
-                              />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="min-h-11 w-full rounded-full"
+                                asChild
+                              >
+                                <Link
+                                  href={hrefVideosOpenDetailKanban(ev.videoId)}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    closeDrawer();
+                                  }}
+                                >
+                                  Ouvrir la production vidéo
+                                </Link>
+                              </Button>
                             </div>
                           </div>
                         </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              ) : null}
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
-              {videoEvents.length > 0 ? (
-                <div>
-                  <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-primary">Vidéo</h3>
-                  <ul className="flex flex-col gap-3">
-                    {videoEvents.map((ev) => (
-                      <li key={ev.id}>
-                        <div
-                          className={cn(
-                            'rounded-xl border border-border/80 border-l-[3px] bg-muted/15 px-3 py-3',
-                            ev.kind === 'shoot'
-                              ? 'border-l-violet-600 bg-violet-500/[0.06]'
-                              : 'border-l-primary bg-primary/[0.06]',
-                          )}
-                        >
-                          <p className="text-sm font-semibold leading-snug text-foreground">
-                            {ev.kind === 'shoot' ? 'Tournage vidéo' : 'Livraison vidéo'} — {ev.title}
-                          </p>
-                          <p className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-                            <span>Client :</span>
-                            <ClientColorDot hex={ev.client_brand_hex} title={ev.clientName} />
-                            <span>{ev.clientName}</span>
-                          </p>
-                          <p className="mt-1 text-xs tabular-nums text-muted-foreground">
-                            {format(new Date(ev.at), 'd MMM yyyy · HH:mm', { locale: fr })}
-                          </p>
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            {VIDEO_STATUS_MAP[ev.status].label} · {VIDEO_PUBLIC_STATUS_MAP[ev.public_status].label}
-                          </p>
-                          <div className="mt-3">
-                            <Button type="button" variant="outline" size="sm" className="min-h-11 w-full rounded-full" asChild>
-                              <Link href={hrefVideosOpenDetail(ev.videoId)}>Ouvrir la production vidéo</Link>
-                            </Button>
-                          </div>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-            </div>
-          )}
-        </div>
-      </DialogContent>
-    </Dialog>
+      {taskAction ? (
+        <>
+          <TaskDetailDialog
+            task={taskAction.task}
+            open={taskAction.mode === 'detail'}
+            onOpenChange={(next) => {
+              if (!next) setTaskAction(null);
+            }}
+            clients={clients}
+            employees={employees}
+            canDelete={canDelete}
+            onMutated={handleMutationSuccess}
+          />
+
+          {canEdit ? (
+            <TaskFormDialog
+              task={taskAction.task}
+              clients={clients}
+              employees={employees}
+              open={taskAction.mode === 'edit'}
+              onOpenChange={(next) => {
+                if (!next) setTaskAction(null);
+              }}
+              onSaved={handleMutationSuccess}
+            />
+          ) : null}
+
+          <ConfirmTaskActionDialog
+            open={confirmMode !== null}
+            onOpenChange={(next) => {
+              if (!next) setTaskAction(null);
+            }}
+            mode={confirmMode}
+            taskId={taskAction.task.id}
+            onSuccess={handleMutationSuccess}
+          />
+        </>
+      ) : null}
+    </>
   );
 }

@@ -16,10 +16,10 @@ import {
 import { getCalendarVideoDotClass } from '@/lib/ui/status-colors';
 import { CalendarTaskChip } from './calendar-task-chip';
 import { DayTasksDrawer } from './day-tasks-drawer';
-import { CalendarTaskAgendaActions } from './calendar-task-agenda-actions';
+import { CalendarTaskActionHost } from './calendar-task-action-host';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { hrefVideosOpenDetail } from '@/lib/videos/video-deep-link';
+import { hrefVideosOpenDetailKanban } from '@/lib/videos/video-deep-link';
 import type { CalendarVideoEvent } from '@/lib/data/videos-calendar';
 import { CalendarVideoChip } from './calendar-video-chip';
 import { VIDEO_PUBLIC_STATUS_MAP, VIDEO_STATUS_MAP } from '@/types/domain';
@@ -159,7 +159,7 @@ function DayAgendaView({
                     </p>
                   ) : null}
                   <div className="mt-3">
-                    <CalendarTaskAgendaActions
+                    <CalendarTaskActionHost
                       task={t}
                       clients={clients}
                       employees={employees}
@@ -209,7 +209,7 @@ function DayAgendaView({
                   </p>
                   <div className="mt-3">
                     <Button type="button" variant="outline" size="sm" className="min-h-11 w-full rounded-full" asChild>
-                      <Link href={hrefVideosOpenDetail(ev.videoId)}>Ouvrir la production vidéo</Link>
+                      <Link href={hrefVideosOpenDetailKanban(ev.videoId)}>Ouvrir la production vidéo</Link>
                     </Button>
                   </div>
                 </div>
