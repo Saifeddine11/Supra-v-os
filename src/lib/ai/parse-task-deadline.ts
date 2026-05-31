@@ -1,9 +1,12 @@
 /**
  * Parse relative French deadline phrases into ISO 8601 (Europe/Paris).
  */
+import { getParisWallClock, isPastOperationalDateTime } from '@/lib/dates/validate-future-date';
+
 export function parseFrenchDeadlineText(text: string, now = new Date()): string | null {
   const raw = text.trim().toLowerCase();
   if (!raw) return null;
+  if (/\bhier\b|\bavant[\s-]?hier\b|\bdans le pass[ée]\b/.test(raw)) return null;
 
   const parisNow = new Date(
     now.toLocaleString('en-US', { timeZone: 'Europe/Paris' }),
@@ -28,7 +31,8 @@ export function parseFrenchDeadlineText(text: string, now = new Date()): string 
     };
     for (const [name, day] of Object.entries(weekdays)) {
       if (raw.includes(name)) {
-        const diff = (day - base.getDay() + 7) % 7 || 7;
+        let diff = (day - base.getDay() + 7) % 7;
+        if (diff === 0) diff = 7;
         base.setDate(base.getDate() + diff);
         break;
       }
@@ -52,7 +56,9 @@ export function parseFrenchDeadlineText(text: string, now = new Date()): string 
     base.setHours(18, 0, 0, 0);
   }
 
-  return base.toISOString();
+  const iso = base.toISOString();
+  if (isPastOperationalDateTime(iso, now)) return null;
+  return iso;
 }
 
 const FRENCH_MONTHS: Record<string, number> = {
@@ -77,9 +83,11 @@ const FRENCH_MONTHS: Record<string, number> = {
 export function parseFrenchDateText(text: string, now = new Date()): string | null {
   const raw = text.trim();
   if (!raw) return null;
+  if (/\bhier\b|\bavant[\s-]?hier\b|\bdans le pass[ée]\b/.test(raw.toLowerCase())) return null;
 
   if (!Number.isNaN(Date.parse(raw))) {
-    return new Date(raw).toISOString();
+    const iso = new Date(raw).toISOString();
+    return isPastOperationalDateTime(iso, now) ? null : iso;
   }
 
   const relative = parseFrenchDeadlineText(raw, now);
@@ -98,10 +106,21 @@ export function parseFrenchDateText(text: string, now = new Date()): string | nu
     const hours = dayMonth[4] ? Number(dayMonth[4]) : 18;
     const minutes = dayMonth[5] ? Number(dayMonth[5]) : 0;
     const candidate = new Date(year, month, day, hours, minutes, 0, 0);
-    if (!dayMonth[3] && candidate.getTime() < now.getTime() - 86_400_000) {
-      candidate.setFullYear(year + 1);
+    if (!dayMonth[3]) {
+      const current = getParisWallClock(now);
+      if (
+        year === current.year &&
+        month + 1 === current.month &&
+        day < current.day
+      ) {
+        return null;
+      }
+      if (candidate.getTime() < now.getTime() - 86_400_000) {
+        candidate.setFullYear(year + 1);
+      }
     }
-    return candidate.toISOString();
+    const iso = candidate.toISOString();
+    return isPastOperationalDateTime(iso, now) ? null : iso;
   }
 
   return null;

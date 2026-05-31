@@ -13,11 +13,16 @@ import {
   previewClientResolution,
   previewTaskDraftReferences,
 } from '@/lib/tasks/resolve-task-references';
+import { isPastOperationalDateTime, SUPAI_PAST_DATE_REFUSAL } from '@/lib/dates/validate-future-date';
 
 export async function buildTaskDraftReply(
   ctx: AuthContext,
   draft: AiTaskDraftPayload,
 ): Promise<string> {
+  if (draft.deadlineIso?.trim() && isPastOperationalDateTime(draft.deadlineIso)) {
+    return SUPAI_PAST_DATE_REFUSAL;
+  }
+
   let incomplete = Boolean(draft.deadlineText?.trim() && !draft.deadlineIso?.trim());
 
   const preview = await previewTaskDraftReferences(ctx, {
@@ -44,6 +49,13 @@ export async function buildVideoDraftReply(
   ctx: AuthContext,
   draft: AiVideoDraftPayload,
 ): Promise<string> {
+  if (
+    (draft.shootingDateIso?.trim() && isPastOperationalDateTime(draft.shootingDateIso)) ||
+    (draft.clientDeliveryDateIso?.trim() && isPastOperationalDateTime(draft.clientDeliveryDateIso))
+  ) {
+    return SUPAI_PAST_DATE_REFUSAL;
+  }
+
   let incomplete = false;
 
   if (draft.clientName?.trim()) {

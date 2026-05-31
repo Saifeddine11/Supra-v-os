@@ -7,6 +7,7 @@ import { canDeleteProject, canManageProjects } from '@/lib/auth/capabilities';
 import { actionError, actionOk, getPostgrestError, type ActionResult } from '@/lib/actions/types';
 import type { ProjectStatus, TaskPriority } from '@/types/database';
 import { assertCommercialClientChoice, assertProjectIdAccessible } from '@/lib/auth/data-scope';
+import { validateOperationalFutureDate } from '@/lib/dates/validate-future-date';
 
 function num(formData: FormData, key: string, fallback = 0): number {
   const v = Number(formData.get(key));
@@ -32,6 +33,11 @@ export async function createProjectAction(formData: FormData): Promise<ActionRes
   const status = String(formData.get('status') ?? 'todo') as ProjectStatus;
   const priority = String(formData.get('priority') ?? 'normal') as TaskPriority;
   const lead = String(formData.get('lead_id') ?? '').trim();
+  const deadline = String(formData.get('deadline') ?? '').trim();
+  if (deadline) {
+    const check = validateOperationalFutureDate(deadline, { allowEmpty: false, mode: 'date' });
+    if (!check.ok) return actionError(check.message);
+  }
 
   const row = {
     client_id,
@@ -43,7 +49,7 @@ export async function createProjectAction(formData: FormData): Promise<ActionRes
     progress: Math.min(100, Math.max(0, num(formData, 'progress', 0))),
     lead_id: lead || null,
     start_date: String(formData.get('start_date') ?? '').trim() || null,
-    deadline: String(formData.get('deadline') ?? '').trim() || null,
+    deadline: deadline || null,
     budget: formData.get('budget') ? num(formData, 'budget') : null,
     notes_internal: String(formData.get('notes_internal') ?? '').trim() || null,
     created_by: user.id,
@@ -72,6 +78,17 @@ export async function updateProjectAction(id: string, formData: FormData): Promi
   const status = String(formData.get('status') ?? 'todo') as ProjectStatus;
   const priority = String(formData.get('priority') ?? 'normal') as TaskPriority;
   const lead = String(formData.get('lead_id') ?? '').trim();
+  const deadline = String(formData.get('deadline') ?? '').trim();
+
+  const { data: curProject } = await supabase.from('projects').select('deadline').eq('id', id).maybeSingle();
+  if (deadline) {
+    const check = validateOperationalFutureDate(deadline, {
+      allowEmpty: false,
+      mode: 'date',
+      unchangedFrom: curProject?.deadline ? String(curProject.deadline) : null,
+    });
+    if (!check.ok) return actionError(check.message);
+  }
 
   const row = {
     title,
@@ -82,7 +99,7 @@ export async function updateProjectAction(id: string, formData: FormData): Promi
     progress: Math.min(100, Math.max(0, num(formData, 'progress', 0))),
     lead_id: lead || null,
     start_date: String(formData.get('start_date') ?? '').trim() || null,
-    deadline: String(formData.get('deadline') ?? '').trim() || null,
+    deadline: deadline || null,
     budget: formData.get('budget') ? num(formData, 'budget') : null,
     notes_internal: String(formData.get('notes_internal') ?? '').trim() || null,
     updated_at: new Date().toISOString(),

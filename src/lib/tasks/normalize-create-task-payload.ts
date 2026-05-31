@@ -3,6 +3,7 @@ import 'server-only';
 import type { AuthContext } from '@/lib/auth/permissions';
 import { actionError, actionOk, type ActionResult } from '@/lib/actions/types';
 import { parseFrenchDeadlineText } from '@/lib/ai/parse-task-deadline';
+import { validateOperationalFutureIso } from '@/lib/dates/validate-future-date';
 import type { CreateTaskCoreInput } from '@/lib/tasks/create-task-core';
 import {
   resolveAssigneeForTask,
@@ -73,12 +74,18 @@ export async function normalizeCreateTaskPayload(
     return actionError(`Client introuvable : ${clientName}`);
   }
 
+  const deadline = resolveDeadline(input.deadline, input.deadlineText);
+  if (deadline) {
+    const deadlineCheck = validateOperationalFutureIso(deadline, { allowEmpty: false });
+    if (!deadlineCheck.ok) return actionError(deadlineCheck.message);
+  }
+
   return actionOk({
     title,
     description: input.description?.trim() || null,
     clientId,
     assigneeIds,
-    deadline: resolveDeadline(input.deadline, input.deadlineText),
+    deadline,
     priority: (input.priority ?? 'normal') as TaskPriority,
     status: (input.status ?? 'todo') as TaskStatus,
   });

@@ -19,6 +19,7 @@ import {
 } from '@/lib/data/employee-guards';
 import { legacyPrimaryAssignees, replaceVideoAssignments } from '@/lib/data/video-assignments';
 import { upsertVideoProductionTask } from '@/lib/tasks/video-production-task';
+import { validateOperationalFutureDate } from '@/lib/dates/validate-future-date';
 
 function formatVideoMutationDbError(err: unknown): string {
   const raw =
@@ -145,6 +146,17 @@ export async function createVideoCore(
 
   const shootingAt = parseOptionalIsoTimestamp(input.shootingDateIso);
   const clientDeliveryAt = parseOptionalIsoTimestamp(input.clientDeliveryDateIso);
+
+  for (const [label, raw] of [
+    ['Date de tournage', input.shootingDateIso],
+    ['Date de livraison client', input.clientDeliveryDateIso],
+  ] as const) {
+    if (raw?.trim()) {
+      const check = validateOperationalFutureDate(raw, { allowEmpty: false, mode: 'datetime' });
+      if (!check.ok) return actionError(`${label} : ${check.message}`);
+    }
+  }
+
   const deliveryDeadline = deliveryDeadlineDateFromClientAt(clientDeliveryAt);
 
   let editorIds = dedupeIds(input.editorIds ?? []);

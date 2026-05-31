@@ -21,6 +21,7 @@ import { notifyTaskAssignees, notifyTaskBlocked } from '@/lib/notifications/task
 import type { TaskPriority, TaskStatus } from '@/types/database';
 import { isTaskStatusAllowedInWorkflow } from '@/types/domain';
 import { revalidatePath } from 'next/cache';
+import { validateOperationalFutureDate } from '@/lib/dates/validate-future-date';
 
 const TASK_MUTATION_DENIED =
   'Action impossible : vous n’avez pas l’autorisation ou la tâche est invalide.';
@@ -113,12 +114,21 @@ export async function updateTaskCore(
   }
 
   const priority = (input.priority ?? current.priority) as TaskPriority;
-  const deadline =
+  let deadline: string | null =
     input.deadline !== undefined
       ? input.deadline
         ? new Date(input.deadline).toISOString()
         : null
       : current.deadline;
+
+  if (input.deadline !== undefined && input.deadline) {
+    const deadlineCheck = validateOperationalFutureDate(input.deadline, {
+      allowEmpty: false,
+      mode: 'datetime',
+      unchangedFrom: current.deadline,
+    });
+    if (!deadlineCheck.ok) return actionError(deadlineCheck.message);
+  }
   const description =
     input.description !== undefined ? input.description : current.description;
 

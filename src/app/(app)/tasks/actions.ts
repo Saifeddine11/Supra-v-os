@@ -31,6 +31,7 @@ import {
   legacyPrimaryAssignee,
   replaceTaskAssignments,
 } from '@/lib/data/task-assignments';
+import { validateOperationalFutureDate } from '@/lib/dates/validate-future-date';
 
 const TASK_MUTATION_DENIED =
   'Action impossible : vous n’avez pas l’autorisation ou la tâche est invalide.';
@@ -137,6 +138,20 @@ export async function updateTaskAction(id: string, formData: FormData): Promise<
   const clientId = String(formData.get('client_id') ?? '').trim();
   let assigneeIds = parseAssigneeIdsFromForm(formData);
   const deadlineRaw = String(formData.get('deadline') ?? '').trim();
+
+  const { data: curDeadlineRow } = await readSb
+    .from('tasks')
+    .select('deadline')
+    .eq('id', id)
+    .maybeSingle();
+  if (deadlineRaw) {
+    const deadlineCheck = validateOperationalFutureDate(deadlineRaw, {
+      allowEmpty: false,
+      mode: 'datetime',
+      unchangedFrom: curDeadlineRow?.deadline ? String(curDeadlineRow.deadline) : null,
+    });
+    if (!deadlineCheck.ok) return actionError(deadlineCheck.message);
+  }
 
   if (clientId && !(await assertClientRecordVisible(readSb, ctx, clientId))) {
     return actionError('Client non autorisé pour cette tâche.');
@@ -330,5 +345,58 @@ export async function deleteTaskAction(id: string): Promise<ActionResult> {
 }
 
 export async function archiveTaskAction(id: string): Promise<ActionResult> {
-  return updateTaskStatusAction(id, 'archived');
+  const ctx = await getAuthContext();
+  if (!ctx) return actionError('Non authentifié.');
+  if (!canDeleteTask(ctx.role)) {
+    return actionError('Seuls l’administrateur ou le chef de projet peuvent archiver une tâche.');
+  }
+
+  const inactive = assertActiveEmployee(ctx);
+  if (inactive) return inactive;
+
+  const readSb = await createClient();
+  const writeSb = await resolveTaskMutationClient(ctx);
+
+  if (!(await assertTaskRecordVisible(readSb, ctx, id))) {
+    return actionError('Tâche inaccessible.');
+  }
+
+  const { data: current } = await readSb
+    .from('tasks')
+    .select('title, status, video_id')
+    .eq('id', id)
+    .maybeSingle();
+  if (!current) return actionError('Tâche introuvable.');
+
+  if (current.status === 'archived') {
+    return actionOk();
+  }
+
+  const { error } = await writeSb
+    .from('tasks')
+    .update({
+      status: 'archived' as TaskStatus,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', id);
+
+  if (error) {
+    console.error('[archiveTaskAction] update tasks:', error);
+    return actionError(formatTaskMutationDbError(error));
+  }
+
+  await logStaffActivity(ctx, {
+    action: 'archived',
+    entityType: 'task',
+    entityId: id,
+    metadata: { title: current.title, status: 'archived' },
+  });
+
+  revalidatePath('/tasks');
+  revalidatePath('/tasks/calendar');
+  revalidatePath('/dashboard');
+  if (current.video_id) {
+    revalidatePath('/videos');
+  }
+  return actionOk();
 }

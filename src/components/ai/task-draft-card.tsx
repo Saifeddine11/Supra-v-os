@@ -18,6 +18,10 @@ import {
 } from '@/lib/ai/task-draft-schema';
 import { hrefTasksOpenDetail } from '@/lib/tasks/task-deep-link';
 import {
+  getOperationalDatetimeSubmitError,
+  OperationalDatetimeField,
+} from '@/components/shared/operational-datetime-field';
+import {
   DRAFT_VALUE_MISSING,
   DRAFT_VALUE_TO_CONFIRM,
   SUPAI_ERROR_NETWORK,
@@ -222,6 +226,11 @@ export function TaskDraftCard({
       toast.error('Le titre est requis.');
       return;
     }
+    const deadlineErr = getOperationalDatetimeSubmitError(deadlineLocal);
+    if (deadlineErr) {
+      toast.error(deadlineErr);
+      return;
+    }
 
     setConfirming(true);
     try {
@@ -394,16 +403,13 @@ export function TaskDraftCard({
               </select>
             </div>
           </div>
-          <div className="grid gap-2">
-            <Label htmlFor="draft-deadline">Échéance</Label>
-            <Input
-              id="draft-deadline"
-              type="datetime-local"
-              value={deadlineLocal}
-              onChange={(e) => setDeadlineLocal(e.target.value)}
-              className="rounded-lg"
-            />
-          </div>
+          <OperationalDatetimeField
+            id="draft-deadline"
+            label="Échéance"
+            value={deadlineLocal}
+            onValueChange={setDeadlineLocal}
+            inputClassName="rounded-lg"
+          />
         </div>
       ) : (
         <dl className="space-y-2 text-sm">

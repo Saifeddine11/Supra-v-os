@@ -22,6 +22,7 @@ import {
   legacyPrimaryAssignee,
   replaceTaskAssignments,
 } from '@/lib/data/task-assignments';
+import { validateOperationalFutureDate } from '@/lib/dates/validate-future-date';
 
 const TASK_MUTATION_DENIED =
   'Action impossible : vous n’avez pas l’autorisation ou la tâche est invalide.';
@@ -90,6 +91,13 @@ export async function createTaskCore(
   const clientId = (input.clientId ?? '').trim();
   let assigneeIds = dedupeIds(input.assigneeIds ?? []);
   const deadlineRaw = (input.deadline ?? '').trim();
+  if (deadlineRaw) {
+    const deadlineCheck = validateOperationalFutureDate(deadlineRaw, {
+      allowEmpty: false,
+      mode: 'datetime',
+    });
+    if (!deadlineCheck.ok) return actionError(deadlineCheck.message);
+  }
 
   if (clientId && !(await assertClientRecordVisible(readSb, ctx, clientId))) {
     return actionError('Client non autorisé pour cette tâche.');

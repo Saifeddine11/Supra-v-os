@@ -17,6 +17,10 @@ import {
 } from '@/lib/ai/video-draft-schema';
 import { hrefVideosOpenDetailKanban } from '@/lib/videos/video-deep-link';
 import {
+  getOperationalDatetimeSubmitError,
+  OperationalDatetimeField,
+} from '@/components/shared/operational-datetime-field';
+import {
   DRAFT_VALUE_MISSING,
   SUPAI_ERROR_NETWORK,
   SUPAI_ERROR_VIDEO_CREATE,
@@ -97,6 +101,16 @@ export function VideoDraftCard({
     if (!canCreate || confirming) return;
     if (!title.trim()) {
       toast.error('Le titre est requis.');
+      return;
+    }
+    const shootErr = getOperationalDatetimeSubmitError(shootingLocal);
+    if (shootErr) {
+      toast.error(`Tournage : ${shootErr}`);
+      return;
+    }
+    const deliveryErr = getOperationalDatetimeSubmitError(deliveryLocal);
+    if (deliveryErr) {
+      toast.error(`Livraison client : ${deliveryErr}`);
       return;
     }
 
@@ -202,36 +216,32 @@ export function VideoDraftCard({
               className="mt-1"
             />
           </div>
-          <div>
-            <Label>Tournage (date/heure)</Label>
-            <Input
-              type="datetime-local"
-              value={shootingLocal}
-              onChange={(e) => setShootingLocal(e.target.value)}
-              className="mt-1"
-            />
-            <Input
-              value={shootingText}
-              onChange={(e) => setShootingText(e.target.value)}
-              placeholder="Texte libre (ex. dimanche à 10h)"
-              className="mt-1.5"
-            />
-          </div>
-          <div>
-            <Label>Livraison client</Label>
-            <Input
-              type="datetime-local"
-              value={deliveryLocal}
-              onChange={(e) => setDeliveryLocal(e.target.value)}
-              className="mt-1"
-            />
-            <Input
-              value={deliveryText}
-              onChange={(e) => setDeliveryText(e.target.value)}
-              placeholder="Texte libre (ex. 31 mai)"
-              className="mt-1.5"
-            />
-          </div>
+          <OperationalDatetimeField
+            label="Tournage (date/heure)"
+            id={`vd-shoot-${draft.title}`}
+            value={shootingLocal}
+            onValueChange={setShootingLocal}
+            inputClassName="mt-1"
+          />
+          <Input
+            value={shootingText}
+            onChange={(e) => setShootingText(e.target.value)}
+            placeholder="Texte libre (ex. dimanche à 10h)"
+            className="mt-1.5"
+          />
+          <OperationalDatetimeField
+            label="Livraison client"
+            id={`vd-deliver-${draft.title}`}
+            value={deliveryLocal}
+            onValueChange={setDeliveryLocal}
+            inputClassName="mt-1"
+          />
+          <Input
+            value={deliveryText}
+            onChange={(e) => setDeliveryText(e.target.value)}
+            placeholder="Texte libre (ex. 31 mai)"
+            className="mt-1.5"
+          />
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <Label>Monteur</Label>

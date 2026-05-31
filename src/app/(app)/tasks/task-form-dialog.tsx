@@ -19,6 +19,11 @@ import { cn } from '@/lib/utils/cn';
 import { toast } from 'sonner';
 import { createTaskAction, updateTaskAction } from './actions';
 import { ClientColorDot } from '@/components/shared/client-color-dot';
+import {
+  getOperationalDatetimeSubmitError,
+  OperationalDatetimeField,
+} from '@/components/shared/operational-datetime-field';
+import { toDatetimeLocalValue } from '@/lib/dates/datetime-local';
 import { getClientColor } from '@/lib/ui/client-colors';
 
 const STATUSES: TaskStatus[] = [...TASK_KANBAN_STATUSES];
@@ -60,6 +65,7 @@ export function TaskFormDialog({
   const [pending, setPending] = useState(false);
   const [assigneeSel, setAssigneeSel] = useState<Set<string>>(() => new Set());
   const [clientSel, setClientSel] = useState(task?.client_id ?? '');
+  const [deadline, setDeadline] = useState('');
   const isEdit = Boolean(task);
   const taskKey = task?.id ?? '__create__';
   const videoLinked = Boolean(task?.video_id);
@@ -72,12 +78,8 @@ export function TaskFormDialog({
     if (!open) return;
     setAssigneeSel(initialAssigneeSet(task ?? null));
     setClientSel(task?.client_id ?? '');
+    setDeadline(toDatetimeLocalValue(task?.deadline ?? null));
   }, [open, taskKey, task]);
-
-  const dlValue =
-    task?.deadline && !Number.isNaN(new Date(task.deadline).getTime())
-      ? new Date(task.deadline).toISOString().slice(0, 16)
-      : '';
 
   const sortedEmployees = useMemo(
     () => [...employees].sort((a, b) => a.full_name.localeCompare(b.full_name, 'fr', { sensitivity: 'base' })),
@@ -96,6 +98,14 @@ export function TaskFormDialog({
             setErr(null);
             setPending(true);
             try {
+              const deadlineErr = getOperationalDatetimeSubmitError(deadline, {
+                unchangedFrom: task?.deadline ?? null,
+              });
+              if (deadlineErr) {
+                setErr(deadlineErr);
+                toast.error(deadlineErr);
+                return;
+              }
               const res = isEdit
                 ? await updateTaskAction(task!.id, formData)
                 : await createTaskAction(formData);
@@ -234,10 +244,14 @@ export function TaskFormDialog({
               </select>
             </div>
           </div>
-          <div className="grid gap-2">
-            <Label htmlFor="task-deadline">Échéance</Label>
-            <Input id="task-deadline" name="deadline" type="datetime-local" defaultValue={dlValue} />
-          </div>
+          <OperationalDatetimeField
+            id="task-deadline"
+            name="deadline"
+            label="Échéance"
+            value={deadline}
+            onValueChange={setDeadline}
+            unchangedBaseline={task?.deadline ?? undefined}
+          />
           {err ? <p className="text-sm text-destructive">{err}</p> : null}
           <div className="flex justify-end gap-2 pt-2">
             <Button type="button" variant="ghost" onClick={() => setOpen(false)}>

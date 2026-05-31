@@ -6,6 +6,7 @@ import { getAuthContext } from '@/lib/auth/permissions';
 import { canDeleteInternalProject, canManageProjects } from '@/lib/auth/capabilities';
 import { actionError, actionOk, getPostgrestError, type ActionResult } from '@/lib/actions/types';
 import type { InternalPriority, ProjectStatus } from '@/types/database';
+import { validateOperationalFutureDate } from '@/lib/dates/validate-future-date';
 
 function num(formData: FormData, key: string, fallback = 0): number {
   const v = Number(formData.get(key));
@@ -25,6 +26,11 @@ export async function createInternalProjectAction(formData: FormData): Promise<A
   const status = String(formData.get('status') ?? 'todo') as ProjectStatus;
   const priority = String(formData.get('priority') ?? 'normal') as InternalPriority;
   const owner = String(formData.get('owner_id') ?? '').trim();
+  const deadline = String(formData.get('deadline') ?? '').trim();
+  if (deadline) {
+    const check = validateOperationalFutureDate(deadline, { allowEmpty: false, mode: 'date' });
+    if (!check.ok) return actionError(check.message);
+  }
 
   const row = {
     title,
@@ -35,7 +41,7 @@ export async function createInternalProjectAction(formData: FormData): Promise<A
     progress: Math.min(100, Math.max(0, num(formData, 'progress', 0))),
     owner_id: owner || null,
     start_date: String(formData.get('start_date') ?? '').trim() || null,
-    deadline: String(formData.get('deadline') ?? '').trim() || null,
+    deadline: deadline || null,
     notes: String(formData.get('notes') ?? '').trim() || null,
     created_by: user.id,
   };
@@ -58,6 +64,20 @@ export async function updateInternalProjectAction(id: string, formData: FormData
   const status = String(formData.get('status') ?? 'todo') as ProjectStatus;
   const priority = String(formData.get('priority') ?? 'normal') as InternalPriority;
   const owner = String(formData.get('owner_id') ?? '').trim();
+  const deadline = String(formData.get('deadline') ?? '').trim();
+  const { data: curInternal } = await supabase
+    .from('internal_projects')
+    .select('deadline')
+    .eq('id', id)
+    .maybeSingle();
+  if (deadline) {
+    const check = validateOperationalFutureDate(deadline, {
+      allowEmpty: false,
+      mode: 'date',
+      unchangedFrom: curInternal?.deadline ? String(curInternal.deadline) : null,
+    });
+    if (!check.ok) return actionError(check.message);
+  }
 
   const row = {
     title,
@@ -68,7 +88,7 @@ export async function updateInternalProjectAction(id: string, formData: FormData
     progress: Math.min(100, Math.max(0, num(formData, 'progress', 0))),
     owner_id: owner || null,
     start_date: String(formData.get('start_date') ?? '').trim() || null,
-    deadline: String(formData.get('deadline') ?? '').trim() || null,
+    deadline: deadline || null,
     notes: String(formData.get('notes') ?? '').trim() || null,
     updated_at: new Date().toISOString(),
   };

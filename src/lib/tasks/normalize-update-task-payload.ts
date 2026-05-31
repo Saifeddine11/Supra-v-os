@@ -9,6 +9,8 @@ import {
 } from '@/lib/tasks/resolve-task-references';
 import type { UpdateTaskCoreInput } from '@/lib/tasks/update-task-core';
 import type { TaskPriority, TaskStatus } from '@/types/database';
+import { validateOperationalFutureIso } from '@/lib/dates/validate-future-date';
+import { getTaskById } from '@/lib/data/tasks';
 
 export type NormalizeUpdateTaskResult = ActionResult<UpdateTaskCoreInput>;
 
@@ -18,6 +20,13 @@ export async function normalizeUpdateTaskPayload(
 ): Promise<NormalizeUpdateTaskResult> {
   const { taskId, changes } = input;
   const patch: UpdateTaskCoreInput = { taskId };
+
+  let currentDeadline: string | null | undefined;
+  if (changes.deadline !== undefined) {
+    const current = await getTaskById(taskId, ctx);
+    if (!current) return actionError('Tâche introuvable.');
+    currentDeadline = current.deadline;
+  }
 
   if (changes.title !== undefined) {
     const title = changes.title.trim();
@@ -30,6 +39,13 @@ export async function normalizeUpdateTaskPayload(
   }
 
   if (changes.deadline !== undefined) {
+    if (changes.deadline) {
+      const deadlineCheck = validateOperationalFutureIso(changes.deadline, {
+        allowEmpty: false,
+        unchangedFrom: currentDeadline ?? null,
+      });
+      if (!deadlineCheck.ok) return actionError(deadlineCheck.message);
+    }
     patch.deadline = changes.deadline;
   }
 

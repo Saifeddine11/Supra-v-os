@@ -1,6 +1,7 @@
 import type { AiVideoDraftPayload } from '@/lib/ai/video-draft-schema';
 import { AI_VIDEO_PRODUCTION_STATUSES } from '@/lib/ai/video-draft-schema';
 import { parseFrenchDateText } from '@/lib/ai/parse-task-deadline';
+import { isPastOperationalDateTime } from '@/lib/dates/validate-future-date';
 import {
   isStructuredVideoTemplate,
   parseLabeledFieldBlock,
@@ -97,6 +98,17 @@ export function extractStructuredVideoFields(message: string): AiVideoDraftPaylo
   };
 }
 
+function stripPastVideoDates(draft: AiVideoDraftPayload): AiVideoDraftPayload {
+  const next = { ...draft };
+  if (next.shootingDateIso && isPastOperationalDateTime(next.shootingDateIso)) {
+    next.shootingDateIso = undefined;
+  }
+  if (next.clientDeliveryDateIso && isPastOperationalDateTime(next.clientDeliveryDateIso)) {
+    next.clientDeliveryDateIso = undefined;
+  }
+  return next;
+}
+
 export function normalizeVideoDraft(
   draft: AiVideoDraftPayload,
   userMessage?: string,
@@ -106,7 +118,7 @@ export function normalizeVideoDraft(
     : null;
 
   if (fromMessage) {
-    return {
+    return stripPastVideoDates({
       ...draft,
       title: fromMessage.title,
       clientName: fromMessage.clientName ?? draft.clientName,
@@ -124,7 +136,7 @@ export function normalizeVideoDraft(
       productionStatus: fromMessage.productionStatus ?? draft.productionStatus ?? 'idea',
       portalStatus: draft.portalStatus ?? 'topic_proposed',
       description: fromMessage.description ?? draft.description,
-    };
+    });
   }
 
   let title = draft.title?.trim() || 'Nouvelle vidéo';
@@ -133,11 +145,11 @@ export function normalizeVideoDraft(
     title = 'Nouvelle vidéo';
   }
 
-  return {
+  return stripPastVideoDates({
     ...draft,
     title: capitalizeFirst(title.slice(0, 160)),
     priority: draft.priority ?? 'normal',
     productionStatus: draft.productionStatus ?? 'idea',
     portalStatus: draft.portalStatus ?? 'topic_proposed',
-  };
+  });
 }

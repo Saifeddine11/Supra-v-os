@@ -1,5 +1,7 @@
 import { redirect } from 'next/navigation';
+import { headers } from 'next/headers';
 import { requireAuth } from '@/lib/auth/permissions';
+import { enforceRouteAccessForPathname } from '@/lib/auth/nav-access';
 import { getUnreadNotificationsCount, listBellPreview } from '@/lib/data/notifications-user';
 import { getMyNotificationPreferences } from '@/lib/data/notification-preferences';
 import { notificationSoundPrefsFromRow } from '@/lib/notifications/notification-sound-prefs';
@@ -10,6 +12,9 @@ import { fetchShootingConfirmationQueue } from '@/lib/data/shooting-confirmation
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const ctx = await requireAuth();
+  const pathname = (await headers()).get('x-pathname') ?? '';
+  await enforceRouteAccessForPathname(pathname);
+
   if (!ctx.employee) {
     redirect('/login?next=/dashboard');
   }

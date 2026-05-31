@@ -16,6 +16,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { PROJECT_STATUS_MAP, PROJECT_TYPE_OPTIONS, PRIORITY_MAP } from '@/types/domain';
 import { createProjectAction, updateProjectAction } from './actions';
+import { OperationalDateField } from '@/components/shared/operational-date-field';
 
 const selectCls =
   'flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground';
@@ -158,8 +159,13 @@ export function ProjectFormDialog({
               <Input id="p-start" name="start_date" type="date" defaultValue={project?.start_date ?? ''} />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="p-deadline">Échéance</Label>
-              <Input id="p-deadline" name="deadline" type="date" defaultValue={project?.deadline ?? ''} />
+              <OperationalDateField
+                id="p-deadline"
+                name="deadline"
+                label="Échéance"
+                defaultValue={project?.deadline ?? ''}
+                unchangedBaseline={project?.deadline ?? undefined}
+              />
             </div>
           </div>
           <div className="grid gap-2">

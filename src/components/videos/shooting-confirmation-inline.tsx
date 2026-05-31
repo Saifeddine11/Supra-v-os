@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
+import { getMinOperationalDatetimeLocal } from '@/lib/dates/validate-future-date';
 import { SHOOTING_POSTPONE_REASON_PRESETS } from '@/lib/videos/shooting-confirmation';
 import {
   confirmVideoShootingDoneAction,
@@ -111,7 +112,7 @@ export function ShootingConfirmationInline({ video, onDone }: { video: VideoWith
           ) : null}
           <div className="space-y-1.5">
             <Label className="text-xs">Nouvelle date</Label>
-            <Input type="datetime-local" value={newShootLocal} onChange={(e) => setNewShootLocal(e.target.value)} className="text-xs" />
+            <Input type="datetime-local" min={getMinOperationalDatetimeLocal()} value={newShootLocal} onChange={(e) => setNewShootLocal(e.target.value)} className="text-xs" />
           </div>
           <div className="space-y-1.5">
             <Label className="text-xs">Note interne (optionnel)</Label>

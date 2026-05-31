@@ -27,6 +27,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils/cn';
 import { createVideoAction, updateVideoAction } from './actions';
 import { ClientColorDot } from '@/components/shared/client-color-dot';
+import {
+  getOperationalDatetimeSubmitError,
+  OperationalDatetimeField,
+} from '@/components/shared/operational-datetime-field';
 import { getClientColor } from '@/lib/ui/client-colors';
 
 const STATUSES = videoStaffProductionStatusSelectOptions();
@@ -117,6 +121,8 @@ export function VideoFormDialog({
   const [editorSel, setEditorSel] = useState<Set<string>>(() => new Set());
   const [camSel, setCamSel] = useState<Set<string>>(() => new Set());
   const [clientSel, setClientSel] = useState(video?.client_id ?? clients[0]?.id ?? '');
+  const [shootingLocal, setShootingLocal] = useState('');
+  const [deliveryLocal, setDeliveryLocal] = useState('');
   const isEdit = Boolean(video);
 
   useEffect(() => {
@@ -131,13 +137,14 @@ export function VideoFormDialog({
     const { editors, cameramen } = initialAssignSets(video ?? null);
     setEditorSel(new Set(editors));
     setCamSel(new Set(cameramen));
-  }, [open, videoRecordKey]);
-
-  const shootingDefault = toDatetimeLocalValue(video?.shooting_date);
-  const deliveryDefault = toDatetimeLocalValue(
-    video?.client_delivery_at ??
-      (video?.delivery_deadline ? `${video.delivery_deadline}T12:00:00` : null)
-  );
+    setShootingLocal(toDatetimeLocalValue(video?.shooting_date));
+    setDeliveryLocal(
+      toDatetimeLocalValue(
+        video?.client_delivery_at ??
+          (video?.delivery_deadline ? `${video.delivery_deadline}T12:00:00` : null),
+      ),
+    );
+  }, [open, videoRecordKey, video]);
 
   /** Listes strictement indépendantes : aucun filtre croisé avec l’autre champ. */
   const editorOptions = useMemo(() => {
@@ -204,14 +211,28 @@ export function VideoFormDialog({
             e.preventDefault();
             setErr(null);
             setPending(true);
+            const shootErr = getOperationalDatetimeSubmitError(shootingLocal, {
+              unchangedFrom: video?.shooting_date ?? null,
+            });
+            if (shootErr) {
+              setErr(`Date de tournage : ${shootErr}`);
+              setPending(false);
+              return;
+            }
+            const deliveryErr = getOperationalDatetimeSubmitError(deliveryLocal, {
+              unchangedFrom:
+                video?.client_delivery_at ??
+                (video?.delivery_deadline ? `${video.delivery_deadline}T12:00:00` : null),
+            });
+            if (deliveryErr) {
+              setErr(`Date de livraison client : ${deliveryErr}`);
+              setPending(false);
+              return;
+            }
             const form = e.currentTarget;
             const fd = new FormData(form);
-            const shootLocal = String(fd.get('shooting_datetime') ?? '').trim();
-            fd.delete('shooting_datetime');
-            fd.set('shooting_at', shootLocal ? new Date(shootLocal).toISOString() : '');
-            const delLocal = String(fd.get('client_delivery_datetime') ?? '').trim();
-            fd.delete('client_delivery_datetime');
-            fd.set('client_delivery_at', delLocal ? new Date(delLocal).toISOString() : '');
+            fd.set('shooting_at', shootingLocal ? new Date(shootingLocal).toISOString() : '');
+            fd.set('client_delivery_at', deliveryLocal ? new Date(deliveryLocal).toISOString() : '');
             try {
               const res = isEdit ? await updateVideoAction(video!.id, fd) : await createVideoAction(fd);
               if (!res.ok) {
@@ -428,30 +449,29 @@ export function VideoFormDialog({
               <FormSection title="Dates importantes" description="Planification tournage et engagement client.">
                 <div className="grid grid-cols-1 gap-5 md:grid-cols-2 md:gap-6">
                   <div className="grid min-w-0 gap-2 rounded-xl border border-border/60 bg-muted/15 p-4">
-                    <Label htmlFor="v-shoot-dt">Date de tournage</Label>
-                    <Input
+                    <OperationalDatetimeField
                       id="v-shoot-dt"
-                      name="shooting_datetime"
-                      type="datetime-local"
-                      className="w-full bg-background/80"
-                      defaultValue={shootingDefault}
+                      label="Date de tournage"
+                      value={shootingLocal}
+                      onValueChange={setShootingLocal}
+                      unchangedBaseline={video?.shooting_date ?? undefined}
+                      inputClassName="w-full bg-background/80"
+                      hint="Visible dans le calendrier équipe et le portail client."
                     />
-                    <p className="text-xs leading-snug text-muted-foreground">
-                      Visible dans le calendrier équipe et le portail client.
-                    </p>
                   </div>
                   <div className="grid min-w-0 gap-2 rounded-xl border border-border/60 bg-muted/15 p-4">
-                    <Label htmlFor="v-deliver-dt">Date de livraison au client</Label>
-                    <Input
+                    <OperationalDatetimeField
                       id="v-deliver-dt"
-                      name="client_delivery_datetime"
-                      type="datetime-local"
-                      className="w-full bg-background/80"
-                      defaultValue={deliveryDefault}
+                      label="Date de livraison au client"
+                      value={deliveryLocal}
+                      onValueChange={setDeliveryLocal}
+                      unchangedBaseline={
+                        video?.client_delivery_at ??
+                          (video?.delivery_deadline ? `${video.delivery_deadline}T12:00:00` : undefined)
+                      }
+                      inputClassName="w-full bg-background/80"
+                      hint="Date prévue d'envoi ou livraison au client."
                     />
-                    <p className="text-xs leading-snug text-muted-foreground">
-                      Date prévue d’envoi ou livraison au client.
-                    </p>
                   </div>
                 </div>
               </FormSection>

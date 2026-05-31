@@ -13,6 +13,7 @@ import {
   previewClientResolution,
   previewAssigneeResolution,
 } from '@/lib/tasks/resolve-task-references';
+import { isPastOperationalDateTime, SUPAI_PAST_DATE_REFUSAL } from '@/lib/dates/validate-future-date';
 
 export async function buildTaskUpdateDraftReply(
   ctx: AuthContext,
@@ -20,6 +21,14 @@ export async function buildTaskUpdateDraftReply(
 ): Promise<string> {
   if (!hasTaskUpdateChanges(draft.changes)) {
     return TASK_UPDATE_DRAFT_EMPTY_CHANGES;
+  }
+
+  if (
+    draft.changes.deadlineIso?.trim() &&
+    !draft.changes.clearDeadline &&
+    isPastOperationalDateTime(draft.changes.deadlineIso)
+  ) {
+    return SUPAI_PAST_DATE_REFUSAL;
   }
 
   const lookup = await lookupTaskForUpdate(ctx, {

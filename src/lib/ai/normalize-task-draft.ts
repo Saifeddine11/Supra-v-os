@@ -1,5 +1,6 @@
 import type { AiTaskDraftPayload } from '@/lib/ai/task-draft-schema';
 import { parseFrenchDeadlineText, parseFrenchDateText } from '@/lib/ai/parse-task-deadline';
+import { isPastOperationalDateTime } from '@/lib/dates/validate-future-date';
 import { extractStructuredTaskFields } from '@/lib/ai/extract-structured-task-fields';
 
 const DATE_WORDS =
@@ -344,6 +345,10 @@ export function normalizeTaskDraft(
       parseFrenchDateText(merged.deadlineText) ??
       parseFrenchDeadlineText(merged.deadlineText) ??
       fromMessage?.deadlineIso;
+  }
+
+  if (merged.deadlineIso && isPastOperationalDateTime(merged.deadlineIso)) {
+    merged.deadlineIso = undefined;
   }
 
   merged.title = normalizeActionTitle(merged.title.slice(0, 160));

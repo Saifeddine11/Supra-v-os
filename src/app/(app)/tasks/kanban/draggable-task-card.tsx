@@ -483,7 +483,8 @@ export function DraggableTaskCard({
                     confirmLabel="Archiver"
                     onConfirm={() =>
                       startTransition(async () => {
-                        await archiveTaskAction(task.id);
+                        const res = await archiveTaskAction(task.id);
+                        if (res.ok) requestCriticalAlertsRefresh();
                         router.refresh();
                       })
                     }

@@ -23,6 +23,7 @@ import {
   videoCanPostponeShooting,
   viewerCanRespondToShootingConfirmation,
 } from '@/lib/videos/shooting-confirmation';
+import { validateOperationalFutureDate } from '@/lib/dates/validate-future-date';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -409,10 +410,9 @@ export async function postponeVideoShootingAction(formData: FormData): Promise<A
 
   const newShootMs = Date.parse(newShootRaw);
   if (Number.isNaN(newShootMs)) return actionError('Date de tournage invalide.');
+  const dateCheck = validateOperationalFutureDate(newShootRaw, { allowEmpty: false, mode: 'datetime' });
+  if (!dateCheck.ok) return actionError(dateCheck.message);
   const newShootingAt = new Date(newShootMs).toISOString();
-  if (newShootMs <= Date.now()) {
-    return actionError('La nouvelle date de tournage doit être dans le futur.');
-  }
 
   const reasonLabel = labelForPostponePreset(preset, detail);
   if (!reasonLabel.trim()) return actionError('Précisez le motif du report.');

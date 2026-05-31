@@ -36,6 +36,10 @@ import {
   DraftReferenceResolvedHint,
 } from '@/components/ai/draft-name-resolution';
 import { hrefTasksOpenDetail } from '@/lib/tasks/task-deep-link';
+import {
+  getOperationalDatetimeSubmitError,
+  OperationalDatetimeField,
+} from '@/components/shared/operational-datetime-field';
 
 type TaskUpdateDraftCardProps = {
   draft: AiTaskUpdateDraftPayload;
@@ -200,6 +204,14 @@ export function TaskUpdateDraftCard({
 
   async function handleConfirm() {
     if (!canConfirm || !taskId) return;
+    if (localDraft.changes.deadlineIso && !localDraft.changes.clearDeadline) {
+      const local = toDatetimeLocal(localDraft.changes.deadlineIso);
+      const deadlineErr = getOperationalDatetimeSubmitError(local);
+      if (deadlineErr) {
+        toast.error(deadlineErr);
+        return;
+      }
+    }
     setConfirming(true);
     try {
       const c = localDraft.changes;
@@ -457,26 +469,23 @@ export function TaskUpdateDraftCard({
               }
             />
           </div>
-          <div>
-            <Label htmlFor="update-deadline">Échéance (datetime-local)</Label>
-            <Input
-              id="update-deadline"
-              type="datetime-local"
-              value={toDatetimeLocal(localDraft.changes.deadlineIso)}
-              onChange={(e) => {
-                const iso = fromDatetimeLocal(e.target.value);
-                setLocalDraft((prev) => ({
-                  ...prev,
-                  changes: {
-                    ...prev.changes,
-                    clearDeadline: false,
-                    deadlineIso: iso,
-                    deadlineText: e.target.value || undefined,
-                  },
-                }));
-              }}
-            />
-          </div>
+          <OperationalDatetimeField
+            id="update-deadline"
+            label="Échéance (datetime-local)"
+            value={toDatetimeLocal(localDraft.changes.deadlineIso)}
+            onValueChange={(next) => {
+              const iso = fromDatetimeLocal(next);
+              setLocalDraft((prev) => ({
+                ...prev,
+                changes: {
+                  ...prev.changes,
+                  clearDeadline: false,
+                  deadlineIso: iso,
+                  deadlineText: next || undefined,
+                },
+              }));
+            }}
+          />
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <Label htmlFor="update-status">Statut</Label>

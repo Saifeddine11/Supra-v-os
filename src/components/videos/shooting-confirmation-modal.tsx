@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
+import { getMinOperationalDatetimeLocal } from '@/lib/dates/validate-future-date';
 import type { ShootingConfirmQueueItem } from '@/lib/data/shooting-confirmation-queue';
 import { SHOOTING_POSTPONE_REASON_PRESETS } from '@/lib/videos/shooting-confirmation';
 import {
@@ -276,6 +277,7 @@ export function ShootingConfirmationModal({
                 <Label>Nouvelle date de tournage</Label>
                 <Input
                   type="datetime-local"
+                  min={getMinOperationalDatetimeLocal()}
                   value={newShootLocal}
                   onChange={(e) => setNewShootLocal(e.target.value)}
                   className="text-sm"

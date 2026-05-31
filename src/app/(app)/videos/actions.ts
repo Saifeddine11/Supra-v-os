@@ -25,6 +25,7 @@ import {
 import { legacyPrimaryAssignees, replaceVideoAssignments } from '@/lib/data/video-assignments';
 import { syncVideoLinkedProductionTaskFromDb, upsertVideoProductionTask } from '@/lib/tasks/video-production-task';
 import { getVideoById, type VideoWithClient } from '@/lib/data/videos';
+import { validateOperationalFutureDate } from '@/lib/dates/validate-future-date';
 
 /** Ne pas exposer les messages techniques RLS / Postgres au formulaire. */
 function formatVideoMutationDbError(err: unknown): string {
@@ -54,6 +55,26 @@ function deliveryDeadlineDateFromClientAt(clientDeliveryAt: string | null): stri
 
 function dedupeIds(ids: string[]): string[] {
   return [...new Set(ids.map((x) => x.trim()).filter(Boolean))];
+}
+
+function validateVideoFormOperationalDates(
+  formData: FormData,
+  unchanged?: { shooting?: string | null; delivery?: string | null },
+): ActionResult<null> {
+  for (const [label, raw, prev] of [
+    ['Date de tournage', formData.get('shooting_at'), unchanged?.shooting ?? null],
+    ['Date de livraison client', formData.get('client_delivery_at'), unchanged?.delivery ?? null],
+  ] as const) {
+    const s = String(raw ?? '').trim();
+    if (!s) continue;
+    const check = validateOperationalFutureDate(s, {
+      allowEmpty: false,
+      mode: 'datetime',
+      unchangedFrom: prev,
+    });
+    if (!check.ok) return actionError(`${label} : ${check.message}`);
+  }
+  return actionOk(null);
 }
 
 /** Étapes autorisées pour un cadreur (drag Kanban ou changement rapide). */
@@ -192,6 +213,10 @@ export async function createVideoAction(formData: FormData): Promise<ActionResul
   let { editorIds, cameramanIds } = parseEditorCameramanIdsFromForm(formData);
   const shootingAt = parseOptionalIsoTimestamp(formData.get('shooting_at'));
   const clientDeliveryAt = parseOptionalIsoTimestamp(formData.get('client_delivery_at'));
+
+  const dateCheck = validateVideoFormOperationalDates(formData);
+  if (!dateCheck.ok) return dateCheck;
+
   const deliveryDeadline = deliveryDeadlineDateFromClientAt(clientDeliveryAt);
 
   const scoped = enforceVideoAssigneeScopeArrays(ctx, editorIds, cameramanIds);
@@ -308,6 +333,18 @@ export async function updateVideoAction(id: string, formData: FormData): Promise
   let { editorIds, cameramanIds } = parseEditorCameramanIdsFromForm(formData);
   const shootingAt = parseOptionalIsoTimestamp(formData.get('shooting_at'));
   const clientDeliveryAt = parseOptionalIsoTimestamp(formData.get('client_delivery_at'));
+
+  const { data: curVideoDates } = await supabase
+    .from('videos')
+    .select('shooting_date,client_delivery_at')
+    .eq('id', id)
+    .maybeSingle();
+  const dateCheck = validateVideoFormOperationalDates(formData, {
+    shooting: curVideoDates?.shooting_date ? String(curVideoDates.shooting_date) : null,
+    delivery: curVideoDates?.client_delivery_at ? String(curVideoDates.client_delivery_at) : null,
+  });
+  if (!dateCheck.ok) return dateCheck;
+
   const deliveryDeadline = deliveryDeadlineDateFromClientAt(clientDeliveryAt);
 
   const scoped = enforceVideoAssigneeScopeArrays(ctx, editorIds, cameramanIds);

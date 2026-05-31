@@ -1,6 +1,7 @@
 import type { AiTaskUpdateChanges, AiTaskUpdateDraftPayload } from '@/lib/ai/task-update-draft-schema';
 import { AI_TASK_UPDATE_STATUS, type AiTaskUpdateStatus } from '@/lib/ai/task-update-draft-schema';
 import { parseFrenchDateText } from '@/lib/ai/parse-task-deadline';
+import { isPastOperationalDateTime } from '@/lib/dates/validate-future-date';
 import { AI_TASK_DRAFT_PRIORITY } from '@/lib/ai/task-draft-schema';
 
 const STATUS_PHRASES: Array<{ pattern: RegExp; status: AiTaskUpdateStatus }> = [
@@ -45,6 +46,10 @@ function normalizeChanges(changes: AiTaskUpdateChanges, userMessage: string): Ai
   if (out.deadlineText?.trim() && !out.deadlineIso) {
     const iso = parseFrenchDateText(out.deadlineText);
     if (iso) out.deadlineIso = iso;
+  }
+
+  if (out.deadlineIso && isPastOperationalDateTime(out.deadlineIso)) {
+    out.deadlineIso = undefined;
   }
 
   if (

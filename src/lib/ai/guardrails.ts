@@ -14,6 +14,11 @@ import {
   SUPAI_REFUSAL_TASK_UPDATE,
 } from '@/lib/ai/supai-copy';
 import { evaluateGlobalTeamGuardrail } from '@/lib/ai/supai-permissions';
+import {
+  detectAmbiguousPastDayOnly,
+  detectExplicitPastDateIntent,
+  SUPAI_PAST_DATE_REFUSAL,
+} from '@/lib/dates/validate-future-date';
 
 export type GuardrailRefusalType =
   | 'finance_unauthorized'
@@ -22,7 +27,8 @@ export type GuardrailRefusalType =
   | 'auto_send'
   | 'secrets'
   | 'permission_denied'
-  | 'task_update_denied';
+  | 'task_update_denied'
+  | 'past_operational_date';
 
 export type GuardrailRefusal = {
   type: GuardrailRefusalType;
@@ -157,6 +163,8 @@ export function getRoleBasedRefusal(
       return SUPAI_REFUSAL_PERMISSION;
     case 'task_update_denied':
       return SUPAI_REFUSAL_TASK_UPDATE;
+    case 'past_operational_date':
+      return SUPAI_PAST_DATE_REFUSAL;
     default:
       return SUPAI_REFUSAL_PERMISSION;
   }
@@ -174,6 +182,15 @@ export function evaluateSupaiGuardrails(
 
   if (isSecretsRequest(text)) {
     return { type: 'secrets', reply: getRoleBasedRefusal(ctx.role, 'secrets') };
+  }
+
+  if (detectExplicitPastDateIntent(text)) {
+    return { type: 'past_operational_date', reply: SUPAI_PAST_DATE_REFUSAL };
+  }
+
+  const ambiguousPastDay = detectAmbiguousPastDayOnly(text);
+  if (ambiguousPastDay) {
+    return { type: 'past_operational_date', reply: ambiguousPastDay };
   }
 
   if (SQL_DESTRUCTIVE_PATTERNS.some((p) => p.test(text))) {

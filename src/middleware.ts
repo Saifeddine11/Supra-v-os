@@ -26,8 +26,13 @@ const isPublic = (pathname: string) =>
   PUBLIC_PATHS.some(p => pathname === p || pathname.startsWith(p));
 
 export async function middleware(request: NextRequest) {
-  const response = NextResponse.next({ request });
   const pathname = request.nextUrl.pathname;
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set('x-pathname', pathname);
+
+  const response = NextResponse.next({
+    request: { headers: requestHeaders },
+  });
 
   const supabaseUrl = normalizeSupabaseProjectUrl(
     process.env.NEXT_PUBLIC_SUPABASE_URL
