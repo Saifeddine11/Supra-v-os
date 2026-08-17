@@ -27,10 +27,17 @@ import {
 } from '@/lib/ui/status-colors';
 import { videoCadreurTableCell, videoMonteurTableCell } from '@/lib/videos/video-assignee-labels';
 import { VideoRowActions } from './video-row-actions';
-import { VideosKanban } from './videos-kanban';
 import { VideoDetailDialog } from './video-detail-dialog';
 import { videoShowsShootingConfirmBadge } from '@/lib/videos/shooting-confirmation';
 import { getVideoDetailForViewerAction } from './actions';
+import dynamic from 'next/dynamic';
+
+const VideosKanban = dynamic(() => import('./videos-kanban').then((m) => ({ default: m.VideosKanban })), {
+  loading: () => (
+    <div className="h-72 animate-pulse rounded-2xl border border-border/50 bg-muted/20" aria-hidden />
+  ),
+  ssr: false,
+});
 
 export function VideosWorkspace({
   view,

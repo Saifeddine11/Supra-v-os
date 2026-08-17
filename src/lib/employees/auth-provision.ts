@@ -3,22 +3,27 @@ import 'server-only';
 import { randomBytes } from 'crypto';
 import { createAdminClient, type ServiceRoleClient } from '@/lib/supabase/admin';
 import { mapSupabaseAuthEmailError } from '@/lib/employees/auth-email-errors';
+import {
+  AUTH_SET_PASSWORD_PATH,
+  getAppOrigin,
+  getAuthSetPasswordRedirectUrl,
+} from '@/lib/auth/password-setup';
 
 /**
  * Cible après clic sur le lien d’invitation / reset (doit figurer dans Redirect URLs Supabase).
  * Production : définir NEXT_PUBLIC_APP_URL=https://app.suprav3.com (sans slash final).
  */
 export function getAuthLoginRedirectUrl(): string {
-  const base = (process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000').replace(/\/$/, '');
-  return `${base}/login`;
+  return `${getAppOrigin()}/login`;
 }
 
-/** URL de callback auth : crée la session puis redirige vers `next` (par défaut /change-password). */
-export function getAuthCallbackRedirectUrl(next = '/change-password'): string {
-  const base = (process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000').replace(/\/$/, '');
-  const safeNext = next.startsWith('/') ? next : '/change-password';
-  return `${base}/auth/callback?next=${encodeURIComponent(safeNext)}`;
+/** @deprecated Prefer getAuthSetPasswordRedirectUrl — kept for older callback links. */
+export function getAuthCallbackRedirectUrl(next = AUTH_SET_PASSWORD_PATH): string {
+  const safeNext = next.startsWith('/') ? next : AUTH_SET_PASSWORD_PATH;
+  return `${getAppOrigin()}/auth/callback?next=${encodeURIComponent(safeNext)}`;
 }
+
+export { getAuthSetPasswordRedirectUrl };
 
 /** Page de connexion publique (même base que les redirections Auth). */
 export function getPublicLoginPageUrl(): string {
@@ -158,7 +163,7 @@ export async function inviteEmployeeAuth(
   const { data: row } = await admin.from('employees').select('user_id').eq('id', employeeId).maybeSingle();
   if (row?.user_id) return { ok: false, error: 'Compte Auth déjà lié.' };
 
-  const redirectTo = getAuthCallbackRedirectUrl('/change-password');
+  const redirectTo = getAuthSetPasswordRedirectUrl();
 
   const { data: invited, error: inviteErr } = await admin.auth.admin.inviteUserByEmail(em, {
     redirectTo,
@@ -274,13 +279,13 @@ export async function createEmployeeAuthWithTempPassword(
 
 export type PasswordResetResult = { ok: true } | { ok: false; error: string };
 
-/** E-mail « mot de passe oublié » — callback auth puis redirection vers /change-password. */
+/** E-mail « mot de passe oublié » — redirection vers /auth/set-password. */
 export async function sendAuthPasswordResetEmail(email: string): Promise<PasswordResetResult> {
   const admin = createAdminClient();
   const em = normalizeEmail(email);
   if (!em) return { ok: false, error: 'Cet employé n’a pas d’e-mail.' };
 
-  const redirectTo = getAuthCallbackRedirectUrl('/change-password');
+  const redirectTo = getAuthSetPasswordRedirectUrl();
   const { error } = await admin.auth.resetPasswordForEmail(em, { redirectTo });
   if (error) {
     return { ok: false, error: mapAuthError(error.message) || 'Impossible d’envoyer l’e-mail de réinitialisation.' };

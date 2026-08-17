@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AlertTriangle, ChevronDown, ChevronUp, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -73,7 +72,6 @@ const btnSm =
   'h-8 min-h-0 shrink-0 rounded-[10px] px-2.5 text-xs font-medium sm:h-9 sm:px-3';
 
 export function GlobalCriticalAlertBar() {
-  const pathname = usePathname();
   const [payload, setPayload] = useState<CriticalActiveAlertsResponse | null>(null);
   const [snoozeTick, setSnoozeTick] = useState(0);
   const [uiState, setUiState] = useState<'compact' | 'hidden'>('compact');
@@ -100,7 +98,7 @@ export function GlobalCriticalAlertBar() {
     return () => {
       cancelled = true;
     };
-  }, [pathname, snoozeTick]);
+  }, [snoozeTick]);
 
   useEffect(() => {
     if (!payload) return;

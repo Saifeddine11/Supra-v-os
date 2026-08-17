@@ -29,8 +29,17 @@ import type { TaskPriority, TaskStatus } from '@/types/database';
 import type { CalendarColorBy } from '@/lib/tasks/calendar-visual';
 import { SectionCard } from '@/components/shared/section-card';
 import { CalendarToolbar, type CalendarNav } from './calendar-toolbar';
-import { TasksCalendarExperience } from './tasks-calendar-experience';
 import { CalendarMobileDefaultRedirect } from './calendar-mobile-default';
+import dynamic from 'next/dynamic';
+
+const TasksCalendarExperience = dynamic(
+  () => import('./tasks-calendar-experience').then((m) => ({ default: m.TasksCalendarExperience })),
+  {
+    loading: () => (
+      <div className="h-80 animate-pulse rounded-2xl border border-border/50 bg-muted/20" aria-hidden />
+    ),
+  },
+);
 
 export const metadata: Metadata = { title: 'Calendrier des tâches' };
 

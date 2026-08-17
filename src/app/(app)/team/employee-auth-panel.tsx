@@ -205,7 +205,7 @@ export function EmployeeAuthPanel({
       <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
         Les invitations et réinitialisations utilisent l’e-mail de la fiche et le domaine{' '}
         <span className="font-mono text-[10px] text-foreground/80">NEXT_PUBLIC_APP_URL</span> pour la redirection vers
-        le callback Auth puis <span className="font-mono text-[10px] text-foreground/80">/change-password</span>.
+        <span className="font-mono text-[10px] text-foreground/80">/auth/set-password</span>.
       </p>
 
       <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">

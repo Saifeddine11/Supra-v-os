@@ -7,13 +7,14 @@ import { getMyNotificationPreferences } from '@/lib/data/notification-preference
 import { notificationSoundPrefsFromRow } from '@/lib/notifications/notification-sound-prefs';
 import { AppShell } from '@/components/app/app-shell';
 import { StaffPasswordChangeGate } from '@/components/app/staff-password-change-gate';
+import { ShootingConfirmationSlot } from '@/components/app/shooting-confirmation-slot';
 import type { Notification } from '@/types/database';
-import { fetchShootingConfirmationQueue } from '@/lib/data/shooting-confirmation-queue';
+import { withDevTime } from '@/lib/perf/dev-time';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const ctx = await requireAuth();
   const pathname = (await headers()).get('x-pathname') ?? '';
-  await enforceRouteAccessForPathname(pathname);
+  await enforceRouteAccessForPathname(pathname, ctx);
 
   if (!ctx.employee) {
     redirect('/login?next=/dashboard');
@@ -25,23 +26,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   let initialBellPreview: Notification[] = [];
   let notificationSoundPrefs = notificationSoundPrefsFromRow(null);
   if (!mustChangePassword) {
-    const [unread, bellPreview, notifPrefs] = await Promise.all([
-      getUnreadNotificationsCount(ctx),
-      listBellPreview(8, ctx),
-      ctx.userId ? getMyNotificationPreferences(ctx.userId) : Promise.resolve(null),
-    ]);
+    const [unread, bellPreview, notifPrefs] = await withDevTime('layout notifications', () =>
+      Promise.all([
+        getUnreadNotificationsCount(ctx),
+        listBellPreview(8, ctx),
+        ctx.userId ? getMyNotificationPreferences(ctx.userId) : Promise.resolve(null),
+      ]),
+    );
     initialUnread = unread;
     initialBellPreview = bellPreview;
     notificationSoundPrefs = notificationSoundPrefsFromRow(notifPrefs);
-  }
-
-  let shootingConfirmQueue: Awaited<ReturnType<typeof fetchShootingConfirmationQueue>> = [];
-  if (!mustChangePassword) {
-    try {
-      shootingConfirmQueue = await fetchShootingConfirmationQueue(ctx);
-    } catch {
-      shootingConfirmQueue = [];
-    }
   }
 
   return (
@@ -53,8 +47,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         initialUnread={initialUnread}
         initialBellPreview={initialBellPreview}
         notificationSoundPrefs={notificationSoundPrefs}
-        shootingConfirmQueue={shootingConfirmQueue}
-        shootingConfirmUserId={ctx.userId}
+        shootingSlot={
+          !mustChangePassword && ctx.userId ? <ShootingConfirmationSlot userId={ctx.userId} /> : null
+        }
       >
         {children}
       </AppShell>

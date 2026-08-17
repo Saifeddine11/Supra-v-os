@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { APP_NAME, AGENCY } from '@/lib/constants';
 import { ThemeToggle } from '@/components/app/theme-toggle';
 import { createClient } from '@/lib/supabase/client';
+import { AUTH_SET_PASSWORD_PATH, isPasswordSetupLocation } from '@/lib/auth/password-setup';
 
 const NO_EMPLOYEE_AFTER_SSO_MSG =
   'Compte connecté mais aucun profil employé trouvé.';
@@ -79,6 +80,16 @@ export function LoginForm() {
   const [loading, setLoading] = useState(false);
 
   /**
+   * Invite / recovery must never stay on the login form (no password yet).
+   * Hash tokens are invisible to middleware — intercept them here first.
+   */
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!isPasswordSetupLocation(window.location.search, window.location.hash)) return;
+    router.replace(`${AUTH_SET_PASSWORD_PATH}${window.location.search}${window.location.hash}`);
+  }, [router]);
+
+  /**
    * Après invitation / lien magique : le hash (#access_token=…) est lu par le client Supabase
    * (detectSessionInUrl), persisté en cookies — on redirige si session valide + employé lié.
    */
@@ -86,6 +97,10 @@ export function LoginForm() {
     let cancelled = false;
     (async () => {
       try {
+        if (typeof window !== 'undefined' && isPasswordSetupLocation(window.location.search, window.location.hash)) {
+          return;
+        }
+
         const supabase = createClient();
         const {
           data: { session },
@@ -110,8 +125,7 @@ export function LoginForm() {
             : next.startsWith('/')
               ? next
               : '/dashboard';
-        router.replace(dest);
-        router.refresh();
+        window.location.assign(dest);
       } catch (e) {
         console.error('[login-form] session depuis URL / invitation', e);
       }
@@ -130,6 +144,7 @@ export function LoginForm() {
     e.preventDefault();
     setError(null);
     setLoading(true);
+    let navigating = false;
 
     try {
       const res = await fetch('/api/auth/login', {
@@ -188,8 +203,9 @@ export function LoginForm() {
           : next.startsWith('/')
             ? next
             : '/dashboard';
-      router.push(dest);
-      router.refresh();
+      window.location.assign(dest);
+      navigating = true;
+      return;
     } catch (err) {
       console.error('[login-form] fetch failed (full error):', err);
       if (err instanceof Error) {
@@ -200,7 +216,7 @@ export function LoginForm() {
       }
       setError(messageFromLoginApiFailure(err));
     } finally {
-      setLoading(false);
+      if (!navigating) setLoading(false);
     }
   }
 

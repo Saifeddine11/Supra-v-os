@@ -22,6 +22,7 @@ import {
   parseUuidParam,
 } from '@/lib/security/input-validation';
 import { ALLOWED_TASK_PRIORITIES, ALLOWED_TASK_STATUSES } from '@/lib/security/query-whitelist';
+import { withDevTime } from '@/lib/perf/dev-time';
 
 export interface TaskListFilters {
   search?: string;
@@ -156,8 +157,10 @@ export async function listTasksEnriched(
   filters: TaskListFilters = {},
   ctx: AuthContext | null = null
 ): Promise<TaskEnriched[]> {
-  const tasks = await listTasks(filters, ctx);
-  return enrichTasks(tasks);
+  return withDevTime('tasks list', async () => {
+    const tasks = await listTasks(filters, ctx);
+    return enrichTasks(tasks);
+  });
 }
 
 export async function getTaskById(

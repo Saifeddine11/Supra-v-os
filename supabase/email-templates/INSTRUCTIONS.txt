@@ -6,10 +6,30 @@ Subject :
 
 Body : copier invite-user.html (onglet Body HTML) et invite-user.txt (Body plain).
 
-URL Configuration (même onglet Authentication) :
-  Site URL : https://app.suprav3.com
-  Redirect URLs : inclure https://app.suprav3.com/** , https://appsupra.vercel.app/** , http://localhost:3000/** , etc.
+  Authentication → Email Templates → Reset password
 
-Code : inviteUserByEmail utilise NEXT_PUBLIC_APP_URL pour redirectTo (voir src/lib/employees/auth-provision.ts).
+Subject :
+  Réinitialiser votre mot de passe — Supra v. Agency OS
+
+Body : copier reset-password.html et reset-password.txt.
+
+Les liens d’invitation / reset DOIVENT pointer vers /auth/confirm (token_hash)
+puis /auth/set-password — jamais vers /login.
+
+URL Configuration (Authentication → URL Configuration) :
+  Site URL : https://app.suprav3.com
+  Redirect URLs : inclure au minimum
+    https://app.suprav3.com/auth/set-password
+    https://app.suprav3.com/auth/confirm
+    https://app.suprav3.com/auth/callback
+    https://app.suprav3.com/change-password
+    https://app.suprav3.com/**
+    http://localhost:3000/auth/set-password
+    http://localhost:3000/auth/confirm
+    http://localhost:3000/auth/callback
+    http://localhost:3000/**
+
+Code : inviteUserByEmail / resetPasswordForEmail utilisent
+NEXT_PUBLIC_APP_URL + /auth/set-password (voir src/lib/employees/auth-provision.ts).
 
 Expéditeur « Supabase Auth » : activer Custom SMTP (ex. Resend) dans Project Settings → Authentication → SMTP Settings ; définir le nom d’affichage « Supra v. » et l’adresse notifications@app.suprav3.com (ou votre domaine vérifié).

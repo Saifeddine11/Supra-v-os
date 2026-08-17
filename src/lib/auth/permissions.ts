@@ -5,9 +5,11 @@
  * enforce role-based access. Never trust the client.
  */
 
+import { cache } from 'react';
 import { createClient } from '@/lib/supabase/server';
 import type { UserRole, Employee } from '@/types/database';
 import { redirect } from 'next/navigation';
+import { withDevTime } from '@/lib/perf/dev-time';
 
 export interface AuthContext {
   userId: string;
@@ -18,28 +20,33 @@ export interface AuthContext {
 
 /**
  * Fetch the current authenticated user + their employee record + role.
- * Returns null if not authenticated.
+ * Deduplicated with React.cache() for the lifetime of the request
+ * (layout + RBAC + page + data helpers share one Auth round-trip).
  */
-export async function getAuthContext(): Promise<AuthContext | null> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return null;
+export const getAuthContext = cache(async (): Promise<AuthContext | null> => {
+  return withDevTime('auth context', async () => {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return null;
 
-  const { data: employeeRow } = await supabase
-    .from('employees')
-    .select('*')
-    .eq('user_id', user.id)
-    .maybeSingle();
+    const { data: employeeRow } = await supabase
+      .from('employees')
+      .select('*')
+      .eq('user_id', user.id)
+      .maybeSingle();
 
-  const employee = (employeeRow ?? null) as Employee | null;
+    const employee = (employeeRow ?? null) as Employee | null;
 
-  return {
-    userId: user.id,
-    email: user.email ?? '',
-    employee,
-    role: employee?.role ?? null,
-  };
-}
+    return {
+      userId: user.id,
+      email: user.email ?? '',
+      employee,
+      role: employee?.role ?? null,
+    };
+  });
+});
 
 /**
  * Require an authenticated user. Redirects to /login if not.

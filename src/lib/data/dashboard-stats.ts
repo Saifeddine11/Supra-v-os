@@ -18,6 +18,7 @@ import {
   fetchVideoIdsForAssignmentRole,
 } from '@/lib/data/video-assignments';
 import { fetchTaskIdsAssignedToEmployee } from '@/lib/data/task-assignments';
+import { withDevTime } from '@/lib/perf/dev-time';
 
 export interface DashboardFinanceAgg {
   currency: AgencyCurrencyIso;
@@ -412,7 +413,18 @@ async function fetchPersonalWorkload(
   const now = new Date().toISOString();
   const { start, end } = todayBoundsIso();
 
-  const taskPivotIds = await fetchTaskIdsAssignedToEmployee(supabase, employeeId);
+  const taskPivotIdsP = fetchTaskIdsAssignedToEmployee(supabase, employeeId);
+  const vaEditorIdsP = fetchVideoIdsForAssignmentRole(supabase, employeeId, 'editor');
+  const vaCamIdsP = fetchVideoIdsForAssignmentRole(supabase, employeeId, 'cameraman');
+  const vaAnyIdsP = fetchVideoIdsAssignedToEmployee(supabase, employeeId);
+
+  const [taskPivotIds, vaEditorIds, vaCamIds, vaAnyIds] = await Promise.all([
+    taskPivotIdsP,
+    vaEditorIdsP,
+    vaCamIdsP,
+    vaAnyIdsP,
+  ]);
+
   const taskOrParts = [`assignee_id.eq.${employeeId}`];
   if (taskPivotIds.length) taskOrParts.push(`id.in.(${taskPivotIds.join(',')})`);
   const taskScopeOr = taskOrParts.join(',');
@@ -454,12 +466,6 @@ async function fetchPersonalWorkload(
     .select('id', { count: 'exact', head: true })
     .or(taskScopeOr)
     .eq('status', 'blocked');
-
-  const [vaEditorIds, vaCamIds, vaAnyIds] = await Promise.all([
-    fetchVideoIdsForAssignmentRole(supabase, employeeId, 'editor'),
-    fetchVideoIdsForAssignmentRole(supabase, employeeId, 'cameraman'),
-    fetchVideoIdsAssignedToEmployee(supabase, employeeId),
-  ]);
 
   const orLegacyAndVaIds = (legacyCol: 'editor_id' | 'cameraman_id', vaIds: string[]) => {
     const parts = [`${legacyCol}.eq.${employeeId}`];
@@ -641,6 +647,10 @@ async function fetchCommercialKpis(
  * Résumé dashboard selon le rôle : agrégats agence, périmètre commercial ou charges personnelles.
  */
 export async function getDashboardSummary(ctx: AuthContext): Promise<DashboardSummary> {
+  return withDevTime('dashboard stats', () => getDashboardSummaryInner(ctx));
+}
+
+async function getDashboardSummaryInner(ctx: AuthContext): Promise<DashboardSummary> {
   const agencyDisplayCurrency = await getAgencyDisplayCurrency();
 
   const empty: DashboardSummary = {
@@ -681,10 +691,16 @@ export async function getDashboardSummary(ctx: AuthContext): Promise<DashboardSu
     .eq('month', goalMonth)
     .maybeSingle();
 
-  const personal = await fetchPersonalWorkload(supabase, empId, ctx.userId, role);
+  const personalP =
+    role === 'finance'
+      ? Promise.resolve(emptyPersonal())
+      : fetchPersonalWorkload(supabase, empId, ctx.userId, role);
 
   if (role === 'project_manager') {
-    const agency = await fetchAgencyAggregates(supabase, now, monthStart);
+    const [personal, agency] = await Promise.all([
+      personalP,
+      fetchAgencyAggregates(supabase, now, monthStart),
+    ]);
     return {
       scope: 'operations',
       ...agency,
@@ -698,10 +714,10 @@ export async function getDashboardSummary(ctx: AuthContext): Promise<DashboardSu
   }
 
   if (role === 'admin') {
-    const [agency, fin, _p, goalRes] = await Promise.all([
+    const [agency, fin, personal, goalRes] = await Promise.all([
       fetchAgencyAggregates(supabase, now, monthStart),
       fetchFinanceBlock(supabase, ctx, today, agencyDisplayCurrency),
-      Promise.resolve(personal),
+      personalP,
       goalPromise,
     ]);
     const agencyMonthlyGoal = (goalRes.data as AgencyMonthlyGoalRow | null) ?? null;
@@ -718,9 +734,10 @@ export async function getDashboardSummary(ctx: AuthContext): Promise<DashboardSu
   }
 
   if (role === 'finance') {
-    const [fin, goalRes] = await Promise.all([
+    const [fin, goalRes, personal] = await Promise.all([
       fetchFinanceBlock(supabase, ctx, today, agencyDisplayCurrency),
       goalPromise,
+      personalP,
     ]);
     const agencyMonthlyGoal = (goalRes.data as AgencyMonthlyGoalRow | null) ?? null;
     return {
@@ -743,10 +760,11 @@ export async function getDashboardSummary(ctx: AuthContext): Promise<DashboardSu
   }
 
   if (role === 'commercial') {
-    const [commercial, fin, goalRes] = await Promise.all([
+    const [commercial, fin, goalRes, personal] = await Promise.all([
       fetchCommercialKpis(supabase, empId, today),
       fetchFinanceBlock(supabase, ctx, today, agencyDisplayCurrency),
       goalPromise,
+      personalP,
     ]);
     const agencyMonthlyGoal = (goalRes.data as AgencyMonthlyGoalRow | null) ?? null;
     return {
@@ -775,11 +793,12 @@ export async function getDashboardSummary(ctx: AuthContext): Promise<DashboardSu
     rk === 'seo' ||
     rk === 'community_manager'
   ) {
-    const [fin, goalRes] = await Promise.all([
+    const [fin, goalRes, personal] = await Promise.all([
       canViewInvoices(role)
         ? fetchFinanceBlock(supabase, ctx, today, agencyDisplayCurrency)
         : Promise.resolve({ pendingInvoices: null, finance: null }),
       goalPromise,
+      personalP,
     ]);
     const myVids =
       rk === 'editor' || rk === 'community_manager'
@@ -808,11 +827,11 @@ export async function getDashboardSummary(ctx: AuthContext): Promise<DashboardSu
     };
   }
 
-  const { data: goalFallback } = await goalPromise;
+  const [personal, goalFallback] = await Promise.all([personalP, goalPromise]);
   return {
     ...empty,
     personal,
-    agencyMonthlyGoal: (goalFallback as AgencyMonthlyGoalRow | null) ?? null,
+    agencyMonthlyGoal: (goalFallback.data as AgencyMonthlyGoalRow | null) ?? null,
     agencyDisplayCurrency,
   };
 }

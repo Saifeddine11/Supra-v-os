@@ -53,21 +53,25 @@ export async function listBellPreview(limit = 8, ctx: AuthContext | null = null)
     .order('created_at', { ascending: false })
     .limit(limit);
   uq = scopeNotifications(uq, auth);
-  const { data: unread, error: e1 } = await uq;
-  if (e1) throw new Error(e1.message);
-  const u = (unread ?? []) as Notification[];
-  if (u.length >= limit) return u;
 
-  let rq = supabase
+  let recentQ = supabase
     .from('notifications')
     .select('*')
-    .eq('is_read', true)
     .order('created_at', { ascending: false })
-    .limit(limit - u.length);
-  rq = scopeNotifications(rq, auth);
-  const { data: rest, error: e2 } = await rq;
-  if (e2) throw new Error(e2.message);
-  return [...u, ...((rest ?? []) as Notification[])];
+    .limit(limit);
+  recentQ = scopeNotifications(recentQ, auth);
+
+  const [unreadRes, recentRes] = await Promise.all([uq, recentQ]);
+  if (unreadRes.error) throw new Error(unreadRes.error.message);
+  if (recentRes.error) throw new Error(recentRes.error.message);
+
+  const unread = (unreadRes.data ?? []) as Notification[];
+  if (unread.length >= limit) return unread;
+  const seen = new Set(unread.map((n) => n.id));
+  const extra = ((recentRes.data ?? []) as Notification[])
+    .filter((n) => !seen.has(n.id))
+    .slice(0, limit - unread.length);
+  return [...unread, ...extra];
 }
 
 /** Notifications créées strictement après `iso` (pour sons / polling sans rejouer l’historique). */

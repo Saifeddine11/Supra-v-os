@@ -3,7 +3,16 @@ import { redirect } from 'next/navigation';
 import { Sparkles } from 'lucide-react';
 import { requireAuth } from '@/lib/auth/permissions';
 import { getSupaiPermissions, getVisibleQuickActionIds } from '@/lib/ai/supai-permissions';
-import { AiAssistantClient } from './ai-assistant-client';
+import dynamic from 'next/dynamic';
+
+const AiAssistantClient = dynamic(
+  () => import('./ai-assistant-client').then((m) => ({ default: m.AiAssistantClient })),
+  {
+    loading: () => (
+      <div className="h-[28rem] animate-pulse rounded-2xl border border-border/50 bg-muted/20" aria-hidden />
+    ),
+  },
+);
 
 export const metadata: Metadata = { title: 'SupAI' };
 

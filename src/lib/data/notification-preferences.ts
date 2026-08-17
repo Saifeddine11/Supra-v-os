@@ -7,7 +7,9 @@ export async function getMyNotificationPreferences(
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('user_notification_preferences')
-    .select('*')
+    .select(
+      'user_id, notification_sound_enabled, notification_sound_urgent_only, notification_sound_volume',
+    )
     .eq('user_id', userId)
     .maybeSingle();
   if (error) {

@@ -8,7 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import type { CookieOptions } from '@supabase/ssr';
-import type { Database, Employee } from '@/types/database';
+import type { Database } from '@/types/database';
 import { normalizeSupabaseProjectUrl } from '@/lib/supabase/normalize-url';
 import { clientIpFrom, rateLimit } from '@/lib/security/rate-limit';
 
@@ -213,7 +213,7 @@ export async function POST(request: NextRequest) {
   });
 
   try {
-    const { error: signError } = await supabase.auth.signInWithPassword({
+    const { data: signData, error: signError } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
@@ -226,13 +226,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const {
-      data: { user },
-      error: userError,
-    } = await supabase.auth.getUser();
-
-    if (userError || !user) {
-      console.error('[auth/login] getUser after signIn:', userError);
+    const user = signData.user;
+    if (!user) {
+      console.error('[auth/login] no user after signIn');
       return NextResponse.json(
         { error: 'Session invalide après connexion. Réessayez.' },
         { status: 500 }
@@ -241,7 +237,7 @@ export async function POST(request: NextRequest) {
 
     const empLookup = await supabase
       .from('employees')
-      .select('*')
+      .select('id, must_change_password')
       .eq('user_id', user.id)
       .maybeSingle();
 
@@ -253,7 +249,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const employee = empLookup.data as Employee | null;
+    const employee = empLookup.data as { id: string; must_change_password: boolean } | null;
 
     if (!employee) {
       console.warn('[auth/login] no employee row for auth user');

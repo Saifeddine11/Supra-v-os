@@ -15,6 +15,7 @@ import {
   formatAssigneeNames,
   type VideoAssigneeRef,
 } from '@/lib/data/video-assignments';
+import { withDevTime } from '@/lib/perf/dev-time';
 
 export type VideoWithClient = Video & {
   clients: { name: string; color_hex: string | null } | null;
@@ -68,6 +69,12 @@ async function enrichVideoRows(
 }
 
 export async function listVideosWithClients(
+  ctx: AuthContext | null = null
+): Promise<VideoWithClient[]> {
+  return withDevTime('videos list', () => listVideosWithClientsInner(ctx));
+}
+
+async function listVideosWithClientsInner(
   ctx: AuthContext | null = null
 ): Promise<VideoWithClient[]> {
   const auth = ctx ?? (await getAuthContext());

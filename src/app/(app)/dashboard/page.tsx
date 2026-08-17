@@ -51,8 +51,7 @@ import { RecentActivityPreview } from '@/components/dashboard/recent-activity-pr
 import { PersonalWorkOverview } from '@/components/dashboard/personal-work-overview';
 import { getDashboardVariant, shouldLoadGlobalActivityFeed } from '@/lib/dashboard/dashboard-variant';
 import { getPersonalDashboardWork } from '@/lib/data/dashboard-personal-work';
-import { fetchDashboardChartsPayload } from '@/lib/data/dashboard-charts';
-import { DashboardChartsSection } from '@/components/dashboard/dashboard-charts-section';
+import { DashboardChartsDeferred } from './dashboard-charts-deferred';
 import type { UserRole } from '@/types/database';
 
 export const metadata: Metadata = {
@@ -300,58 +299,29 @@ export default async function DashboardPage() {
 
   const todayLabel = format(new Date(), "EEEE d MMMM yyyy", { locale: fr });
   const variant = getDashboardVariant(ctx.role);
+  const wantOpsBlocks = ctx.role === 'admin' || ctx.role === 'project_manager';
+  const wantCommercialFollow = ctx.role === 'commercial';
 
-  let dashboardActivity: Awaited<ReturnType<typeof listDashboardActivityForVariant>> = [];
-  if (shouldLoadGlobalActivityFeed(variant)) {
-    try {
-      dashboardActivity = await listDashboardActivityForVariant(variant, 10);
-    } catch {
-      dashboardActivity = [];
-    }
-  }
-
-  let personalWork: Awaited<ReturnType<typeof getPersonalDashboardWork>> | null = null;
-  if (variant === 'individual' && ctx.employee) {
-    try {
-      personalWork = await getPersonalDashboardWork(ctx.employee.id, ctx.employee.role);
-    } catch {
-      personalWork = { tasks: [], videos: [] };
-    }
-  }
-
-  const summary = await getDashboardSummary(ctx);
-  let chartsPayload: Awaited<ReturnType<typeof fetchDashboardChartsPayload>>;
-  try {
-    chartsPayload = await fetchDashboardChartsPayload(ctx, {
-      scope: summary.scope,
-      agencyDisplayCurrency: summary.agencyDisplayCurrency,
-    });
-  } catch {
-    chartsPayload = {
-      currency: summary.agencyDisplayCurrency,
-      deadlinesWeek: null,
-      revenueByMonth: null,
-      criticalByType: [],
-      clientPipeline: null,
-    };
-  }
-  const dashboardNotifications = await listRecentNotifications(6, ctx);
-
-  let operational = emptyDashboardOperational();
-  if (summary.scope === 'full' || summary.scope === 'operations') {
-    try {
-      operational = await fetchDashboardOperational(ctx);
-    } catch {
-      operational = emptyDashboardOperational();
-    }
-  } else if (summary.scope === 'commercial') {
-    try {
-      const clientsFollow = await fetchCommercialClientsFollow(ctx);
-      operational = { ...emptyDashboardOperational(), clientsFollow };
-    } catch {
-      operational = emptyDashboardOperational();
-    }
-  }
+  const [dashboardActivity, personalWork, summary, dashboardNotifications, operational] = await Promise.all([
+    shouldLoadGlobalActivityFeed(variant)
+      ? listDashboardActivityForVariant(variant, 10).catch(() => [] as Awaited<ReturnType<typeof listDashboardActivityForVariant>>)
+      : Promise.resolve([] as Awaited<ReturnType<typeof listDashboardActivityForVariant>>),
+    variant === 'individual' && ctx.employee
+      ? getPersonalDashboardWork(ctx.employee.id, ctx.employee.role).catch(() => ({
+          tasks: [] as Awaited<ReturnType<typeof getPersonalDashboardWork>>['tasks'],
+          videos: [] as Awaited<ReturnType<typeof getPersonalDashboardWork>>['videos'],
+        }))
+      : Promise.resolve(null),
+    getDashboardSummary(ctx),
+    listRecentNotifications(6, ctx),
+    wantOpsBlocks
+      ? fetchDashboardOperational(ctx).catch(() => emptyDashboardOperational())
+      : wantCommercialFollow
+        ? fetchCommercialClientsFollow(ctx)
+            .then((clientsFollow) => ({ ...emptyDashboardOperational(), clientsFollow }))
+            .catch(() => emptyDashboardOperational())
+        : Promise.resolve(emptyDashboardOperational()),
+  ]);
   const financeSnapshot = financeSnapshotFromAgg(
     summary.finance,
     summary.agencyMonthlyGoal,
@@ -642,7 +612,12 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-      <DashboardChartsSection variant={variant} scope={summary.scope} role={ctx.employee.role} charts={chartsPayload} />
+      <DashboardChartsDeferred
+        variant={variant}
+        scope={summary.scope}
+        role={ctx.employee.role}
+        currency={summary.agencyDisplayCurrency}
+      />
 
       <div className="grid gap-6 xl:grid-cols-3">
         <div className="space-y-6 xl:col-span-2">

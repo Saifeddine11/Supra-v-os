@@ -3,7 +3,7 @@
  */
 
 import { redirect } from 'next/navigation';
-import { requireAuth } from '@/lib/auth/permissions';
+import { requireAuth, type AuthContext } from '@/lib/auth/permissions';
 import { canAccessPath } from '@/lib/auth/nav-policy';
 
 export { canAccessPath, getNavGroupsForRole, isStaff, navItemVisible } from '@/lib/auth/nav-policy';
@@ -17,10 +17,13 @@ export function shouldEnforceRouteAccess(pathname: string): boolean {
 }
 
 /** RBAC guard using the request pathname (set by middleware as x-pathname). */
-export async function enforceRouteAccessForPathname(pathname: string): Promise<void> {
+export async function enforceRouteAccessForPathname(
+  pathname: string,
+  existing?: AuthContext,
+): Promise<void> {
   if (!shouldEnforceRouteAccess(pathname)) return;
 
-  const ctx = await requireAuth();
+  const ctx = existing ?? (await requireAuth());
   if (!ctx.employee || !ctx.role) {
     redirect('/access-denied');
   }
@@ -30,8 +33,8 @@ export async function enforceRouteAccessForPathname(pathname: string): Promise<v
 }
 
 /** Appeler depuis un layout de segment : redirige vers /access-denied si interdit. */
-export async function enforceRouteAccess(segmentPath: string): Promise<void> {
-  const ctx = await requireAuth();
+export async function enforceRouteAccess(segmentPath: string, existing?: AuthContext): Promise<void> {
+  const ctx = existing ?? (await requireAuth());
   if (!ctx.employee || !ctx.role) {
     redirect('/access-denied');
   }

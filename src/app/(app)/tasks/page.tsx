@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
+import dynamic from 'next/dynamic';
 import { listTasksEnriched, type TaskListFilters } from '@/lib/data/tasks';
 import { listClients } from '@/lib/data/clients';
 import { listEmployeesForSelect } from '@/lib/data/employees';
@@ -11,9 +12,14 @@ import type { TaskPriority } from '@/types/database';
 import { SectionCard } from '@/components/shared/section-card';
 import { EmptyState } from '@/components/shared/empty-state';
 import { TasksToolbar } from './tasks-toolbar';
-import { TasksKanban } from './tasks-kanban';
 
 export const metadata: Metadata = { title: 'Tâches' };
+
+const TasksKanban = dynamic(() => import('./tasks-kanban').then((m) => ({ default: m.TasksKanban })), {
+  loading: () => (
+    <div className="h-72 animate-pulse rounded-2xl border border-border/50 bg-muted/20" aria-hidden />
+  ),
+});
 
 export default async function TasksPage({
   searchParams,

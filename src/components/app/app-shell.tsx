@@ -22,7 +22,9 @@ export interface AppShellProps {
   initialBellPreview: Notification[];
   notificationSoundPrefs: NotificationSoundPrefs;
   children: React.ReactNode;
-  /** Tournages à confirmer (PM / admin / cadreur assigné) — affichage modal unique. */
+  /** Tournages à confirmer — slot streamé (Suspense), ne bloque pas le layout. */
+  shootingSlot?: React.ReactNode;
+  /** @deprecated Prefer shootingSlot. Kept for password_gate / tests. */
   shootingConfirmQueue?: ShootingConfirmQueueItem[];
   /** auth.users id — snooze localStorage par utilisateur. */
   shootingConfirmUserId?: string | null;
@@ -37,6 +39,7 @@ export function AppShell({
   initialBellPreview,
   notificationSoundPrefs,
   children,
+  shootingSlot = null,
   shootingConfirmQueue = [],
   shootingConfirmUserId = null,
   mode = 'full',
@@ -91,7 +94,8 @@ export function AppShell({
         <main className="relative z-10 mx-auto max-w-[1600px] px-4 py-6 pb-24 sm:px-6 lg:px-8 lg:py-8 lg:pb-8">
           {children}
         </main>
-        {shootingConfirmUserId && shootingConfirmQueue.length > 0 ? (
+        {shootingSlot}
+        {!shootingSlot && shootingConfirmUserId && shootingConfirmQueue.length > 0 ? (
           <ShootingConfirmationHost userId={shootingConfirmUserId} initialQueue={shootingConfirmQueue} />
         ) : null}
         <AppShellToaster />

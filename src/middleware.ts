@@ -11,10 +11,14 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 import type { CookieOptions } from '@supabase/ssr';
 import { normalizeSupabaseProjectUrl } from '@/lib/supabase/normalize-url';
+import {
+  AUTH_SET_PASSWORD_PATH,
+  hasPasswordSetupSearchParams,
+} from '@/lib/auth/password-setup';
 
 const PUBLIC_PATHS = [
   '/login',
-  '/auth/callback',
+  '/auth/',            // callback, confirm, set-password — invite/recovery must not hit /login
   '/portal/',          // /portal/client/[id] — token-based, no auth
   '/api/cron/',        // protected by CRON_SECRET, not by Supabase auth
   '/api/dev/',         // dev-only helpers (handlers still gate by NODE_ENV)
@@ -97,6 +101,34 @@ export async function middleware(request: NextRequest) {
   }
   if (!user && pathname === '/api/ai/context') {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  /**
+   * Invite / recovery links often land on Site URL (`/`) or `/login` with `?code=`
+   * or `token_hash`. Never send those to the password login form.
+   * Hash tokens (#access_token) are not visible here — the login page forwards them.
+   */
+  if (hasPasswordSetupSearchParams(request.nextUrl.searchParams)) {
+    if (pathname !== AUTH_SET_PASSWORD_PATH && !pathname.startsWith('/auth/')) {
+      const url = request.nextUrl.clone();
+      url.pathname = AUTH_SET_PASSWORD_PATH;
+      const redirect = NextResponse.redirect(url);
+      response.cookies.getAll().forEach((cookie) => {
+        redirect.cookies.set(cookie.name, cookie.value);
+      });
+      return redirect;
+    }
+  }
+
+  // Anciens e-mails pointaient vers /change-password (layout app protégé).
+  if (pathname === '/change-password' && !user) {
+    const url = request.nextUrl.clone();
+    url.pathname = AUTH_SET_PASSWORD_PATH;
+    const redirect = NextResponse.redirect(url);
+    response.cookies.getAll().forEach((cookie) => {
+      redirect.cookies.set(cookie.name, cookie.value);
+    });
+    return redirect;
   }
 
   // Redirect to /login for protected routes if not authenticated

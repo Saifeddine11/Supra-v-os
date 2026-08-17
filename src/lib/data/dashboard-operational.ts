@@ -18,6 +18,7 @@ import type { InvoiceStatus, TaskPriority, UserRole, VideoStatus } from '@/types
 import { INVOICE_STATUS_MAP, ROLE_LABELS, VIDEO_STATUS_MAP } from '@/types/domain';
 import { formatAgencyMoneyCompact } from '@/lib/money/format-money';
 import { getAgencyDisplayCurrency } from '@/lib/data/agency-settings-db';
+import { withDevTime } from '@/lib/perf/dev-time';
 import { fetchAssignmentsForTasks, formatTaskAssigneeSummary } from '@/lib/data/task-assignments';
 import { getClientColor } from '@/lib/ui/client-colors';
 import {
@@ -169,6 +170,10 @@ export function emptyDashboardOperational(): DashboardOperationalBlocks {
  * Blocs opérationnels (admin / chef de projet uniquement) — aucune donnée fictive.
  */
 export async function fetchDashboardOperational(ctx: AuthContext): Promise<DashboardOperationalBlocks> {
+  return withDevTime('dashboard operational', () => fetchDashboardOperationalInner(ctx));
+}
+
+async function fetchDashboardOperationalInner(ctx: AuthContext): Promise<DashboardOperationalBlocks> {
   if (!ctx.employee || !hasFullOrgDataAccess(ctx)) {
     return emptyDashboardOperational();
   }

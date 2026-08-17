@@ -14,9 +14,10 @@ Les crons / notifications métier (rappels, factures) passent par **Resend** (`s
 
 | Flux | Mécanisme | Redirect |
 |------|-----------|----------|
-| Invitation collaborateur | `inviteUserByEmail` (service role) | `NEXT_PUBLIC_APP_URL` → `/auth/callback?next=/change-password` |
+| Invitation collaborateur | `inviteUserByEmail` (service role) | `NEXT_PUBLIC_APP_URL` → `/auth/set-password` |
 | Réinitialisation mot de passe | `resetPasswordForEmail` | idem |
-| Mot de passe temporaire | `createUser` admin (pas d’e-mail Auth) | Connexion manuelle sur `/login` |
+| Confirmation e-mail (template) | `token_hash` → `/auth/confirm` | puis `/auth/set-password` |
+| Mot de passe temporaire | `createUser` admin (pas d’e-mail Auth) | Connexion manuelle sur `/login` puis `/change-password` |
 
 Code : `src/lib/employees/auth-provision.ts`
 
@@ -33,7 +34,7 @@ Code : `src/lib/employees/auth-provision.ts`
    - Sender name : `Supra v.`
 3. **Authentication** → **URL Configuration** :
    - Site URL : `https://app.suprav3.com`
-   - Redirect URLs : `https://app.suprav3.com/**`, previews Vercel, `http://localhost:3000/**`
+   - Redirect URLs : `https://app.suprav3.com/auth/set-password`, `https://app.suprav3.com/auth/confirm`, `https://app.suprav3.com/**`, previews Vercel, `http://localhost:3000/**`
 4. **Vercel** (Production) : `NEXT_PUBLIC_APP_URL=https://app.suprav3.com` (sans slash final).
 5. **Email Templates** : coller les modèles depuis `supabase/email-templates/` (voir `INSTRUCTIONS.txt`).
 

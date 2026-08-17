@@ -19,13 +19,7 @@ function asOtpType(raw: string | null): EmailOtpType | null {
   return raw as EmailOtpType;
 }
 
-/**
- * PKCE / legacy callback. Invite and recovery always continue to /auth/set-password.
- * Hash tokens (#access_token) are not visible here — we forward to set-password
- * so the browser client can establish the session.
- */
 export async function GET(request: NextRequest) {
-  const code = request.nextUrl.searchParams.get('code');
   const tokenHash = request.nextUrl.searchParams.get('token_hash');
   const type = asOtpType(request.nextUrl.searchParams.get('type'));
   const { supabase, missingConfig, redirectTo } = createAuthRedirectClient(request);
@@ -34,22 +28,17 @@ export async function GET(request: NextRequest) {
     return redirectTo('/login?error=invalid_link');
   }
 
-  if (code) {
-    const { error } = await supabase.auth.exchangeCodeForSession(code);
-    if (error) {
-      return redirectTo(`${AUTH_SET_PASSWORD_PATH}?error=invalid_link`);
-    }
-  } else if (tokenHash && type) {
-    const { error } = await supabase.auth.verifyOtp({
-      type,
-      token_hash: tokenHash,
-    });
-    if (error) {
-      return redirectTo(`${AUTH_SET_PASSWORD_PATH}?error=invalid_link`);
-    }
-  } else {
-    // Implicit flow: tokens live in the URL hash. Keep the fragment on the client page.
-    return redirectTo(AUTH_SET_PASSWORD_PATH);
+  if (!tokenHash || !type) {
+    return redirectTo(`${AUTH_SET_PASSWORD_PATH}?error=invalid_link`);
+  }
+
+  const { error } = await supabase.auth.verifyOtp({
+    type,
+    token_hash: tokenHash,
+  });
+
+  if (error) {
+    return redirectTo(`${AUTH_SET_PASSWORD_PATH}?error=invalid_link`);
   }
 
   const {
@@ -61,7 +50,7 @@ export async function GET(request: NextRequest) {
       const admin = createAdminClient();
       await ensureEmployeeLinkedByEmail(admin, user.id, user.email);
     } catch {
-      // Liaison best-effort.
+      // Liaison best-effort — la page set-password peut encore finaliser.
     }
   }
 

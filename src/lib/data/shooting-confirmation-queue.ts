@@ -10,6 +10,7 @@ import {
   videoNeedsShootingConfirmation,
   viewerCanRespondToShootingConfirmation,
 } from '@/lib/videos/shooting-confirmation';
+import { withDevTime } from '@/lib/perf/dev-time';
 
 export type ShootingConfirmQueueItem = {
   id: string;
@@ -61,6 +62,13 @@ async function attachCameramenForQueueRows(
 export async function fetchShootingConfirmationQueue(
   ctx: AuthContext,
   now: Date = new Date(),
+): Promise<ShootingConfirmQueueItem[]> {
+  return withDevTime('shooting confirmation queue', () => fetchShootingConfirmationQueueInner(ctx, now));
+}
+
+async function fetchShootingConfirmationQueueInner(
+  ctx: AuthContext,
+  now: Date,
 ): Promise<ShootingConfirmQueueItem[]> {
   if (!ctx.role || !ctx.employee) return [];
   if (!roleSeesShootingConfirmationFlow(ctx.role)) return [];
