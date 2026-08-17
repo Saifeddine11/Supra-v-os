@@ -143,6 +143,23 @@ function mapAuthError(msg: string): string {
   return mapSupabaseAuthEmailError(msg);
 }
 
+function logAuthEmailFailure(
+  action: 'invite' | 'password_reset',
+  email: string,
+  error: unknown,
+) {
+  const details =
+    error && typeof error === 'object'
+      ? {
+          email,
+          errorCode: 'code' in error ? String(error.code) : undefined,
+          status: 'status' in error ? Number(error.status) : undefined,
+          message: 'message' in error ? String(error.message) : undefined,
+        }
+      : { email, message: String(error) };
+  console.error(`[auth-${action}] failed`, details);
+}
+
 export type InviteEmployeeAuthResult =
   | { ok: true; mode: 'invited' }
   | { ok: true; mode: 'linked_existing' }
@@ -183,6 +200,9 @@ export async function inviteEmployeeAuth(
   const maybeExists = /already|registered|exists|duplicate/i.test(inviteMsg) || inviteErr?.status === 422;
 
   if (maybeExists || inviteErr) {
+    if (inviteErr) {
+      logAuthEmailFailure('invite', em, inviteErr);
+    }
     const existingId = await findAuthUserIdByEmail(admin, em);
     if (existingId) {
       const link = await linkEmployeeToAuthUser(admin, employeeId, existingId, {});
@@ -288,6 +308,7 @@ export async function sendAuthPasswordResetEmail(email: string): Promise<Passwor
   const redirectTo = getAuthSetPasswordRedirectUrl();
   const { error } = await admin.auth.resetPasswordForEmail(em, { redirectTo });
   if (error) {
+    logAuthEmailFailure('password_reset', em, error);
     return { ok: false, error: mapAuthError(error.message) || 'Impossible d’envoyer l’e-mail de réinitialisation.' };
   }
   return { ok: true };

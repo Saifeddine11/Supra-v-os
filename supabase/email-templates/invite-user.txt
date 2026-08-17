@@ -6,7 +6,7 @@ Vous avez été invité à créer votre compte sur Supra v. Agency OS, la platef
 
 Pour accepter l’invitation et configurer votre accès, ouvrez ce lien :
 
-{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=invite
+{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=invite&redirect_to={{ .RedirectTo }}
 
 Si vous ne reconnaissez pas cette invitation, vous pouvez ignorer cet email.
 

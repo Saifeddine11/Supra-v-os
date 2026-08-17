@@ -9,14 +9,26 @@ const OTP_TYPES = new Set<EmailOtpType>([
   'invite',
   'recovery',
   'signup',
-  'magiclink',
-  'email_change',
   'email',
 ]);
 
 function asOtpType(raw: string | null): EmailOtpType | null {
   if (!raw || !OTP_TYPES.has(raw as EmailOtpType)) return null;
   return raw as EmailOtpType;
+}
+
+function logDevVerifyError(type: EmailOtpType, error: unknown) {
+  if (process.env.NODE_ENV === 'production') return;
+  const details =
+    error && typeof error === 'object'
+      ? {
+          type,
+          errorCode: 'code' in error ? String(error.code) : undefined,
+          status: 'status' in error ? Number(error.status) : undefined,
+          message: 'message' in error ? String(error.message) : undefined,
+        }
+      : { type, message: String(error) };
+  console.error('[auth-confirm] verifyOtp failed', details);
 }
 
 export async function GET(request: NextRequest) {
@@ -38,7 +50,8 @@ export async function GET(request: NextRequest) {
   });
 
   if (error) {
-    return redirectTo(`${AUTH_SET_PASSWORD_PATH}?error=invalid_link`);
+    logDevVerifyError(type, error);
+    return redirectTo(`${AUTH_SET_PASSWORD_PATH}?error=invalid_or_expired_link`);
   }
 
   const {

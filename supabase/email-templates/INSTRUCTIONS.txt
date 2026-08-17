@@ -14,7 +14,7 @@ Subject :
 Body : copier reset-password.html et reset-password.txt.
 
 Les liens d’invitation / reset DOIVENT pointer vers /auth/confirm (token_hash)
-puis /auth/set-password — jamais vers /login.
+avec redirect_to={{ .RedirectTo }}, puis /auth/set-password — jamais vers /login.
 
 URL Configuration (Authentication → URL Configuration) :
   Site URL : https://app.suprav3.com
