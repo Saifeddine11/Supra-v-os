@@ -139,6 +139,30 @@ export async function linkEmployeeToAuthUser(
   return { ok: true };
 }
 
+function generateTemporaryPassword(): string {
+  const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+  const numbers = '23456789';
+  const symbols = '!@#$%*?-';
+  const all = letters + numbers + symbols;
+  const bytes = randomBytes(24);
+  const chars: string[] = [
+    letters[bytes[0]! % letters.length]!,
+    letters[bytes[1]! % letters.length]!,
+    numbers[bytes[2]! % numbers.length]!,
+    symbols[bytes[3]! % symbols.length]!,
+  ];
+  for (let i = 4; i < 16; i += 1) {
+    chars.push(all[bytes[i]! % all.length]!);
+  }
+  for (let i = chars.length - 1; i > 0; i -= 1) {
+    const j = bytes[i]! % (i + 1);
+    const current = chars[i]!;
+    chars[i] = chars[j]!;
+    chars[j] = current;
+  }
+  return chars.join('');
+}
+
 function mapAuthError(msg: string): string {
   return mapSupabaseAuthEmailError(msg);
 }
@@ -255,7 +279,7 @@ export async function createEmployeeAuthWithTempPassword(
     return { ok: true, mode: 'linked_existing', userId: existingId };
   }
 
-  const temporaryPassword = randomBytes(18).toString('base64url').slice(0, 22);
+  const temporaryPassword = generateTemporaryPassword();
 
   const { data: created, error: createErr } = await admin.auth.admin.createUser({
     email: em,

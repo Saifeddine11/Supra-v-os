@@ -33,7 +33,7 @@ export function AppSidebar({ employee, email }: AppSidebarProps) {
   const linkClass = (href: string) => {
     const active = isNavActive(pathname, href);
     return cn(
-      'group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+      'group flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors',
       active
         ? 'bg-primary/[0.12] text-primary ring-1 ring-primary/25'
         : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
@@ -41,10 +41,10 @@ export function AppSidebar({ employee, email }: AppSidebarProps) {
   };
 
   const NavBlock = (
-    <nav className="flex flex-1 flex-col gap-6 overflow-y-auto px-3 py-4">
+    <nav className="flex flex-1 flex-col gap-4 overflow-y-auto px-2.5 py-3">
       {navGroups.map((group) => (
         <div key={group.label}>
-          <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80">
+          <p className="mb-1.5 px-2.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80">
             {group.label}
           </p>
           <ul className="space-y-0.5">
@@ -99,11 +99,11 @@ export function AppSidebar({ employee, email }: AppSidebarProps) {
       {/* Sidebar drawer mobile / fixed desktop */}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 flex w-[272px] flex-col border-r border-border/80 bg-surface-secondary/95 backdrop-blur-xl transition-transform lg:translate-x-0',
+          'fixed inset-y-0 left-0 z-50 flex w-[272px] flex-col border-r border-border/80 bg-surface-secondary/95 backdrop-blur-xl transition-transform lg:w-[224px] lg:translate-x-0',
           open ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         )}
       >
-        <div className="flex items-center justify-between gap-2 border-b border-border/70 px-4 py-4">
+        <div className="flex items-center justify-between gap-2 border-b border-border/70 px-3.5 py-3.5">
           <Link href="/dashboard" className="block min-w-0" onClick={() => setOpen(false)}>
             <p className="font-serif text-lg tracking-tight text-supra-gradient">Supra v.</p>
             <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
@@ -122,8 +122,8 @@ export function AppSidebar({ employee, email }: AppSidebarProps) {
 
         {NavBlock}
 
-        <div className="mt-auto border-t border-border/70 p-3">
-          <div className="flex items-center gap-3 rounded-xl border border-border/80 bg-card p-3">
+        <div className="mt-auto border-t border-border/70 p-2.5">
+          <div className="flex items-center gap-2.5 rounded-xl border border-border/80 bg-card p-2.5">
             <UserAvatar
               name={employee.full_name}
               initials={employee.avatar_initials}

@@ -7,7 +7,8 @@ import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { GripVertical, MoreHorizontal } from 'lucide-react';
+import { toast } from 'sonner';
+import { CheckCircle2, GripVertical, MoreHorizontal } from 'lucide-react';
 import type { Client, Employee, Task, TaskStatus, TaskEnriched } from '@/types/database';
 import { TASK_STATUS_MAP, PRIORITY_MAP, TASK_KANBAN_STATUSES } from '@/types/domain';
 import { cn } from '@/lib/utils/cn';
@@ -32,11 +33,10 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { ConfirmDialog } from '@/components/shared/confirm-dialog';
 import { TaskFormDialog } from '../task-form-dialog';
 import { TaskDetailDialog } from './task-detail-dialog';
 import { ConfirmTaskActionDialog, type TaskConfirmActionMode } from '../confirm-task-action-dialog';
-import { archiveTaskAction, deleteTaskAction, updateTaskStatusAction } from '../actions';
+import { updateTaskStatusAction } from '../actions';
 import { hrefVideosOpenDetail } from '@/lib/videos/video-deep-link';
 import { ClientColorDot } from '@/components/shared/client-color-dot';
 import { requestCriticalAlertsRefresh } from '@/lib/alerts/request-critical-alerts-refresh';
@@ -51,6 +51,8 @@ function TaskCardActionsMenu({
   clients,
   employees,
   canDelete,
+  canEdit,
+  canChangeStatus,
   onOpenDetail,
   onRequestConfirm,
 }: {
@@ -58,11 +60,28 @@ function TaskCardActionsMenu({
   clients: Pick<Client, 'id' | 'name' | 'color_hex' | 'color_label'>[];
   employees: Pick<Employee, 'id' | 'full_name'>[];
   canDelete: boolean;
+  canEdit: boolean;
+  canChangeStatus: boolean;
   onOpenDetail: () => void;
   onRequestConfirm: (mode: TaskConfirmActionMode) => void;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+
+  function updateStatus(nextStatus: TaskStatus) {
+    startTransition(async () => {
+      const res = await updateTaskStatusAction(task.id, nextStatus);
+      if (!res.ok) {
+        toast.error(res.error || 'Impossible de mettre à jour le statut.');
+        return;
+      }
+      toast.success(nextStatus === 'done' ? 'Tâche marquée comme terminée' : 'Statut mis à jour', {
+        duration: 2000,
+      });
+      requestCriticalAlertsRefresh();
+      router.refresh();
+    });
+  }
 
   return (
     <DropdownMenu>
@@ -79,44 +98,54 @@ function TaskCardActionsMenu({
           <MoreHorizontal className="h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="z-[120] w-52" onClick={(e) => e.stopPropagation()}>
+      <DropdownMenuContent
+        align="end"
+        className="z-[120] w-56"
+        onClick={(e) => e.stopPropagation()}
+        onPointerDown={(e) => e.stopPropagation()}
+      >
         <DropdownMenuItem
           onSelect={() => {
             onOpenDetail();
           }}
         >
-          Voir le détail
+          Détails
         </DropdownMenuItem>
-        <TaskFormDialog
-          task={task}
-          clients={clients}
-          employees={employees}
-          trigger={
-            <DropdownMenuItem onSelect={(e) => e.preventDefault()}>Modifier</DropdownMenuItem>
-          }
-        />
-        <DropdownMenuSub>
-          <DropdownMenuSubTrigger>Changer le statut</DropdownMenuSubTrigger>
-          <DropdownMenuSubContent>
-            {TASK_KANBAN_STATUSES.map((s) => (
-              <DropdownMenuItem
-                key={s}
-                disabled={pending || task.status === s}
-                onSelect={() => {
-                  startTransition(async () => {
-                    const res = await updateTaskStatusAction(task.id, s);
-                    if (res.ok) {
-                      requestCriticalAlertsRefresh();
-                    }
-                    router.refresh();
-                  });
-                }}
-              >
-                {TASK_STATUS_MAP[s].label}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuSubContent>
-        </DropdownMenuSub>
+        {canEdit ? (
+          <TaskFormDialog
+            task={task}
+            clients={clients}
+            employees={employees}
+            trigger={
+              <DropdownMenuItem onSelect={(e) => e.preventDefault()}>Modifier</DropdownMenuItem>
+            }
+          />
+        ) : null}
+        {canChangeStatus ? (
+          <>
+            <DropdownMenuItem
+              disabled={pending || task.status === 'done'}
+              onSelect={() => updateStatus('done')}
+            >
+              <CheckCircle2 className="mr-2 h-4 w-4" aria-hidden />
+              Marquer comme terminé
+            </DropdownMenuItem>
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>Changer le statut</DropdownMenuSubTrigger>
+              <DropdownMenuSubContent className="z-[130]">
+                {TASK_KANBAN_STATUSES.map((s) => (
+                  <DropdownMenuItem
+                    key={s}
+                    disabled={pending || task.status === s}
+                    onSelect={() => updateStatus(s)}
+                  >
+                    {TASK_STATUS_MAP[s].label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+          </>
+        ) : null}
         {task.video_id ? (
           <DropdownMenuItem asChild>
             <Link href={hrefVideosOpenDetail(task.video_id)}>Ouvrir la vidéo</Link>
@@ -149,6 +178,8 @@ export function DraggableTaskCard({
   clients,
   employees,
   canDelete,
+  canEdit,
+  canChangeStatus,
   dragEnabled,
   compact = false,
   pulseHighlight = false,
@@ -157,13 +188,14 @@ export function DraggableTaskCard({
   clients: Pick<Client, 'id' | 'name' | 'color_hex' | 'color_label'>[];
   employees: Pick<Employee, 'id' | 'full_name'>[];
   canDelete: boolean;
+  canEdit: boolean;
+  canChangeStatus: boolean;
   dragEnabled: boolean;
   compact?: boolean;
   pulseHighlight?: boolean;
 }) {
   const [detailOpen, setDetailOpen] = useState(false);
   const [confirmAction, setConfirmAction] = useState<TaskConfirmActionMode | null>(null);
-  const [pending, startTransition] = useTransition();
   const router = useRouter();
   const od = overdue(task);
   const statusAccent = getTaskStatusAccentColor(task.status);
@@ -219,7 +251,7 @@ export function DraggableTaskCard({
         className={cn(
           KANBAN_CARD_SHELL,
           kanbanColors.className,
-          compact ? 'min-h-[68px] p-2.5 pl-3' : 'min-h-[100px] p-3 pl-3.5',
+          compact ? 'min-h-[82px] p-2.5 pl-3' : 'min-h-[100px] p-3 pl-3.5',
           pulseHighlight &&
             'ring-2 ring-primary/55 shadow-[0_0_0_3px_rgba(255,61,10,0.12)] dark:ring-[#FF6A2A]/45',
           isDragging && 'relative z-[200]',
@@ -245,6 +277,8 @@ export function DraggableTaskCard({
               clients={clients}
               employees={employees}
               canDelete={canDelete}
+              canEdit={canEdit}
+              canChangeStatus={canChangeStatus}
               onOpenDetail={() => setDetailOpen(true)}
               onRequestConfirm={setConfirmAction}
             />
@@ -252,7 +286,7 @@ export function DraggableTaskCard({
         ) : null}
 
         {compact ? (
-          <div className="flex items-stretch gap-1.5">
+          <div className="flex items-start gap-1.5">
             {dragHandle}
             <div
               role="button"
@@ -264,10 +298,10 @@ export function DraggableTaskCard({
                   setDetailOpen(true);
                 }
               }}
-              className="flex min-w-0 flex-1 cursor-pointer flex-col justify-center gap-1 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              className="flex min-w-0 flex-1 cursor-pointer flex-col justify-center gap-1.5 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
             >
-              <div className="flex items-center gap-2">
-                <p className="min-w-0 flex-1 truncate text-[13px] font-semibold leading-tight text-foreground">
+              <div className="flex items-start gap-1.5">
+                <p className="line-clamp-2 min-w-0 flex-1 text-[13px] font-semibold leading-tight text-foreground">
                   {task.title}
                 </p>
                 <Badge
@@ -277,23 +311,47 @@ export function DraggableTaskCard({
                   {PRIORITY_MAP[task.priority].label}
                 </Badge>
               </div>
-              {task.client_name ? (
-                <p className="flex min-w-0 items-center gap-1 truncate text-[12px] text-muted-foreground">
-                  {task.client_brand_hex ? (
-                    <ClientColorDot hex={task.client_brand_hex} size="sm" title={task.client_name} />
-                  ) : null}
-                  <span className="truncate">{task.client_name}</span>
-                </p>
-              ) : null}
-              <div className="flex flex-wrap items-center gap-1">
+              <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+                {task.client_name ? (
+                  <span className="flex min-w-0 flex-1 items-center gap-1 truncate">
+                    {task.client_brand_hex ? (
+                      <ClientColorDot hex={task.client_brand_hex} size="sm" title={task.client_name} />
+                    ) : null}
+                    <span className="truncate">{task.client_name}</span>
+                  </span>
+                ) : (
+                  <span className="min-w-0 flex-1 truncate italic">Sans client</span>
+                )}
+                <span className="flex shrink-0 items-center gap-1">
+                  {task.assignees?.length ? (
+                    <>
+                      {task.assignees.slice(0, 2).map((p) => (
+                        <span
+                          key={p.id}
+                          className="max-w-[3.75rem] truncate rounded border border-border/70 bg-background/45 px-1.5 py-px text-[10px] text-foreground/80"
+                          title={p.full_name}
+                        >
+                          {p.full_name.split(/\s+/)[0] ?? p.full_name}
+                        </span>
+                      ))}
+                      {task.assignees.length > 2 ? (
+                        <span className="text-[10px] text-muted-foreground">+{task.assignees.length - 2}</span>
+                      ) : null}
+                    </>
+                  ) : (
+                    <span className="text-[10px] italic text-muted-foreground">Non assigné</span>
+                  )}
+                </span>
+              </div>
+              <div className="flex min-h-5 flex-wrap items-center gap-1">
                 {od ? (
                   <span
                     className={cn(
-                      'rounded border px-1.5 py-px text-[9px] font-semibold uppercase',
+                      'rounded border px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide',
                       operationalBadgeClass('danger'),
                     )}
                   >
-                    Retard
+                    En retard
                   </span>
                 ) : null}
                 <span
@@ -313,6 +371,18 @@ export function DraggableTaskCard({
                   >
                     {format(new Date(task.deadline), 'd MMM', { locale: fr })}
                   </span>
+                ) : task.deadline ? (
+                  <span className="text-[10px] tabular-nums text-muted-foreground">
+                    {format(new Date(task.deadline), 'd MMM', { locale: fr })}
+                  </span>
+                ) : null}
+                {task.video_id ? (
+                  <Badge
+                    variant="outline"
+                    className="shrink-0 border-primary/30 px-1.5 text-[9px] font-medium text-primary"
+                  >
+                    Vidéo
+                  </Badge>
                 ) : null}
               </div>
             </div>
@@ -322,215 +392,14 @@ export function DraggableTaskCard({
                 clients={clients}
                 employees={employees}
                 canDelete={canDelete}
+                canEdit={canEdit}
+                canChangeStatus={canChangeStatus}
                 onOpenDetail={() => setDetailOpen(true)}
                 onRequestConfirm={setConfirmAction}
               />
             </div>
           </div>
-        ) : (
-          <>
-            <div className="flex gap-1.5">
-              {dragHandle}
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={openDetailFromCard}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    setDetailOpen(true);
-                  }
-                }}
-                className={cn(
-                  'min-w-0 flex-1 cursor-pointer rounded-lg outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring/40',
-                  dragEnabled && 'touch-manipulation',
-                )}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <p className="line-clamp-2 min-w-0 flex-1 text-sm font-medium leading-snug text-foreground">
-                    {task.title}
-                  </p>
-                  <Badge
-                    variant="outline"
-                    className="shrink-0 border-border text-[10px]"
-                    style={{ color: PRIORITY_MAP[task.priority].color }}
-                  >
-                    {PRIORITY_MAP[task.priority].label}
-                  </Badge>
-                </div>
-                {task.client_name ? (
-                  <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-                    {task.client_brand_hex ? (
-                      <ClientColorDot hex={task.client_brand_hex} size="sm" title={task.client_name} />
-                    ) : null}
-                    <span className="line-clamp-1">{task.client_name}</span>
-                  </p>
-                ) : null}
-                <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                  {od ? (
-                    <span
-                      className={cn(
-                        'rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
-                        operationalBadgeClass('danger'),
-                      )}
-                    >
-                      En retard
-                    </span>
-                  ) : null}
-                  {task.priority === 'urgent' && task.status !== 'done' ? (
-                    <span
-                      className={cn(
-                        'rounded-md border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
-                        operationalBadgeClass('danger'),
-                      )}
-                    >
-                      Urgent
-                    </span>
-                  ) : null}
-                  <span
-                    className={cn(
-                      'rounded-md border px-2 py-0.5 text-[10px] font-medium',
-                      getTaskStatusBadgeClass(task.status),
-                    )}
-                  >
-                    {TASK_STATUS_MAP[task.status].label}
-                  </span>
-                  {task.video_id ? (
-                    <Badge
-                      variant="outline"
-                      className="shrink-0 border-primary/35 text-[10px] font-medium text-primary"
-                    >
-                      Vidéo
-                    </Badge>
-                  ) : null}
-                  {task.assignees?.length ? (
-                    <>
-                      {task.assignees.slice(0, 2).map((p) => (
-                        <Badge
-                          key={p.id}
-                          variant="outline"
-                          className="max-w-[6rem] shrink-0 truncate border-border/80 text-[10px] font-normal"
-                          title={p.full_name}
-                        >
-                          {p.full_name.split(/\s+/)[0] ?? p.full_name}
-                        </Badge>
-                      ))}
-                      {task.assignees.length > 2 ? (
-                        <span className="text-[10px] text-muted-foreground">+{task.assignees.length - 2}</span>
-                      ) : null}
-                    </>
-                  ) : (
-                    <span className="text-[10px] italic text-muted-foreground">Non assigné</span>
-                  )}
-                </div>
-                <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                  {task.deadline ? (
-                    <span
-                      className={cn(
-                        'tabular-nums',
-                        od && 'font-semibold text-destructive',
-                        dlState === 'today' && !od && 'font-medium text-orange-600 dark:text-orange-400',
-                        dlState === 'tomorrow' && !od && 'font-medium text-amber-700 dark:text-amber-400',
-                      )}
-                    >
-                      {format(new Date(task.deadline), 'd MMM · HH:mm', { locale: fr })}
-                    </span>
-                  ) : (
-                    <span className="text-[11px]">Pas d&apos;échéance</span>
-                  )}
-                </div>
-              </div>
-            </div>
-            <div
-              className="mt-3 flex min-h-10 flex-wrap items-center gap-1 border-t border-border/60 pt-2"
-              onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <select
-                className="h-8 max-w-[140px] flex-1 rounded-md border border-border bg-muted px-2 text-xs text-foreground"
-                value={task.status}
-                disabled={pending}
-                onChange={(e) => {
-                  const next = e.target.value as TaskStatus;
-                  startTransition(async () => {
-                    const res = await updateTaskStatusAction(task.id, next);
-                    if (res.ok) requestCriticalAlertsRefresh();
-                    router.refresh();
-                  });
-                }}
-              >
-                {TASK_KANBAN_STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {TASK_STATUS_MAP[s].label}
-                  </option>
-                ))}
-              </select>
-              <TaskFormDialog
-                task={task}
-                clients={clients}
-                employees={employees}
-                trigger={
-                  <Button variant="ghost" size="sm" className="h-8 px-2 text-xs">
-                    Éditer
-                  </Button>
-                }
-              />
-              {canDelete ? (
-                <>
-                  <ConfirmDialog
-                    title="Archiver cette tâche ?"
-                    description="Elle disparaîtra du tableau (statut archivé)."
-                    confirmLabel="Archiver"
-                    onConfirm={() =>
-                      startTransition(async () => {
-                        const res = await archiveTaskAction(task.id);
-                        if (res.ok) requestCriticalAlertsRefresh();
-                        router.refresh();
-                      })
-                    }
-                  >
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 px-2 text-xs text-orange-300 opacity-90 transition-opacity group-hover:opacity-100"
-                    >
-                      Archiver
-                    </Button>
-                  </ConfirmDialog>
-                  <ConfirmDialog
-                    title="Supprimer définitivement ?"
-                    description="Action irréversible."
-                    confirmLabel="Supprimer"
-                    onConfirm={() =>
-                      startTransition(async () => {
-                        await deleteTaskAction(task.id);
-                        router.refresh();
-                      })
-                    }
-                  >
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 px-2 text-xs text-destructive opacity-90 transition-opacity group-hover:opacity-100"
-                    >
-                      Suppr.
-                    </Button>
-                  </ConfirmDialog>
-                </>
-              ) : null}
-            </div>
-            <div className="mt-2 flex justify-end sm:hidden" onPointerDown={(e) => e.stopPropagation()}>
-              <TaskCardActionsMenu
-                task={task}
-                clients={clients}
-                employees={employees}
-                canDelete={canDelete}
-                onOpenDetail={() => setDetailOpen(true)}
-                onRequestConfirm={setConfirmAction}
-              />
-            </div>
-          </>
-        )}
+        ) : null}
       </article>
 
       <TaskDetailDialog

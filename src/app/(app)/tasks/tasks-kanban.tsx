@@ -59,6 +59,8 @@ type KanbanProps = {
   clients: Pick<Client, 'id' | 'name' | 'color_hex' | 'color_label'>[];
   employees: Pick<Employee, 'id' | 'full_name'>[];
   canDelete: boolean;
+  canEdit: boolean;
+  canChangeStatus: boolean;
   allowKanbanDrag: boolean;
 };
 
@@ -67,6 +69,8 @@ function TasksKanbanBoard({
   clients,
   employees,
   canDelete,
+  canEdit,
+  canChangeStatus,
   allowKanbanDrag,
   pulseTaskId,
 }: KanbanProps & { pulseTaskId: string | null }) {
@@ -155,6 +159,8 @@ function TasksKanbanBoard({
                 clients={clients}
                 employees={employees}
                 canDelete={canDelete}
+                canEdit={canEdit}
+                canChangeStatus={canChangeStatus}
                 dragEnabled={dragEnabled}
                 stackOnTop={dragEnabled && activeSourceStatus === col.status}
                 pulseTaskId={pulseTaskId}

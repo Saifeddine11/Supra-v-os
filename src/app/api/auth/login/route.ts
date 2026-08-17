@@ -11,6 +11,7 @@ import type { CookieOptions } from '@supabase/ssr';
 import type { Database } from '@/types/database';
 import { normalizeSupabaseProjectUrl } from '@/lib/supabase/normalize-url';
 import { clientIpFrom, rateLimit } from '@/lib/security/rate-limit';
+import { isPerfLogEnabled, perfLog, perfMs } from '@/lib/perf/dev-time';
 
 const NO_EMPLOYEE_MSG =
   'Compte connecté mais aucun profil employé trouvé.';
@@ -213,17 +214,25 @@ export async function POST(request: NextRequest) {
   });
 
   try {
+    const signStart = performance.now();
+    perfLog('[login-perf] signInWithPassword start');
     const { data: signData, error: signError } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
+    const signMs = perfMs(signStart);
+    perfLog(`[login-perf] signInWithPassword end: ${signMs} ms`);
 
     if (signError) {
       console.warn('[auth/login] signIn error:', signError.code || 'unknown');
-      return NextResponse.json(
+      const fail = NextResponse.json(
         { error: mapAuthMessage(signError.message) },
         { status: 401 }
       );
+      if (isPerfLogEnabled()) {
+        fail.headers.set('Server-Timing', `signInWithPassword;dur=${signMs}`);
+      }
+      return fail;
     }
 
     const user = signData.user;
@@ -235,11 +244,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const empStart = performance.now();
     const empLookup = await supabase
       .from('employees')
       .select('id, must_change_password')
       .eq('user_id', user.id)
       .maybeSingle();
+    const empMs = perfMs(empStart);
+    perfLog(`[login-perf] employee lookup: ${empMs} ms`);
 
     if (empLookup.error) {
       console.error('[auth/login] employees lookup:', empLookup.error.message);
@@ -265,6 +277,12 @@ export async function POST(request: NextRequest) {
     sessionCookies.forEach(({ name, value, options }) => {
       res.cookies.set(name, value, options);
     });
+    if (isPerfLogEnabled()) {
+      res.headers.set(
+        'Server-Timing',
+        `signInWithPassword;dur=${signMs}, employeeLookup;dur=${empMs}`,
+      );
+    }
     return res;
   } catch (err) {
     console.error('[auth/login] unexpected error', err);

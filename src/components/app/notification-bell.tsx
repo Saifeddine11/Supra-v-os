@@ -89,12 +89,11 @@ export function NotificationBell({
       }
     }
 
+    void tick();
     const interval = window.setInterval(tick, 35_000);
-    const first = window.setTimeout(tick, 6_000);
     return () => {
       cancelled = true;
       window.clearInterval(interval);
-      window.clearTimeout(first);
     };
   }, [soundPrefs]);
 

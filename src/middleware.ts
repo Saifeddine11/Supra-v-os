@@ -75,11 +75,17 @@ export async function middleware(request: NextRequest) {
   });
 
   let user = null;
+  const sessionStart = performance.now();
   try {
     const { data } = await supabase.auth.getUser();
     user = data.user ?? null;
   } catch (e) {
     console.error('[middleware] auth.getUser failed', e instanceof Error ? e.message : e);
+  }
+  const sessionMs = Math.round(performance.now() - sessionStart);
+  if (process.env.NODE_ENV === 'development' || process.env.PERF_LOGIN_LOGS === '1') {
+    console.info(`[perf] middleware session check: ${sessionMs} ms`);
+    response.headers.set('Server-Timing', `mwSession;dur=${sessionMs}`);
   }
 
   /**

@@ -5,6 +5,7 @@ import {
   fetchCriticalAlertsWithClient,
   mapCriticalAlertsToActiveApi,
 } from '@/lib/data/critical-alerts';
+import { isPerfLogEnabled, perfLog, perfMs } from '@/lib/perf/dev-time';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,10 +24,13 @@ export async function GET(_request: Request) {
 
   try {
     const admin = createAdminClient();
+    const alertStart = performance.now();
     const bundle = await fetchCriticalAlertsWithClient(admin, ctx);
     const body = mapCriticalAlertsToActiveApi(bundle);
+    const alertMs = perfMs(alertStart);
+    perfLog(`[perf] critical alerts: ${alertMs} ms`);
 
-    if (process.env.NODE_ENV === 'development') {
+    if (isPerfLogEnabled()) {
       console.log('[critical-active] user', ctx.employee.id, ctx.role);
       console.log('[critical-active] alerts', body.alerts.length, 'critical', body.criticalCount);
     }

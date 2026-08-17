@@ -5,6 +5,7 @@
 import { redirect } from 'next/navigation';
 import { requireAuth, type AuthContext } from '@/lib/auth/permissions';
 import { canAccessPath } from '@/lib/auth/nav-policy';
+import { withDevTime } from '@/lib/perf/dev-time';
 
 export { canAccessPath, getNavGroupsForRole, isStaff, navItemVisible } from '@/lib/auth/nav-policy';
 
@@ -23,13 +24,15 @@ export async function enforceRouteAccessForPathname(
 ): Promise<void> {
   if (!shouldEnforceRouteAccess(pathname)) return;
 
-  const ctx = existing ?? (await requireAuth());
-  if (!ctx.employee || !ctx.role) {
-    redirect('/access-denied');
-  }
-  if (!canAccessPath(ctx.role, pathname)) {
-    redirect('/access-denied');
-  }
+  await withDevTime('route access', async () => {
+    const ctx = existing ?? (await requireAuth());
+    if (!ctx.employee || !ctx.role) {
+      redirect('/access-denied');
+    }
+    if (!canAccessPath(ctx.role, pathname)) {
+      redirect('/access-denied');
+    }
+  });
 }
 
 /** Appeler depuis un layout de segment : redirige vers /access-denied si interdit. */

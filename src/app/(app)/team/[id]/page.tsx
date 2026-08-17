@@ -118,7 +118,7 @@ export default async function TeamMemberPage({ params }: { params: Promise<{ id:
       {canAdmin ? (
         <SectionCard
           title="Accès Supabase Auth"
-          description="Invitation par e-mail, création avec mot de passe temporaire (affichage unique) ou lien de réinitialisation."
+          description="L’invitation par e-mail est le flux recommandé. Le mot de passe temporaire est une solution de secours (affichage unique)."
         >
           <EmployeeAuthPanel
             employeeId={member.id}

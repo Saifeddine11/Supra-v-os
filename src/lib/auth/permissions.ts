@@ -26,16 +26,26 @@ export interface AuthContext {
 export const getAuthContext = cache(async (): Promise<AuthContext | null> => {
   return withDevTime('auth context', async () => {
     const supabase = await createClient();
+    const userStart = performance.now();
     const {
       data: { user },
     } = await supabase.auth.getUser();
+    const userMs = Math.round(performance.now() - userStart);
+    if (process.env.NODE_ENV === 'development' || process.env.PERF_LOGIN_LOGS === '1') {
+      console.info(`[perf] auth context getUser: ${userMs} ms`);
+    }
     if (!user) return null;
 
+    const empStart = performance.now();
     const { data: employeeRow } = await supabase
       .from('employees')
       .select('*')
       .eq('user_id', user.id)
       .maybeSingle();
+    const empMs = Math.round(performance.now() - empStart);
+    if (process.env.NODE_ENV === 'development' || process.env.PERF_LOGIN_LOGS === '1') {
+      console.info(`[perf] auth context employee: ${empMs} ms`);
+    }
 
     const employee = (employeeRow ?? null) as Employee | null;
 

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
+import { Suspense } from 'react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import {
@@ -19,7 +20,7 @@ import {
   Wallet,
   type LucideIcon,
 } from 'lucide-react';
-import { requireAuth } from '@/lib/auth/permissions';
+import { requireAuth, type AuthContext } from '@/lib/auth/permissions';
 import {
   canModifyClients,
   canModifyInvoices,
@@ -43,16 +44,19 @@ import {
   fetchCommercialClientsFollow,
   fetchDashboardOperational,
 } from '@/lib/data/dashboard-operational';
-import { financeSnapshotFromAgg, getDashboardSummary } from '@/lib/data/dashboard-stats';
+import { financeSnapshotFromAgg, getDashboardSummary, type DashboardScope } from '@/lib/data/dashboard-stats';
 import { formatAgencyMoneyCompact } from '@/lib/money/format-money';
 import { listRecentNotifications } from '@/lib/data/notifications-user';
 import { listDashboardActivityForVariant } from '@/lib/data/activity-logs';
 import { RecentActivityPreview } from '@/components/dashboard/recent-activity-preview';
 import { PersonalWorkOverview } from '@/components/dashboard/personal-work-overview';
-import { getDashboardVariant, shouldLoadGlobalActivityFeed } from '@/lib/dashboard/dashboard-variant';
+import { getDashboardVariant, dashboardScopeFromRole, shouldLoadGlobalActivityFeed } from '@/lib/dashboard/dashboard-variant';
 import { getPersonalDashboardWork } from '@/lib/data/dashboard-personal-work';
 import { DashboardChartsDeferred } from './dashboard-charts-deferred';
 import type { UserRole } from '@/types/database';
+import { LoginPerfBeacon } from '@/components/app/login-perf-beacon';
+import { PageLoadingSkeleton } from '@/components/app/page-loading-skeleton';
+import { isMinimalDashboardEnabled, perfLog, perfMs, withDevTime } from '@/lib/perf/dev-time';
 
 export const metadata: Metadata = {
   title: 'Tableau de bord',
@@ -291,13 +295,101 @@ function individualStatCards(role: UserRole, p: Awaited<ReturnType<typeof getDas
   return cards;
 }
 
+function DashboardGreetingHeader({
+  fullName,
+  role,
+  variant,
+  scope,
+}: {
+  fullName: string;
+  role: UserRole;
+  variant: ReturnType<typeof getDashboardVariant>;
+  scope: DashboardScope;
+}) {
+  const todayLabel = format(new Date(), "EEEE d MMMM yyyy", { locale: fr });
+  return (
+    <header className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+      <div className="min-w-0 space-y-2">
+        <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">{todayLabel}</p>
+        <h1 className="font-sans text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
+          Bonjour {firstName(fullName)},
+        </h1>
+        <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-base">
+          {introForDashboard(variant, scope, role)}
+        </p>
+        <p className="text-sm text-muted-foreground">
+          Rôle :{' '}
+          <span className="font-medium capitalize text-primary">{roleLabel(role)}</span>
+        </p>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {(() => {
+          type Quick = { href: string; label: string };
+          const items: Quick[] = [];
+          if (canModifyClients(role)) items.push({ href: '/clients', label: 'Nouveau client' });
+          if (navItemVisible('/tasks', role)) items.push({ href: '/tasks?new=task', label: 'Nouvelle tâche' });
+          if (canModifyInvoices(role)) items.push({ href: '/invoices', label: 'Nouvelle facture' });
+          return items.map((item, i) => (
+            <ActionButton key={item.href} href={item.href} variant={i === 0 ? 'primary' : 'secondary'}>
+              {item.label}
+            </ActionButton>
+          ));
+        })()}
+      </div>
+    </header>
+  );
+}
+
 export default async function DashboardPage() {
+  const pageStart = performance.now();
   const ctx = await requireAuth();
   if (!ctx.employee) {
     redirect('/login?next=/dashboard');
   }
 
-  const todayLabel = format(new Date(), "EEEE d MMMM yyyy", { locale: fr });
+  const variant = getDashboardVariant(ctx.role);
+  const scope = dashboardScopeFromRole(ctx.role);
+
+  if (isMinimalDashboardEnabled()) {
+    perfLog(`[perf] dashboard page total: ${perfMs(pageStart)} ms`);
+    return (
+      <div className="space-y-4">
+        <LoginPerfBeacon label="dashboard first render" />
+        <DashboardGreetingHeader
+          fullName={ctx.employee.full_name}
+          role={ctx.employee.role}
+          variant={variant}
+          scope={scope}
+        />
+        <p className="text-sm text-muted-foreground">
+          Diagnostic login — dashboard minimal (stats, graphiques et alertes désactivés).
+        </p>
+      </div>
+    );
+  }
+
+  perfLog(`[perf] dashboard page shell: ${perfMs(pageStart)} ms`);
+
+  return (
+    <div className="space-y-8">
+      <LoginPerfBeacon label="dashboard first render" />
+      <DashboardGreetingHeader
+        fullName={ctx.employee.full_name}
+        role={ctx.employee.role}
+        variant={variant}
+        scope={scope}
+      />
+      <Suspense fallback={<PageLoadingSkeleton titleWidth="w-56" />}>
+        <DashboardLiveBody ctx={ctx} />
+      </Suspense>
+    </div>
+  );
+}
+
+async function DashboardLiveBody({ ctx }: { ctx: AuthContext }) {
+  const pageStart = performance.now();
+  if (!ctx.employee) return null;
+
   const variant = getDashboardVariant(ctx.role);
   const wantOpsBlocks = ctx.role === 'admin' || ctx.role === 'project_manager';
   const wantCommercialFollow = ctx.role === 'commercial';
@@ -313,7 +405,7 @@ export default async function DashboardPage() {
         }))
       : Promise.resolve(null),
     getDashboardSummary(ctx),
-    listRecentNotifications(6, ctx),
+    withDevTime('notifications', () => listRecentNotifications(6, ctx)),
     wantOpsBlocks
       ? fetchDashboardOperational(ctx).catch(() => emptyDashboardOperational())
       : wantCommercialFollow
@@ -322,6 +414,7 @@ export default async function DashboardPage() {
             .catch(() => emptyDashboardOperational())
         : Promise.resolve(emptyDashboardOperational()),
   ]);
+  perfLog(`[perf] dashboard page total: ${perfMs(pageStart)} ms`);
   const financeSnapshot = financeSnapshotFromAgg(
     summary.finance,
     summary.agencyMonthlyGoal,
@@ -548,37 +641,6 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      <header className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-        <div className="min-w-0 space-y-2">
-          <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">{todayLabel}</p>
-          <h1 className="font-sans text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
-            Bonjour {firstName(ctx.employee.full_name)},
-          </h1>
-          <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-base">
-            {introForDashboard(variant, summary.scope, ctx.employee.role)}
-          </p>
-          <p className="text-sm text-muted-foreground">
-            Rôle :{' '}
-            <span className="font-medium capitalize text-primary">{roleLabel(ctx.employee.role)}</span>
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {(() => {
-            type Quick = { href: string; label: string };
-            const items: Quick[] = [];
-            if (canModifyClients(ctx.role)) items.push({ href: '/clients', label: 'Nouveau client' });
-            if (navItemVisible('/tasks', ctx.employee.role))
-              items.push({ href: '/tasks?new=task', label: 'Nouvelle tâche' });
-            if (canModifyInvoices(ctx.role)) items.push({ href: '/invoices', label: 'Nouvelle facture' });
-            return items.map((item, i) => (
-              <ActionButton key={item.href} href={item.href} variant={i === 0 ? 'primary' : 'secondary'}>
-                {item.label}
-              </ActionButton>
-            ));
-          })()}
-        </div>
-      </header>
-
       {summary.scope === 'full' && variant === 'admin' ? (
         <SectionCard title="Mon activité" description="Vos tâches et charges personnelles (données live).">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

@@ -6,7 +6,7 @@ import { listClients } from '@/lib/data/clients';
 import { listEmployeesForSelect } from '@/lib/data/employees';
 import { getAuthContext } from '@/lib/auth/permissions';
 import { taskListingDenied } from '@/lib/auth/data-scope';
-import { canCreateTasks, canDeleteTask } from '@/lib/auth/capabilities';
+import { canChangeTaskStatus, canCreateTasks, canDeleteTask, canUpdateTasks } from '@/lib/auth/capabilities';
 import { TasksNewTaskOpener } from './tasks-new-task-opener';
 import type { TaskPriority } from '@/types/database';
 import { SectionCard } from '@/components/shared/section-card';
@@ -50,17 +50,19 @@ export default async function TasksPage({
     color_label: c.color_label,
   }));
   const canDelete = canDeleteTask(ctx?.role ?? null);
+  const canEdit = canUpdateTasks(ctx?.role ?? null);
+  const canChangeStatus = canChangeTaskStatus(ctx?.role ?? null);
   const canCreate = canCreateTasks(ctx?.role ?? null);
-  const allowKanbanDrag = Boolean(ctx && !taskListingDenied(ctx));
+  const allowKanbanDrag = Boolean(ctx && canChangeStatus && !taskListingDenied(ctx));
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3.5">
       <Suspense fallback={null}>
         <TasksNewTaskOpener clients={clientOptions} employees={employees} />
       </Suspense>
       <div>
-        <h1 className="font-sans text-2xl font-semibold tracking-tight text-foreground">Tâches</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <h1 className="font-sans text-xl font-semibold tracking-tight text-foreground sm:text-2xl">Tâches</h1>
+        <p className="mt-0.5 text-sm text-muted-foreground">
           Kanban connecté à Supabase — colonnes alignées sur votre workflow.
         </p>
       </div>
@@ -76,7 +78,8 @@ export default async function TasksPage({
 
       <SectionCard
         title="Board"
-        description="Glissez une tâche vers une autre colonne pour changer son statut. Vous pouvez aussi utiliser le menu déroulant sur chaque carte."
+        description="Glissez une tâche ou utilisez le menu de chaque carte."
+        className="[&>div]:p-2 md:[&>div]:p-2.5 [&>header]:gap-2 [&>header]:px-4 [&>header]:py-2.5"
       >
         {tasks.length === 0 ? (
           <EmptyState
@@ -93,6 +96,8 @@ export default async function TasksPage({
               clients={clientOptions}
               employees={employees}
               canDelete={canDelete}
+              canEdit={canEdit}
+              canChangeStatus={canChangeStatus}
               allowKanbanDrag={allowKanbanDrag}
             />
           </>

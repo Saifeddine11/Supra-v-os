@@ -4,7 +4,7 @@ import { useDroppable } from '@dnd-kit/core';
 import type { Client, Employee, TaskStatus, TaskEnriched } from '@/types/database';
 import { cn } from '@/lib/utils/cn';
 import { DraggableTaskCard } from './draggable-task-card';
-import { KANBAN_COLUMN_COMPACT_THRESHOLD, KANBAN_COLUMN_HEIGHT_CLASS, KANBAN_COLUMN_WIDTH_CLASS } from './kanban-board';
+import { KANBAN_COLUMN_HEIGHT_CLASS, KANBAN_COLUMN_WIDTH_CLASS } from './kanban-board';
 
 export function TaskKanbanColumn({
   status,
@@ -14,6 +14,8 @@ export function TaskKanbanColumn({
   clients,
   employees,
   canDelete,
+  canEdit,
+  canChangeStatus,
   dragEnabled,
   stackOnTop,
   pulseTaskId,
@@ -25,6 +27,8 @@ export function TaskKanbanColumn({
   clients: Pick<Client, 'id' | 'name' | 'color_hex' | 'color_label'>[];
   employees: Pick<Employee, 'id' | 'full_name'>[];
   canDelete: boolean;
+  canEdit: boolean;
+  canChangeStatus: boolean;
   dragEnabled: boolean;
   stackOnTop: boolean;
   pulseTaskId?: string | null;
@@ -34,14 +38,12 @@ export function TaskKanbanColumn({
     disabled: !dragEnabled,
   });
 
-  const compactCards = tasks.length > KANBAN_COLUMN_COMPACT_THRESHOLD || !dragEnabled;
-
   return (
     <div
       className={cn(
         KANBAN_COLUMN_HEIGHT_CLASS,
         KANBAN_COLUMN_WIDTH_CLASS,
-        'flex flex-col overflow-hidden rounded-[20px] border shadow-sm',
+        'flex flex-col overflow-hidden rounded-2xl border shadow-sm',
         'bg-muted/25 dark:bg-muted/15',
         stackOnTop && 'relative z-[100]',
         dragEnabled && isOver
@@ -50,7 +52,7 @@ export function TaskKanbanColumn({
       )}
     >
       <div
-        className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-border/60 bg-card/95 px-3 py-2.5 backdrop-blur-sm dark:bg-card/90"
+        className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-border/60 bg-card/95 px-2.5 py-2 backdrop-blur-sm dark:bg-card/90"
         style={{ borderTopColor: accentColor, borderTopWidth: 3, borderTopStyle: 'solid' }}
       >
         <p className="text-xs font-semibold uppercase tracking-wide text-foreground">{label}</p>
@@ -61,7 +63,7 @@ export function TaskKanbanColumn({
       <div
         ref={setNodeRef}
         className={cn(
-          'kanban-column-scroll flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-y-contain p-2.5 transition-colors',
+          'kanban-column-scroll flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overscroll-y-contain p-2 transition-colors',
           dragEnabled && isOver && 'bg-primary/[0.06] dark:bg-primary/[0.09]',
         )}
       >
@@ -91,8 +93,10 @@ export function TaskKanbanColumn({
               clients={clients}
               employees={employees}
               canDelete={canDelete}
+              canEdit={canEdit}
+              canChangeStatus={canChangeStatus}
               dragEnabled={dragEnabled}
-              compact={compactCards}
+              compact
               pulseHighlight={pulseTaskId === t.id}
             />
           ))

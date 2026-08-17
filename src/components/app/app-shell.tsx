@@ -30,6 +30,8 @@ export interface AppShellProps {
   shootingConfirmUserId?: string | null;
   /** Sans navigation : changement de mot de passe obligatoire. */
   mode?: AppShellMode;
+  /** Diagnostic: hide the critical-alert bar (login-perf minimal dashboard). */
+  showCriticalAlerts?: boolean;
 }
 
 export function AppShell({
@@ -43,6 +45,7 @@ export function AppShell({
   shootingConfirmQueue = [],
   shootingConfirmUserId = null,
   mode = 'full',
+  showCriticalAlerts = true,
 }: AppShellProps) {
   if (mode === 'password_gate') {
     return (
@@ -80,7 +83,7 @@ export function AppShell({
         aria-hidden
       />
       <AppSidebar employee={employee} email={email} />
-      <div className="lg:pl-[272px]">
+      <div className="lg:pl-[224px]">
         <StickyAppHeader>
           <AppTopbar
             employee={employee}
@@ -89,9 +92,9 @@ export function AppShell({
             initialBellPreview={initialBellPreview}
             notificationSoundPrefs={notificationSoundPrefs}
           />
-          <GlobalCriticalAlertBar />
+          {showCriticalAlerts ? <GlobalCriticalAlertBar /> : null}
         </StickyAppHeader>
-        <main className="relative z-10 mx-auto max-w-[1600px] px-4 py-6 pb-24 sm:px-6 lg:px-8 lg:py-8 lg:pb-8">
+        <main className="relative z-10 mx-auto max-w-[1640px] px-4 py-5 pb-24 sm:px-5 lg:px-6 lg:py-6 lg:pb-8">
           {children}
         </main>
         {shootingSlot}

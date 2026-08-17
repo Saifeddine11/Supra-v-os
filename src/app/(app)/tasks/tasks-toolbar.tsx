@@ -23,13 +23,13 @@ export function TasksToolbar({
   defaultPriority?: string;
 }) {
   return (
-    <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-      <form method="GET" action="/tasks" className="flex flex-1 flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-        <Input name="q" placeholder="Rechercher…" defaultValue={defaultQ} className="sm:max-w-xs" />
+    <div className="flex flex-col gap-2.5 lg:flex-row lg:items-center lg:justify-between">
+      <form method="GET" action="/tasks" className="flex flex-1 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+        <Input name="q" placeholder="Rechercher…" defaultValue={defaultQ} className="h-9 sm:max-w-[18rem]" />
         <select
           name="assignee"
           defaultValue={defaultAssignee ?? 'all'}
-          className="h-10 rounded-lg border border-border bg-muted px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 sm:w-52"
+          className="h-9 rounded-lg border border-border bg-muted px-2.5 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 sm:w-48"
         >
           <option value="all">Tous les assignés</option>
           {employees.map((e) => (
@@ -41,7 +41,7 @@ export function TasksToolbar({
         <select
           name="priority"
           defaultValue={defaultPriority ?? 'all'}
-          className="h-10 rounded-lg border border-border bg-muted px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 sm:w-44"
+          className="h-9 rounded-lg border border-border bg-muted px-2.5 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 sm:w-40"
         >
           <option value="all">Toutes priorités</option>
           {(['low', 'normal', 'high', 'urgent'] as TaskPriority[]).map((p) => (

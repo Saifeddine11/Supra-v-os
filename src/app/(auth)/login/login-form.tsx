@@ -145,6 +145,14 @@ export function LoginForm() {
     setError(null);
     setLoading(true);
     let navigating = false;
+    const loginPerf =
+      process.env.NODE_ENV === 'development' ||
+      process.env.NEXT_PUBLIC_PERF_LOGIN_LOGS === 'true';
+    const clickAt = Date.now();
+    if (loginPerf) {
+      sessionStorage.setItem('login-perf-t0', String(clickAt));
+      console.info('[login-perf] signInWithPassword start');
+    }
 
     try {
       const res = await fetch('/api/auth/login', {
@@ -203,6 +211,10 @@ export function LoginForm() {
           : next.startsWith('/')
             ? next
             : '/dashboard';
+      if (loginPerf) {
+        console.info(`[login-perf] signInWithPassword end: ${Date.now() - clickAt} ms`);
+        console.info('[login-perf] redirect start');
+      }
       window.location.assign(dest);
       navigating = true;
       return;

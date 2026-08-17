@@ -5,15 +5,6 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -21,7 +12,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
 import {
   createAuthUserForEmployeeAction,
   inviteEmployeeAuthAction,
@@ -44,9 +34,7 @@ type LinkedExistingInfo = {
   email: string;
 };
 
-function collaboratorFirstName(fullName: string): string {
-  return fullName.trim().split(/\s+/)[0] || '—';
-}
+type TempModalView = 'confirm' | 'success' | 'linked';
 
 export function EmployeeAuthPanel({
   employeeId,
@@ -63,13 +51,15 @@ export function EmployeeAuthPanel({
   const [err, setErr] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
   const [pending, setPending] = useState<string | null>(null);
-  const [confirmTemp, setConfirmTemp] = useState(false);
+  const [tempOpen, setTempOpen] = useState(false);
+  const [tempView, setTempView] = useState<TempModalView>('confirm');
+  const [tempModalError, setTempModalError] = useState<string | null>(null);
   const [tempSuccess, setTempSuccess] = useState<TempAccountSuccess | null>(null);
   const [linkedInfo, setLinkedInfo] = useState<LinkedExistingInfo | null>(null);
   const [passwordCopied, setPasswordCopied] = useState(false);
-  const [accessCopied, setAccessCopied] = useState(false);
 
   const hasEmail = Boolean(email?.trim());
+  const creating = pending === 'create';
 
   async function runInvite() {
     setErr(null);
@@ -109,24 +99,46 @@ export function EmployeeAuthPanel({
     }
   }
 
-  async function runCreateTemp() {
+  function openTempModal() {
     setErr(null);
+    setTempModalError(null);
+    setTempSuccess(null);
+    setLinkedInfo(null);
+    setPasswordCopied(false);
+    setTempView('confirm');
+    setTempOpen(true);
+  }
+
+  function closeTempModal() {
+    if (creating) return;
+    const shouldRefresh = tempView === 'success' || tempView === 'linked';
+    setTempOpen(false);
+    setTempView('confirm');
+    setTempModalError(null);
+    setTempSuccess(null);
+    setLinkedInfo(null);
+    setPasswordCopied(false);
+    if (shouldRefresh) router.refresh();
+  }
+
+  async function runCreateTemp() {
+    setTempModalError(null);
     setPasswordCopied(false);
     setPending('create');
     try {
       const res = await createAuthUserForEmployeeAction(employeeId);
       if (!res.ok) {
-        setErr(res.error);
+        setTempModalError(res.error);
         return;
       }
       const data = res.data;
       if (!data) {
-        setErr('Réponse serveur inattendue.');
+        setTempModalError('Réponse serveur inattendue.');
         return;
       }
-      setConfirmTemp(false);
       if (data.mode === 'linked_existing') {
         setLinkedInfo({ message: data.message, email: data.email });
+        setTempView('linked');
         return;
       }
       setTempSuccess({
@@ -135,6 +147,9 @@ export function EmployeeAuthPanel({
         temporaryPassword: data.temporaryPassword,
         loginUrl: data.loginUrl,
       });
+      setTempView('success');
+    } catch {
+      setTempModalError('Création du mot de passe impossible. Réessayez.');
     } finally {
       setPending(null);
     }
@@ -144,47 +159,9 @@ export function EmployeeAuthPanel({
     try {
       await navigator.clipboard.writeText(password);
       setPasswordCopied(true);
-      setAccessCopied(false);
     } catch {
       setPasswordCopied(false);
-    }
-  }
-
-  async function copyAllAccess(info: TempAccountSuccess) {
-    const prenom = collaboratorFirstName(fullName);
-    const text = [
-      `Bonjour ${prenom},`,
-      '',
-      'Votre accès à Supra v. Agency OS est prêt.',
-      '',
-      `Lien : ${info.loginUrl}`,
-      `E-mail : ${info.email}`,
-      `Mot de passe temporaire : ${info.temporaryPassword}`,
-      '',
-      'Merci de changer votre mot de passe dès la première connexion.',
-    ].join('\n');
-    try {
-      await navigator.clipboard.writeText(text);
-      setAccessCopied(true);
-      setPasswordCopied(false);
-    } catch {
-      setAccessCopied(false);
-    }
-  }
-
-  function closeTempSuccess(open: boolean) {
-    if (!open) {
-      setTempSuccess(null);
-      setPasswordCopied(false);
-      setAccessCopied(false);
-      router.refresh();
-    }
-  }
-
-  function closeLinkedInfo(open: boolean) {
-    if (!open) {
-      setLinkedInfo(null);
-      router.refresh();
+      setTempModalError('Impossible de copier. Sélectionnez le mot de passe manuellement.');
     }
   }
 
@@ -203,12 +180,12 @@ export function EmployeeAuthPanel({
         )}
       </div>
       <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-        Les invitations et réinitialisations utilisent l’e-mail de la fiche et le domaine{' '}
-        <span className="font-mono text-[10px] text-foreground/80">NEXT_PUBLIC_APP_URL</span> pour la redirection vers
+        L’invitation par e-mail est le flux recommandé. Les invitations et réinitialisations utilisent l’e-mail de la
+        fiche et redirigent vers{' '}
         <span className="font-mono text-[10px] text-foreground/80">/auth/set-password</span>.
       </p>
 
-      <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+      <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start">
         {!userId ? (
           <>
             <Button
@@ -220,18 +197,20 @@ export function EmployeeAuthPanel({
             >
               {pending === 'invite' ? 'Envoi…' : 'Envoyer invitation'}
             </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="min-h-11 rounded-full"
-              disabled={!hasEmail || Boolean(pending)}
-              onClick={() => {
-                setErr(null);
-                setConfirmTemp(true);
-              }}
-            >
-              Créer accès (mot de passe temporaire)
-            </Button>
+            <div className="flex min-w-0 flex-col gap-1">
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11 rounded-full border-amber-500/45 text-amber-900 hover:bg-amber-500/10 dark:text-amber-200"
+                disabled={!hasEmail || Boolean(pending)}
+                onClick={openTempModal}
+              >
+                Créer accès (mot de passe temporaire)
+              </Button>
+              <p className="max-w-sm text-[11px] leading-relaxed text-muted-foreground">
+                À utiliser uniquement si l’employé ne reçoit pas l’e-mail d’invitation.
+              </p>
+            </div>
           </>
         ) : (
           <Button
@@ -271,117 +250,130 @@ export function EmployeeAuthPanel({
       ) : null}
       {ok ? <p className="mt-3 text-sm text-emerald-700 dark:text-emerald-400">{ok}</p> : null}
 
-      <AlertDialog open={confirmTemp} onOpenChange={setConfirmTemp}>
-        <AlertDialogContent className="z-[102]">
-          <AlertDialogHeader>
-            <AlertDialogTitle>Mot de passe temporaire ?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Un compte Supabase Auth sera créé avec un mot de passe généré, affiché une seule fois. Demandez au
-              collaborateur de le changer après la première connexion. Préférez l’invitation par e-mail lorsque SMTP
-              Supabase est correctement configuré.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={pending === 'create'}>Annuler</AlertDialogCancel>
-            <Button
-              type="button"
-              variant="primary"
-              className="rounded-full"
-              disabled={pending === 'create'}
-              onClick={() => void runCreateTemp()}
-            >
-              {pending === 'create' ? 'Création…' : 'Créer le compte'}
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <Dialog
+        open={tempOpen}
+        onOpenChange={(open) => {
+          if (!open) closeTempModal();
+        }}
+      >
+        <DialogContent
+          showCloseButton={!creating}
+          overlayClassName="bg-black/40"
+          className="max-w-md sm:max-w-md"
+          onPointerDownOutside={(event) => {
+            if (creating) event.preventDefault();
+          }}
+          onEscapeKeyDown={(event) => {
+            if (creating) event.preventDefault();
+          }}
+        >
+          {tempView === 'confirm' ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>Créer un mot de passe temporaire ?</DialogTitle>
+                <DialogDescription>
+                  Cette action crée un mot de passe provisoire pour cet employé. Il sera affiché une seule fois et devra
+                  être changé lors de la première connexion.
+                </DialogDescription>
+              </DialogHeader>
+              {fullName || email ? (
+                <p className="text-sm text-foreground">
+                  <span className="font-medium">{fullName}</span>
+                  {email ? (
+                    <>
+                      <span className="text-muted-foreground"> · </span>
+                      <span className="break-all text-muted-foreground">{email}</span>
+                    </>
+                  ) : null}
+                </p>
+              ) : null}
+              {tempModalError ? (
+                <p className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">
+                  {tempModalError}
+                </p>
+              ) : null}
+              <DialogFooter>
+                <Button type="button" variant="ghost" className="rounded-full" disabled={creating} onClick={closeTempModal}>
+                  Annuler
+                </Button>
+                <Button
+                  type="button"
+                  variant="primary"
+                  className="rounded-full"
+                  disabled={creating}
+                  onClick={() => void runCreateTemp()}
+                >
+                  {creating ? 'Création…' : 'Créer le mot de passe'}
+                </Button>
+              </DialogFooter>
+            </>
+          ) : null}
 
-      <Dialog open={Boolean(tempSuccess)} onOpenChange={closeTempSuccess}>
-        <DialogContent className="z-[110] max-w-md border-emerald-500/25 shadow-supra-glow sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-emerald-800 dark:text-emerald-200">Compte créé avec succès</DialogTitle>
-            <DialogDescription>
-              Transmettez ces informations au collaborateur par un canal sécurisé.
-            </DialogDescription>
-          </DialogHeader>
-          {tempSuccess ? (
-            <div className="space-y-4">
-              <div className="space-y-1.5">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">E-mail</p>
-                <p className="break-all rounded-lg border border-border/80 bg-muted/30 px-3 py-2 text-sm font-medium">
-                  {tempSuccess.email}
+          {tempView === 'success' && tempSuccess ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>Mot de passe temporaire créé</DialogTitle>
+                <DialogDescription>
+                  Transmettez ces informations au collaborateur par un canal sécurisé, puis fermez cette fenêtre.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">E-mail</p>
+                  <p className="break-all rounded-lg border border-border/80 bg-muted/30 px-3 py-2 text-sm font-medium">
+                    {tempSuccess.email}
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Mot de passe temporaire
+                  </p>
+                  <p className="select-all rounded-xl border border-border bg-muted/50 px-3 py-3 font-mono text-sm tracking-wide text-foreground">
+                    {tempSuccess.temporaryPassword}
+                  </p>
+                </div>
+                <p className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-sm text-amber-950 dark:text-amber-100">
+                  Ce mot de passe est affiché une seule fois. Copiez-le maintenant.
                 </p>
+                {tempModalError ? (
+                  <p className="text-sm text-destructive" role="alert">
+                    {tempModalError}
+                  </p>
+                ) : null}
               </div>
-              <div className="space-y-1.5">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Mot de passe temporaire</p>
-                <Input
-                  readOnly
-                  value={tempSuccess.temporaryPassword}
-                  className="font-mono text-sm"
-                  onFocus={(e) => e.target.select()}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Lien de connexion</p>
-                <p className="break-all rounded-lg border border-border/80 bg-muted/30 px-3 py-2 text-sm font-medium text-primary underline-offset-4">
-                  {tempSuccess.loginUrl}
-                </p>
-              </div>
-              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+              <DialogFooter>
                 <Button
                   type="button"
                   variant="outline"
                   className="rounded-full"
                   onClick={() => void copyTemporaryPassword(tempSuccess.temporaryPassword)}
                 >
-                  {passwordCopied ? 'Copié' : 'Copier le mot de passe'}
+                  {passwordCopied ? 'Copié' : 'Copier'}
                 </Button>
-                <Button
-                  type="button"
-                  variant="primary"
-                  className="rounded-full"
-                  onClick={() => void copyAllAccess(tempSuccess)}
-                >
-                  {accessCopied ? 'Accès copiés' : 'Copier les accès'}
+                <Button type="button" variant="primary" className="rounded-full" onClick={closeTempModal}>
+                  Fermer
                 </Button>
-              </div>
-              <p className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-sm text-amber-950 dark:text-amber-100">
-                Ce mot de passe est affiché une seule fois. Le collaborateur devra le changer dès sa première connexion.
-              </p>
-            </div>
+              </DialogFooter>
+            </>
           ) : null}
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="primary"
-              className="w-full rounded-full sm:w-auto"
-              onClick={() => closeTempSuccess(false)}
-            >
-              Fermer
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
-      <Dialog open={Boolean(linkedInfo)} onOpenChange={closeLinkedInfo}>
-        <DialogContent className="z-[110] max-w-md">
-          <DialogHeader>
-            <DialogTitle>Compte Auth existant</DialogTitle>
-            <DialogDescription className="text-left text-foreground/85">
-              {linkedInfo?.message}
-            </DialogDescription>
-          </DialogHeader>
-          {linkedInfo ? (
-            <p className="break-all text-sm text-muted-foreground">
-              <span className="font-medium text-foreground">E-mail : </span>
-              {linkedInfo.email}
-            </p>
+          {tempView === 'linked' && linkedInfo ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>Compte Auth existant</DialogTitle>
+                <DialogDescription className="text-left text-foreground/85">{linkedInfo.message}</DialogDescription>
+              </DialogHeader>
+              <p className="break-all text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">E-mail : </span>
+                {linkedInfo.email}
+              </p>
+              <DialogFooter>
+                <Button type="button" variant="primary" className="rounded-full" onClick={closeTempModal}>
+                  Fermer
+                </Button>
+              </DialogFooter>
+            </>
           ) : null}
-          <DialogFooter>
-            <Button type="button" variant="primary" className="rounded-full" onClick={() => closeLinkedInfo(false)}>
-              Fermer
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
