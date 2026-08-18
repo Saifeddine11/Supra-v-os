@@ -130,6 +130,7 @@ export async function POST(request: Request) {
         categoryId: result.categoryId ?? null,
         createdChannels: result.createdChannels,
         linkedChannels: result.linkedChannels,
+        channelPermissionDiagnostics: result.channelPermissionDiagnostics,
         errors: result.errors,
         error: result.ok ? undefined : result.errors.join(' ') || 'link_failed',
       },

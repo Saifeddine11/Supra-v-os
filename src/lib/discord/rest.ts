@@ -1,7 +1,7 @@
 import 'server-only';
 
 import { discordApiBase, getDiscordBotToken } from '@/lib/discord/config';
-import { DISCORD_OVERWRITE_TYPE_ROLE } from '@/lib/discord/channels';
+import { DISCORD_OVERWRITE_TYPE_MEMBER, DISCORD_OVERWRITE_TYPE_ROLE } from '@/lib/discord/channels';
 
 export type DiscordRestResult<T> =
   | { ok: true; data: T }
@@ -144,15 +144,29 @@ export async function discordCreateGuildChannel(
   return discordFetch<DiscordChannel>('POST', `/guilds/${guildId}/channels`, payload);
 }
 
+export async function discordGetCurrentUser(): Promise<DiscordRestResult<{ id: string }>> {
+  return discordFetch<{ id: string }>('GET', '/users/@me');
+}
+
+export async function discordPutChannelOverwrite(
+  channelId: string,
+  targetId: string,
+  type: typeof DISCORD_OVERWRITE_TYPE_ROLE | typeof DISCORD_OVERWRITE_TYPE_MEMBER,
+  allow: bigint,
+  deny: bigint,
+): Promise<DiscordRestResult<Record<string, never>>> {
+  return discordFetch('PUT', `/channels/${channelId}/permissions/${targetId}`, {
+    type,
+    allow: allow.toString(),
+    deny: deny.toString(),
+  });
+}
+
 export async function discordPutChannelRoleOverwrite(
   channelId: string,
   roleId: string,
   allow: bigint,
   deny: bigint,
 ): Promise<DiscordRestResult<Record<string, never>>> {
-  return discordFetch('PUT', `/channels/${channelId}/permissions/${roleId}`, {
-    type: DISCORD_OVERWRITE_TYPE_ROLE,
-    allow: allow.toString(),
-    deny: deny.toString(),
-  });
+  return discordPutChannelOverwrite(channelId, roleId, DISCORD_OVERWRITE_TYPE_ROLE, allow, deny);
 }

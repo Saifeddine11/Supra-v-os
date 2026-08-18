@@ -11,7 +11,9 @@ import {
   CLIENT_DISCORD_CHANNEL_SPECS,
   DISCORD_CHANNEL_TYPE_GUILD_CATEGORY,
   DISCORD_CHANNEL_TYPE_GUILD_TEXT,
+  DISCORD_OVERWRITE_TYPE_MEMBER,
   DISCORD_OVERWRITE_TYPE_ROLE,
+  mergeBotSelfAllowBits,
   mergeEveryoneDenyView,
   mergeStaffAllowBits,
   parseDiscordBitfield,
@@ -21,8 +23,9 @@ import { roleIdsForClientChannel } from '@/lib/discord/roles';
 import {
   discordCreateGuildChannel,
   discordGetChannel,
+  discordGetCurrentUser,
   discordListGuildChannels,
-  discordPutChannelRoleOverwrite,
+  discordPutChannelOverwrite,
   type DiscordChannel,
   type DiscordPermissionOverwrite,
 } from '@/lib/discord/rest';
@@ -146,50 +149,108 @@ async function createTextChannel(
   return { ok: true, id };
 }
 
-function overwriteForRole(
+function overwriteForTarget(
   overwrites: DiscordPermissionOverwrite[] | undefined,
-  roleId: string,
+  targetId: string,
+  type: number,
 ): DiscordPermissionOverwrite | undefined {
-  return (overwrites ?? []).find(
-    (o) => o.type === DISCORD_OVERWRITE_TYPE_ROLE && o.id === roleId,
-  );
+  return (overwrites ?? []).find((o) => o.type === type && o.id === targetId);
+}
+
+export type DiscordChannelPermissionDiagnostic = {
+  channelId: string;
+  channelName: string;
+  botSelfAccessSucceeded: boolean;
+  everyoneDenyApplied: boolean;
+  error?: string;
+};
+
+async function resolveBotUserId(): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const me = await discordGetCurrentUser();
+  if (!me.ok) return { ok: false, error: me.error };
+  const id = normalizeDiscordSnowflake(me.data.id);
+  if (!id) return { ok: false, error: 'Discord /users/@me returned an invalid user id.' };
+  return { ok: true, id };
 }
 
 async function repairStandardPermissions(
   channel: DiscordChannel,
   department: TaskDepartment | null,
-): Promise<string[]> {
-  const errors: string[] = [];
+  botUserId: string,
+): Promise<{ errors: string[]; diagnostic: DiscordChannelPermissionDiagnostic }> {
+  const diagnostic: DiscordChannelPermissionDiagnostic = {
+    channelId: channel.id,
+    channelName: channel.name,
+    botSelfAccessSucceeded: false,
+    everyoneDenyApplied: false,
+  };
   const guildId = getDiscordGuildId();
-  if (!guildId) return ['DISCORD_GUILD_ID is not set.'];
+  if (!guildId) {
+    const error = 'DISCORD_GUILD_ID is not set.';
+    diagnostic.error = error;
+    return { errors: [error], diagnostic };
+  }
 
   const fresh = await discordGetChannel(channel.id);
   const overwrites = fresh.ok ? fresh.data.permission_overwrites : channel.permission_overwrites;
 
-  const everyone = overwriteForRole(overwrites, guildId);
+  const botCurrent = overwriteForTarget(overwrites, botUserId, DISCORD_OVERWRITE_TYPE_MEMBER);
+  const botMerged = mergeBotSelfAllowBits(
+    parseDiscordBitfield(botCurrent?.allow),
+    parseDiscordBitfield(botCurrent?.deny),
+  );
+  const botRes = await discordPutChannelOverwrite(
+    channel.id,
+    botUserId,
+    DISCORD_OVERWRITE_TYPE_MEMBER,
+    botMerged.allow,
+    botMerged.deny,
+  );
+  if (!botRes.ok) {
+    const error = `${channel.name} bot self-access: ${botRes.error}`;
+    diagnostic.error = error;
+    return { errors: [error], diagnostic };
+  }
+  diagnostic.botSelfAccessSucceeded = true;
+
+  const errors: string[] = [];
+  const everyone = overwriteForTarget(overwrites, guildId, DISCORD_OVERWRITE_TYPE_ROLE);
   const everyoneMerged = mergeEveryoneDenyView(
     parseDiscordBitfield(everyone?.allow),
     parseDiscordBitfield(everyone?.deny),
   );
-  const everyoneRes = await discordPutChannelRoleOverwrite(
+  const everyoneRes = await discordPutChannelOverwrite(
     channel.id,
     guildId,
+    DISCORD_OVERWRITE_TYPE_ROLE,
     everyoneMerged.allow,
     everyoneMerged.deny,
   );
-  if (!everyoneRes.ok) errors.push(`@everyone ${channel.name}: ${everyoneRes.error}`);
+  if (!everyoneRes.ok) {
+    const error = `@everyone ${channel.name}: ${everyoneRes.error}`;
+    errors.push(error);
+    diagnostic.error = error;
+  } else {
+    diagnostic.everyoneDenyApplied = true;
+  }
 
   for (const roleId of roleIdsForClientChannel(department)) {
-    const current = overwriteForRole(overwrites, roleId);
+    const current = overwriteForTarget(overwrites, roleId, DISCORD_OVERWRITE_TYPE_ROLE);
     const merged = mergeStaffAllowBits(
       parseDiscordBitfield(current?.allow),
       parseDiscordBitfield(current?.deny),
     );
-    const res = await discordPutChannelRoleOverwrite(channel.id, roleId, merged.allow, merged.deny);
+    const res = await discordPutChannelOverwrite(
+      channel.id,
+      roleId,
+      DISCORD_OVERWRITE_TYPE_ROLE,
+      merged.allow,
+      merged.deny,
+    );
     if (!res.ok) errors.push(`role ${roleId} on ${channel.name}: ${res.error}`);
   }
 
-  return errors;
+  return { errors, diagnostic };
 }
 
 async function persistRoute(
@@ -231,12 +292,23 @@ async function loadClientRoutes(
 async function ensureStandardChannels(
   clientId: string,
   categoryId: string,
-): Promise<{ created: number; linked: number; errors: string[] }> {
+): Promise<{
+  created: number;
+  linked: number;
+  errors: string[];
+  channelPermissionDiagnostics: DiscordChannelPermissionDiagnostic[];
+}> {
   const errors: string[] = [];
+  const channelPermissionDiagnostics: DiscordChannelPermissionDiagnostic[] = [];
   let created = 0;
   let linked = 0;
   let children = await listCategoryTextChannels(categoryId);
   const existingRoutes = await loadClientRoutes(clientId);
+
+  const bot = await resolveBotUserId();
+  if (!bot.ok) {
+    errors.push(`bot user id: ${bot.error}`);
+  }
 
   for (const spec of CLIENT_DISCORD_CHANNEL_SPECS) {
     const routeKey = spec.department ?? 'default';
@@ -281,11 +353,23 @@ async function ensureStandardChannels(
     const routeErr = await persistRoute(clientId, spec, channelId);
     if (routeErr) errors.push(`${spec.name} route: ${routeErr}`);
 
-    const permErrs = await repairStandardPermissions(child, spec.department);
-    errors.push(...permErrs);
+    if (!bot.ok) {
+      channelPermissionDiagnostics.push({
+        channelId,
+        channelName: child.name,
+        botSelfAccessSucceeded: false,
+        everyoneDenyApplied: false,
+        error: bot.error,
+      });
+      continue;
+    }
+
+    const repaired = await repairStandardPermissions(child, spec.department, bot.id);
+    errors.push(...repaired.errors);
+    channelPermissionDiagnostics.push(repaired.diagnostic);
   }
 
-  return { created, linked, errors };
+  return { created, linked, errors, channelPermissionDiagnostics };
 }
 
 async function ensureCategoryForNewClient(
@@ -325,6 +409,7 @@ export type DiscordClientProvisionResult = {
   createdChannels: number;
   linkedChannels: number;
   errors: string[];
+  channelPermissionDiagnostics: DiscordChannelPermissionDiagnostic[];
 };
 
 async function provisionClientDiscord(clientId: string): Promise<DiscordClientProvisionResult> {
@@ -334,6 +419,7 @@ async function provisionClientDiscord(clientId: string): Promise<DiscordClientPr
     createdChannels: 0,
     linkedChannels: 0,
     errors: [],
+    channelPermissionDiagnostics: [],
   };
   if (!canProvisionDiscordClients()) {
     return { ...empty, errors: ['Discord bot token or guild id is not configured.'] };
@@ -352,6 +438,7 @@ async function provisionClientDiscord(clientId: string): Promise<DiscordClientPr
     createdChannels: channels.created,
     linkedChannels: channels.linked,
     errors: channels.errors,
+    channelPermissionDiagnostics: channels.channelPermissionDiagnostics,
   };
 }
 
@@ -383,6 +470,7 @@ export async function linkExistingClientDiscordCategory(input: {
     createdChannels: 0,
     linkedChannels: 0,
     errors: [],
+    channelPermissionDiagnostics: [],
   };
   if (!clientId) return { ...empty, errors: ['client_id is required.'] };
   if (!categoryId) return { ...empty, errors: ['category_id must be a Discord snowflake.'] };
@@ -419,5 +507,6 @@ export async function linkExistingClientDiscordCategory(input: {
     createdChannels: channels.created,
     linkedChannels: channels.linked,
     errors: channels.errors,
+    channelPermissionDiagnostics: channels.channelPermissionDiagnostics,
   };
 }
