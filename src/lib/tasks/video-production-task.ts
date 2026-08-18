@@ -1,7 +1,7 @@
 import 'server-only';
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { TaskPriority, TaskStatus, VideoStatus } from '@/types/database';
+import type { TaskDepartment, TaskPriority, TaskStatus, VideoStatus } from '@/types/database';
 import { replaceTaskAssignments, legacyPrimaryAssignee } from '@/lib/data/task-assignments';
 import { scheduleTaskDiscordUpsert } from '@/lib/discord/task-discord';
 
@@ -105,6 +105,7 @@ export async function upsertVideoProductionTask(sb: SB, input: SyncVideoProducti
         client_id: input.clientId,
         status: taskStatus,
         priority: input.priority,
+        department: 'production_video' as TaskDepartment,
         deadline,
         assignee_id: primary.assignee_id,
         updated_at: new Date().toISOString(),
@@ -124,6 +125,7 @@ export async function upsertVideoProductionTask(sb: SB, input: SyncVideoProducti
     assignee_id: primary.assignee_id,
     status: taskStatus,
     priority: input.priority,
+    department: 'production_video' as TaskDepartment,
     deadline,
     created_by: input.createdByUserId,
   };

@@ -52,6 +52,13 @@ export type TaskStatus =
 
 export type TaskPriority = 'low' | 'normal' | 'high' | 'urgent';
 
+export type TaskDepartment =
+  | 'production_video'
+  | 'video_distribution'
+  | 'community_management'
+  | 'media_buying'
+  | 'web_seo';
+
 export type VideoStatus =
   | 'idea'
   | 'brief_pending'
@@ -309,6 +316,7 @@ export interface Task {
   watcher_ids: string[];
   status: TaskStatus;
   priority: TaskPriority;
+  department: TaskDepartment | null;
   progress: number;
   start_date: string | null;
   deadline: string | null;
@@ -345,11 +353,11 @@ export interface TaskDiscordMessage {
   updated_at: string;
 }
 
-/** client_id / department_role null = fallback route. */
+/** client_id / department null = fallback route. Independent of employees.role. */
 export interface DiscordChannelRoute {
   id: string;
   client_id: string | null;
-  department_role: UserRole | null;
+  department: TaskDepartment | null;
   discord_channel_id: string;
   is_enabled: boolean;
   created_at: string;
@@ -898,6 +906,7 @@ export type Database = {
       project_status: ProjectStatus;
       task_status: TaskStatus;
       task_priority: TaskPriority;
+      task_department: TaskDepartment;
       video_status: VideoStatus;
       video_public_status: VideoPublicStatus;
       video_format: VideoFormat;

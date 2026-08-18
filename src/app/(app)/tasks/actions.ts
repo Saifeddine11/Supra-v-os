@@ -22,6 +22,7 @@ import { actionError, actionOk, getPostgrestError, type ActionResult } from '@/l
 import type { TaskPriority, TaskStatus, TaskEnriched } from '@/types/database';
 import { isTaskStatusAllowedInWorkflow } from '@/types/domain';
 import { createTaskCore } from '@/lib/tasks/create-task-core';
+import { parseTaskDepartmentInput } from '@/lib/tasks/task-department';
 import { notifyTaskAssignees, notifyTaskBlocked } from '@/lib/notifications/task-events';
 import { peekTaskDiscordLink, scheduleTaskDiscordRemoved, scheduleTaskDiscordUpsert } from '@/lib/discord/task-discord';
 import { logStaffActivity } from '@/lib/activity/log-activity';
@@ -106,6 +107,9 @@ export async function createTaskAction(formData: FormData): Promise<ActionResult
   const assigneeIds = parseAssigneeIdsFromForm(formData);
   const deadlineRaw = String(formData.get('deadline') ?? '').trim();
   const status = (String(formData.get('status') ?? 'todo') || 'todo') as TaskStatus;
+  const departmentParsed = parseTaskDepartmentInput(formData.get('department'));
+  if (!departmentParsed.ok) return actionError(departmentParsed.error);
+  if (!departmentParsed.value) return actionError('Le département est requis.');
 
   return createTaskCore(ctx, {
     title,
@@ -115,6 +119,7 @@ export async function createTaskAction(formData: FormData): Promise<ActionResult
     deadline: deadlineRaw || null,
     priority: (String(formData.get('priority') ?? 'normal') || 'normal') as TaskPriority,
     status,
+    department: departmentParsed.value,
   });
 }
 
@@ -191,6 +196,9 @@ export async function updateTaskAction(id: string, formData: FormData): Promise<
     return actionError('Statut non disponible dans le workflow.');
   }
 
+  const departmentParsed = parseTaskDepartmentInput(formData.get('department'));
+  if (!departmentParsed.ok) return actionError(departmentParsed.error);
+
   const { error } = await writeSb
     .from('tasks')
     .update({
@@ -200,6 +208,7 @@ export async function updateTaskAction(id: string, formData: FormData): Promise<
       assignee_id: primary.assignee_id,
       status,
       priority: String(formData.get('priority') ?? 'normal') as TaskPriority,
+      department: departmentParsed.value,
       deadline: deadlineRaw ? new Date(deadlineRaw).toISOString() : null,
       updated_at: new Date().toISOString(),
     })

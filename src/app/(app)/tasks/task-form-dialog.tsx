@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Client, Employee, Task, TaskEnriched, TaskPriority, TaskStatus } from '@/types/database';
-import { TASK_STATUS_MAP, PRIORITY_MAP, TASK_KANBAN_STATUSES } from '@/types/domain';
+import { TASK_STATUS_MAP, PRIORITY_MAP, TASK_KANBAN_STATUSES, TASK_DEPARTMENT_MAP, TASK_DEPARTMENT_OPTIONS } from '@/types/domain';
 import {
   Dialog,
   DialogContent,
@@ -157,6 +157,25 @@ export function TaskFormDialog({
                 {clients.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="task-department">Département</Label>
+              <select
+                id="task-department"
+                name="department"
+                required={!isEdit}
+                defaultValue={
+                  task?.department ?? (videoLinked ? 'production_video' : '')
+                }
+                className="h-10 rounded-lg border border-border bg-muted px-3 text-sm"
+              >
+                <option value="">{isEdit ? '—' : 'Choisir un département'}</option>
+                {TASK_DEPARTMENT_OPTIONS.map((d) => (
+                  <option key={d} value={d}>
+                    {TASK_DEPARTMENT_MAP[d].label}
                   </option>
                 ))}
               </select>

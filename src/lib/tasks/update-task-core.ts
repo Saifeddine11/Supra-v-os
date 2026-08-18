@@ -19,7 +19,7 @@ import { getTaskById } from '@/lib/data/tasks';
 import { logStaffActivity } from '@/lib/activity/log-activity';
 import { notifyTaskAssignees, notifyTaskBlocked } from '@/lib/notifications/task-events';
 import { scheduleTaskDiscordUpsert } from '@/lib/discord/task-discord';
-import type { TaskPriority, TaskStatus } from '@/types/database';
+import type { TaskDepartment, TaskPriority, TaskStatus } from '@/types/database';
 import { isTaskStatusAllowedInWorkflow } from '@/types/domain';
 import { revalidatePath } from 'next/cache';
 import { validateOperationalFutureDate } from '@/lib/dates/validate-future-date';
@@ -48,6 +48,7 @@ export type UpdateTaskCoreInput = {
   deadline?: string | null;
   priority?: TaskPriority;
   status?: TaskStatus;
+  department?: TaskDepartment | null;
 };
 
 export async function updateTaskCore(
@@ -145,6 +146,9 @@ export async function updateTaskCore(
     deadline,
     updated_at: new Date().toISOString(),
   };
+  if (input.department !== undefined) {
+    patch.department = input.department;
+  }
   if (status === 'done') {
     patch.completed_at = new Date().toISOString();
   }

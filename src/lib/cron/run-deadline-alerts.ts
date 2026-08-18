@@ -22,7 +22,7 @@ import {
   isTaskOverdueForAlert,
   TASK_CRITICAL_ALERT_EXCLUDED_STATUSES_SQL,
 } from '@/lib/alerts/active-alert-rules';
-import type { TaskPriority, TaskStatus } from '@/types/database';
+import type { TaskDepartment, TaskPriority, TaskStatus } from '@/types/database';
 import { sendDiscordDeadlineReminders } from '@/lib/discord/task-discord';
 
 export type DeadlineAlertsResult = {
@@ -122,13 +122,26 @@ export async function runDeadlineAlerts(): Promise<DeadlineAlertsResult> {
   }
 
   // Tasks due in 24h (not overdue yet)
-  const { data: tasksSoon } = await admin
+  let { data: tasksSoon, error: soonErr } = await admin
     .from('tasks')
-    .select('id,title,deadline,status,assignee_id,priority,client_id,clients(name)')
+    .select('id,title,deadline,status,assignee_id,priority,client_id,department,clients(name)')
     .not('status', 'in', TASK_CRITICAL_ALERT_EXCLUDED_STATUSES_SQL)
     .not('deadline', 'is', null)
     .gt('deadline', now.toISOString())
     .lte('deadline', in24h.toISOString());
+  if (soonErr && /department/i.test(soonErr.message)) {
+    const fallback = await admin
+      .from('tasks')
+      .select('id,title,deadline,status,assignee_id,priority,client_id,clients(name)')
+      .not('status', 'in', TASK_CRITICAL_ALERT_EXCLUDED_STATUSES_SQL)
+      .not('deadline', 'is', null)
+      .gt('deadline', now.toISOString())
+      .lte('deadline', in24h.toISOString());
+    tasksSoon = (fallback.data ?? []).map((row) => ({
+      ...row,
+      department: null,
+    }));
+  }
 
   for (const t of tasksSoon ?? []) {
     if (
@@ -171,12 +184,24 @@ export async function runDeadlineAlerts(): Promise<DeadlineAlertsResult> {
   }
 
   // Overdue tasks
-  const { data: tasksOver } = await admin
+  let { data: tasksOver, error: overErr } = await admin
     .from('tasks')
-    .select('id,title,deadline,status,assignee_id,priority,client_id,clients(name)')
+    .select('id,title,deadline,status,assignee_id,priority,client_id,department,clients(name)')
     .not('status', 'in', TASK_CRITICAL_ALERT_EXCLUDED_STATUSES_SQL)
     .not('deadline', 'is', null)
     .lt('deadline', now.toISOString());
+  if (overErr && /department/i.test(overErr.message)) {
+    const fallback = await admin
+      .from('tasks')
+      .select('id,title,deadline,status,assignee_id,priority,client_id,clients(name)')
+      .not('status', 'in', TASK_CRITICAL_ALERT_EXCLUDED_STATUSES_SQL)
+      .not('deadline', 'is', null)
+      .lt('deadline', now.toISOString());
+    tasksOver = (fallback.data ?? []).map((row) => ({
+      ...row,
+      department: null,
+    }));
+  }
 
   for (const t of tasksOver ?? []) {
     if (!isTaskOverdueForAlert({ status: t.status as TaskStatus, deadline: t.deadline as string | null, now })) {
@@ -479,6 +504,7 @@ export async function runDeadlineAlerts(): Promise<DeadlineAlertsResult> {
     assignee_id: string | null;
     priority: string;
     client_id: string | null;
+    department: TaskDepartment | null;
   }) => ({
     id: t.id,
     title: t.title,
@@ -487,6 +513,7 @@ export async function runDeadlineAlerts(): Promise<DeadlineAlertsResult> {
     assignee_id: t.assignee_id,
     priority: t.priority as TaskPriority,
     client_id: t.client_id,
+    department: t.department,
   });
 
   const discord = await sendDiscordDeadlineReminders({
@@ -506,6 +533,7 @@ export async function runDeadlineAlerts(): Promise<DeadlineAlertsResult> {
           assignee_id: (t.assignee_id as string | null) ?? null,
           priority: t.priority as string,
           client_id: (t.client_id as string | null) ?? null,
+          department: (t.department as TaskDepartment | null) ?? null,
         }),
       ),
     overdue: (tasksOver ?? [])
@@ -525,6 +553,7 @@ export async function runDeadlineAlerts(): Promise<DeadlineAlertsResult> {
           assignee_id: (t.assignee_id as string | null) ?? null,
           priority: t.priority as string,
           client_id: (t.client_id as string | null) ?? null,
+          department: (t.department as TaskDepartment | null) ?? null,
         }),
       ),
   });

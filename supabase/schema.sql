@@ -70,6 +70,15 @@ create type task_status as enum (
 -- Task priority
 create type task_priority as enum ('low', 'normal', 'high', 'urgent');
 
+-- Task work stream (Discord routing). Independent of employees.role.
+create type task_department as enum (
+  'production_video',
+  'video_distribution',
+  'community_management',
+  'media_buying',
+  'web_seo'
+);
+
 -- Internal video production status (rich state machine)
 create type video_status as enum (
   'idea',
@@ -417,6 +426,7 @@ create table tasks (
   -- State
   status            task_status not null default 'todo',
   priority          task_priority not null default 'normal',
+  department        task_department,                 -- Discord routing; null = no department match
   progress          int not null default 0 check (progress between 0 and 100),
 
   -- Dates
@@ -449,6 +459,7 @@ create index idx_tasks_status on tasks(status);
 create index idx_tasks_deadline on tasks(deadline);
 create index idx_tasks_priority on tasks(priority);
 create index idx_tasks_parent on tasks(parent_task_id);
+create index idx_tasks_department on tasks(department) where department is not null;
 
 -- Multi-assignation tâches (premier assigné reste dans tasks.assignee_id pour compat).
 create table task_assignments (
@@ -480,29 +491,27 @@ create table task_discord_messages (
 create table discord_channel_routes (
   id                   uuid primary key default gen_random_uuid(),
   client_id            uuid references clients(id) on delete cascade,
-  department_role      user_role,
+  department           task_department,
   discord_channel_id   text not null,
   is_enabled           boolean not null default true,
   created_at           timestamptz not null default now(),
   updated_at           timestamptz not null default now(),
   constraint discord_channel_routes_channel_snowflake
-    check (discord_channel_id ~ '^[0-9]{17,20}$'),
-  constraint discord_channel_routes_not_client_role
-    check (department_role is null or department_role <> 'client'::user_role)
+    check (discord_channel_id ~ '^[0-9]{17,20}$')
 );
 
-create unique index discord_channel_routes_client_role_uidx
-  on discord_channel_routes (client_id, department_role)
-  where client_id is not null and department_role is not null;
+create unique index discord_channel_routes_client_department_uidx
+  on discord_channel_routes (client_id, department)
+  where client_id is not null and department is not null;
 create unique index discord_channel_routes_client_default_uidx
   on discord_channel_routes (client_id)
-  where client_id is not null and department_role is null;
-create unique index discord_channel_routes_role_default_uidx
-  on discord_channel_routes (department_role)
-  where client_id is null and department_role is not null;
+  where client_id is not null and department is null;
+create unique index discord_channel_routes_department_default_uidx
+  on discord_channel_routes (department)
+  where client_id is null and department is not null;
 create unique index discord_channel_routes_global_uidx
   on discord_channel_routes ((true))
-  where client_id is null and department_role is null;
+  where client_id is null and department is null;
 
 create unique index tasks_one_production_task_per_video on tasks (video_id)
   where video_id is not null;

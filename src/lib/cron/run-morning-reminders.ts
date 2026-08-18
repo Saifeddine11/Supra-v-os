@@ -17,7 +17,7 @@ import {
   isTaskUrgentForAlert,
   TASK_CRITICAL_ALERT_EXCLUDED_STATUSES_SQL,
 } from '@/lib/alerts/active-alert-rules';
-import type { TaskPriority, TaskStatus, UserRole } from '@/types/database';
+import type { TaskDepartment, TaskPriority, TaskStatus } from '@/types/database';
 import { sendDiscordMorningDigest } from '@/lib/discord/task-discord';
 
 export type MorningRemindersResult = {
@@ -95,11 +95,23 @@ export async function runMorningReminders(): Promise<MorningRemindersResult> {
     const taskOrParts = [`assignee_id.eq.${emp.id}`];
     if (fromPivot.length) taskOrParts.push(`id.in.(${fromPivot.join(',')})`);
 
-    const { data: tasks } = await admin
+    let { data: tasks, error: taskSelErr } = await admin
       .from('tasks')
-      .select('id,title,deadline,priority,status,client_id')
+      .select('id,title,deadline,priority,status,client_id,department')
       .or(taskOrParts.join(','))
       .not('status', 'in', TASK_CRITICAL_ALERT_EXCLUDED_STATUSES_SQL);
+
+    if (taskSelErr && /department/i.test(taskSelErr.message)) {
+      const fallback = await admin
+        .from('tasks')
+        .select('id,title,deadline,priority,status,client_id')
+        .or(taskOrParts.join(','))
+        .not('status', 'in', TASK_CRITICAL_ALERT_EXCLUDED_STATUSES_SQL);
+      tasks = (fallback.data ?? []).map((row) => ({
+        ...row,
+        department: null,
+      }));
+    }
 
     const open = tasks ?? [];
     const overdue: typeof open = [];
@@ -160,12 +172,12 @@ export async function runMorningReminders(): Promise<MorningRemindersResult> {
       id: t.id as string,
       title: t.title as string,
       clientId: (t.client_id as string | null) ?? null,
+      department: (t.department as TaskDepartment | null) ?? null,
     });
     const discordOk = await sendDiscordMorningDigest({
       employeeId: emp.id as string,
       fullName: emp.full_name as string,
       discordUserId: (emp.discord_user_id as string | null) ?? null,
-      role: (emp.role as UserRole | null) ?? null,
       dueToday: dueToday.map(toLine),
       overdue: overdue.map(toLine),
       urgent: urgentOpen.map(toLine),

@@ -10,6 +10,7 @@
 import type {
   TaskStatus,
   TaskPriority,
+  TaskDepartment,
   VideoStatus,
   VideoPublicStatus,
   InvoiceStatus,
@@ -44,6 +45,22 @@ export const TASK_STATUS_MAP: Record<TaskStatus, StatusConfig> = {
   done:            { label: 'Terminé',          color: '#3DBD7D' },
   archived:        { label: 'Archivé',          color: '#525252' },
 };
+
+export const TASK_DEPARTMENT_MAP: Record<TaskDepartment, StatusConfig> = {
+  production_video:      { label: 'Production vidéo',      color: '#FF450F' },
+  video_distribution:    { label: 'Distribution vidéo',    color: '#D14A28' },
+  community_management:  { label: 'Community management',  color: '#C4789B' },
+  media_buying:          { label: 'Media buying',          color: '#E07B3A' },
+  web_seo:               { label: 'Web / SEO',             color: '#5B8FD4' },
+};
+
+export const TASK_DEPARTMENT_OPTIONS: TaskDepartment[] = [
+  'production_video',
+  'video_distribution',
+  'community_management',
+  'media_buying',
+  'web_seo',
+];
 
 export const PRIORITY_MAP: Record<TaskPriority, StatusConfig> = {
   low:    { label: 'Basse',   color: '#525252' },

@@ -21,9 +21,10 @@ import {
   buildMorningDigestPayload,
   buildTaskDiscordPayload,
 } from '@/lib/discord/embed';
-import { TEAM_ASSIGNABLE_ROLES } from '@/types/domain';
+import { TASK_DEPARTMENT_OPTIONS } from '@/types/domain';
 import type {
   DiscordChannelRoute,
+  TaskDepartment,
   TaskPriority,
   TaskStatus,
   UserRole,
@@ -48,7 +49,7 @@ async function loadRoutes(): Promise<DiscordChannelRoute[]> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from('discord_channel_routes')
-    .select('id, client_id, department_role, discord_channel_id, is_enabled, created_at, updated_at');
+    .select('id, client_id, department, discord_channel_id, is_enabled, created_at, updated_at');
   if (error) {
     logDiscord(`routes: ${error.message}`);
     return [];
@@ -141,7 +142,7 @@ export async function syncTaskToDiscord(taskId: string): Promise<void> {
   const admin = createAdminClient();
   const { data: task, error: taskErr } = await admin
     .from('tasks')
-    .select('id, title, status, priority, deadline, client_id, assignee_id')
+    .select('id, title, status, priority, deadline, client_id, assignee_id, department')
     .eq('id', taskId)
     .maybeSingle();
   if (taskErr) {
@@ -170,18 +171,16 @@ export async function syncTaskToDiscord(taskId: string): Promise<void> {
     empIds.length > 0
       ? await admin
           .from('employees')
-          .select('id, full_name, role, discord_user_id')
+          .select('id, full_name, discord_user_id')
           .in('id', empIds)
-      : { data: [] as { id: string; full_name: string; role: UserRole; discord_user_id: string | null }[] };
+      : { data: [] as { id: string; full_name: string; discord_user_id: string | null }[] };
 
   const employees = emps ?? [];
-  const primary =
-    employees.find((e) => e.id === task.assignee_id) ?? employees[0] ?? null;
-  const departmentRole = (primary?.role as UserRole | undefined) ?? null;
+  const department = (task.department as TaskDepartment | null) ?? null;
   const channelId = resolveDiscordChannelId(
     routes,
     (task.client_id as string | null) ?? null,
-    departmentRole,
+    department,
   );
   if (!channelId) return;
 
@@ -242,6 +241,7 @@ type ReminderTask = {
   assignee_id: string | null;
   priority: TaskPriority;
   client_id: string | null;
+  department: TaskDepartment | null;
 };
 
 /**
@@ -300,9 +300,9 @@ export async function sendDiscordDeadlineReminders(input: {
       empIds.size > 0
         ? await admin
             .from('employees')
-            .select('id, role, discord_user_id')
+            .select('id, discord_user_id')
             .in('id', [...empIds])
-        : { data: [] as { id: string; role: UserRole; discord_user_id: string | null }[] };
+        : { data: [] as { id: string; discord_user_id: string | null }[] };
     const empMap = new Map((emps ?? []).map((e) => [e.id as string, e]));
 
     const now = Date.now();
@@ -317,10 +317,9 @@ export async function sendDiscordDeadlineReminders(input: {
       }
 
       const ids = [...(assigneesByTask.get(t.id) ?? [])];
-      const primary = empMap.get(t.assignee_id ?? ids[0] ?? '');
       const channelId =
         link?.discord_channel_id ??
-        resolveDiscordChannelId(routes, t.client_id, (primary?.role as UserRole | undefined) ?? null);
+        resolveDiscordChannelId(routes, t.client_id, t.department);
       if (!channelId) {
         skipped += 1;
         continue;
@@ -362,10 +361,9 @@ export async function sendDiscordMorningDigest(input: {
   employeeId: string;
   fullName: string;
   discordUserId: string | null;
-  role: UserRole | null;
-  dueToday: { id: string; title: string; clientId: string | null }[];
-  overdue: { id: string; title: string; clientId: string | null }[];
-  urgent: { id: string; title: string; clientId: string | null }[];
+  dueToday: { id: string; title: string; clientId: string | null; department: TaskDepartment | null }[];
+  overdue: { id: string; title: string; clientId: string | null; department: TaskDepartment | null }[];
+  urgent: { id: string; title: string; clientId: string | null; department: TaskDepartment | null }[];
 }): Promise<boolean> {
   if (!isDiscordTaskSyncEnabled()) return false;
   try {
@@ -385,13 +383,13 @@ export async function sendDiscordMorningDigest(input: {
     };
 
     for (const t of input.dueToday) {
-      add(resolveDiscordChannelId(routes, t.clientId, input.role), 'dueToday', t.title);
+      add(resolveDiscordChannelId(routes, t.clientId, t.department), 'dueToday', t.title);
     }
     for (const t of input.overdue) {
-      add(resolveDiscordChannelId(routes, t.clientId, input.role), 'overdue', t.title);
+      add(resolveDiscordChannelId(routes, t.clientId, t.department), 'overdue', t.title);
     }
     for (const t of input.urgent) {
-      add(resolveDiscordChannelId(routes, t.clientId, input.role), 'urgent', t.title);
+      add(resolveDiscordChannelId(routes, t.clientId, t.department), 'urgent', t.title);
     }
 
     if (grouped.size === 0) return false;
@@ -438,7 +436,7 @@ export async function listDiscordAdminStatus(): Promise<{
   routes: DiscordChannelRoute[];
   employeesMissingDiscordId: { id: string; full_name: string; role: UserRole }[];
   activeClients: { id: string; name: string }[];
-  departmentRoles: UserRole[];
+  departments: TaskDepartment[];
 }> {
   const tokenConfigured = Boolean(getDiscordBotToken());
   const syncEnabled = isDiscordTaskSyncEnabled();
@@ -448,7 +446,7 @@ export async function listDiscordAdminStatus(): Promise<{
     routes: [] as DiscordChannelRoute[],
     employeesMissingDiscordId: [] as { id: string; full_name: string; role: UserRole }[],
     activeClients: [] as { id: string; name: string }[],
-    departmentRoles: TEAM_ASSIGNABLE_ROLES,
+    departments: TASK_DEPARTMENT_OPTIONS,
   };
   try {
     const admin = createAdminClient();
@@ -470,7 +468,7 @@ export async function listDiscordAdminStatus(): Promise<{
       routes,
       employeesMissingDiscordId: (emps.data ?? []) as { id: string; full_name: string; role: UserRole }[],
       activeClients: (clients.data ?? []) as { id: string; name: string }[],
-      departmentRoles: TEAM_ASSIGNABLE_ROLES,
+      departments: TASK_DEPARTMENT_OPTIONS,
     };
   } catch (e) {
     logDiscord(e instanceof Error ? e.message : 'admin status failed');
@@ -480,22 +478,22 @@ export async function listDiscordAdminStatus(): Promise<{
 
 export async function upsertDiscordChannelRoute(input: {
   clientId: string | null;
-  departmentRole: UserRole | null;
+  department: TaskDepartment | null;
   channelId: string;
 }): Promise<{ ok: boolean; error?: string; id?: string }> {
   const channelId = normalizeDiscordSnowflake(input.channelId);
   if (!channelId) return { ok: false, error: 'discord_channel_id must be a 17–20 digit snowflake.' };
-  if (input.departmentRole === 'client') {
-    return { ok: false, error: 'department_role cannot be client.' };
+  if (input.department && !TASK_DEPARTMENT_OPTIONS.includes(input.department)) {
+    return { ok: false, error: 'department must be a task_department value.' };
   }
   try {
     const admin = createAdminClient();
     const now = new Date().toISOString();
     let find = admin.from('discord_channel_routes').select('id');
     find = input.clientId ? find.eq('client_id', input.clientId) : find.is('client_id', null);
-    find = input.departmentRole
-      ? find.eq('department_role', input.departmentRole)
-      : find.is('department_role', null);
+    find = input.department
+      ? find.eq('department', input.department)
+      : find.is('department', null);
     const { data: existing, error: findErr } = await find.maybeSingle();
     if (findErr) return { ok: false, error: findErr.message };
 
@@ -516,7 +514,7 @@ export async function upsertDiscordChannelRoute(input: {
       .from('discord_channel_routes')
       .insert({
         client_id: input.clientId,
-        department_role: input.departmentRole,
+        department: input.department,
         discord_channel_id: channelId,
         is_enabled: true,
         updated_at: now,

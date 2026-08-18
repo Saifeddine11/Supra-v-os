@@ -13,7 +13,7 @@ import {
   taskListingDenied,
 } from '@/lib/auth/data-scope';
 import { actionError, actionOk, getPostgrestError, type ActionResult } from '@/lib/actions/types';
-import type { TaskPriority, TaskStatus } from '@/types/database';
+import type { TaskDepartment, TaskPriority, TaskStatus } from '@/types/database';
 import { isTaskStatusAllowedInWorkflow } from '@/types/domain';
 import { notifyTaskAssignees } from '@/lib/notifications/task-events';
 import { scheduleTaskDiscordUpsert } from '@/lib/discord/task-discord';
@@ -62,6 +62,7 @@ export type CreateTaskCoreInput = {
   deadline?: string | null;
   priority?: TaskPriority;
   status?: TaskStatus;
+  department?: TaskDepartment | null;
 };
 
 export async function createTaskCore(
@@ -131,6 +132,7 @@ export async function createTaskCore(
     assignee_id: primary.assignee_id,
     status,
     priority: (input.priority ?? 'normal') as TaskPriority,
+    department: input.department ?? null,
     deadline: deadlineRaw ? new Date(deadlineRaw).toISOString() : null,
     created_by: user.id,
   };

@@ -6,8 +6,8 @@ import {
   postDiscordTestMessage,
   upsertDiscordChannelRoute,
 } from '@/lib/discord/task-discord';
-import { TEAM_ASSIGNABLE_ROLES } from '@/types/domain';
-import type { UserRole } from '@/types/database';
+import { isTaskDepartment } from '@/lib/tasks/task-department';
+import type { TaskDepartment } from '@/types/database';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -26,6 +26,7 @@ async function requireAdmin() {
 /**
  * Admin-only Discord Phase 1 helpers.
  * GET: routing status (no secrets). POST: test message or upsert a channel route.
+ * Do not create production routes until live sync is intentionally enabled.
  */
 export async function GET() {
   const auth = await requireAdmin();
@@ -37,12 +38,12 @@ export async function GET() {
     ...status,
     routingHelp: {
       matchOrder: [
-        'client_id + department_role (most specific)',
-        'client_id only (department_role null) — client default',
-        'department_role only (client_id null) — department default',
+        'client_id + department (most specific)',
+        'client_id only (department null) — client default',
+        'department only (client_id null) — department default',
         'both null — global fallback',
       ],
-      departmentRoles: TEAM_ASSIGNABLE_ROLES,
+      note: 'Routing uses tasks.department, never employees.role or operational_skills. discord_user_id is mention-only.',
       howToCopyChannelId:
         'Discord → Settings → Advanced → Developer Mode, then right-click the channel → Copy Channel ID.',
       howToCopyUserId:
@@ -59,7 +60,7 @@ export async function POST(request: Request) {
     action?: string;
     channelId?: string;
     clientId?: string | null;
-    departmentRole?: UserRole | null;
+    department?: TaskDepartment | null;
   };
   try {
     body = await request.json();
@@ -84,18 +85,19 @@ export async function POST(request: Request) {
     if (clientId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(clientId)) {
       return NextResponse.json({ ok: false, error: 'client_id must be a UUID or null.' }, { status: 400 });
     }
-    const roleRaw = body.departmentRole;
-    const departmentRole =
-      typeof roleRaw === 'string' && roleRaw.trim() ? (roleRaw.trim() as UserRole) : null;
-    if (departmentRole && !TEAM_ASSIGNABLE_ROLES.includes(departmentRole)) {
+    const deptRaw = body.department;
+    const departmentRaw =
+      typeof deptRaw === 'string' && deptRaw.trim() ? deptRaw.trim() : null;
+    if (departmentRaw && !isTaskDepartment(departmentRaw)) {
       return NextResponse.json(
-        { ok: false, error: 'department_role must be a staff role (not client).' },
+        { ok: false, error: 'department must be a task_department value.' },
         { status: 400 },
       );
     }
+    const department = departmentRaw && isTaskDepartment(departmentRaw) ? departmentRaw : null;
     const result = await upsertDiscordChannelRoute({
       clientId,
-      departmentRole,
+      department,
       channelId: String(body.channelId ?? ''),
     });
     if (!result.ok) {
