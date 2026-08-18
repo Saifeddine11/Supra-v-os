@@ -60,7 +60,10 @@ export async function runMorningReminders(): Promise<MorningRemindersResult> {
       .eq('is_active', true)
       .is('archived_at', null)
       .not('user_id', 'is', null);
-    employees = fallback.data;
+    employees = (fallback.data ?? []).map((row) => ({
+      ...row,
+      discord_user_id: null,
+    }));
     empErr = fallback.error;
   }
 
