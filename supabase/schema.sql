@@ -304,17 +304,28 @@ create table clients (
   notes_internal      text,
   account_manager_id  uuid references employees(id) on delete set null,
 
+  -- Discord (category identity is the snowflake, never the category name)
+  discord_category_id text,
+
   -- Audit
   created_at          timestamptz not null default now(),
   updated_at          timestamptz not null default now(),
   created_by          uuid references auth.users(id) on delete set null,
   constraint clients_color_hex_format_check
-    check (color_hex is null or color_hex ~ '^#[0-9A-Fa-f]{6}$')
+    check (color_hex is null or color_hex ~ '^#[0-9A-Fa-f]{6}$'),
+  constraint clients_discord_category_id_snowflake
+    check (
+      discord_category_id is null
+      or discord_category_id ~ '^[0-9]{17,20}$'
+    )
 );
 
 create index idx_clients_status on clients(status);
 create index idx_clients_account_manager on clients(account_manager_id);
 create index idx_clients_sector on clients(sector);
+create unique index clients_discord_category_id_uidx
+  on clients (discord_category_id)
+  where discord_category_id is not null;
 
 -- ============================================================================
 -- CLIENT PORTALS (token-based access)

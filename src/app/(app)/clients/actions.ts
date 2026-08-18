@@ -10,6 +10,7 @@ import {
 } from '@/lib/auth/capabilities';
 import { actionError, actionOk, getPostgrestError, type ActionResult } from '@/lib/actions/types';
 import { logStaffActivity } from '@/lib/activity/log-activity';
+import { scheduleClientDiscordProvision } from '@/lib/discord/provision';
 import { assertClientRecordVisible } from '@/lib/auth/data-scope';
 import type { ClientStatus, ContractType } from '@/types/database';
 import { getAgencyDisplayCurrency } from '@/lib/data/agency-settings-db';
@@ -101,6 +102,8 @@ export async function createClientAction(formData: FormData): Promise<ActionResu
     entityId: data.id,
     metadata: { name },
   });
+
+  scheduleClientDiscordProvision(data.id);
 
   revalidatePath('/clients');
   revalidatePath('/dashboard');

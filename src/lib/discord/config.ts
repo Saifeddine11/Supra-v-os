@@ -18,7 +18,11 @@ export function getDiscordBotToken(): string | null {
   return raw || null;
 }
 
-/** Live SUPRA → Discord sync. Test route works without this flag. */
+export function getDiscordGuildId(): string | null {
+  return normalizeDiscordSnowflake(process.env.DISCORD_GUILD_ID ?? '');
+}
+
+/** Live SUPRA → Discord task posts. Client provisioning and the test route work without this flag. */
 export function isDiscordTaskSyncEnabled(): boolean {
   if (!getDiscordBotToken()) return false;
   const v = (process.env.DISCORD_TASK_SYNC_ENABLED ?? '').trim().toLowerCase();

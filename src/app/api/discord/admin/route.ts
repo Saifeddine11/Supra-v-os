@@ -6,6 +6,7 @@ import {
   postDiscordTestMessage,
   upsertDiscordChannelRoute,
 } from '@/lib/discord/task-discord';
+import { linkExistingClientDiscordCategory } from '@/lib/discord/provision';
 import { isTaskDepartment } from '@/lib/tasks/task-department';
 import type { TaskDepartment } from '@/types/database';
 
@@ -48,6 +49,10 @@ export async function GET() {
         'Discord → Settings → Advanced → Developer Mode, then right-click the channel → Copy Channel ID.',
       howToCopyUserId:
         'Right-click the employee Discord profile → Copy User ID, then save it on /team/[id] (discord_user_id).',
+      howToLinkExistingClient:
+        'POST { action: "link_existing", clientId, categoryId }. Verifies the category ID, maps the six standard channels inside it, creates only missing ones, repairs standard permission overwrites, never creates a second category.',
+      howToCopyCategoryId:
+        'Discord Developer Mode → right-click the client category → Copy ID. Never identify a client by category name.',
     },
   });
 }
@@ -61,6 +66,7 @@ export async function POST(request: Request) {
     channelId?: string;
     clientId?: string | null;
     department?: TaskDepartment | null;
+    categoryId?: string;
   };
   try {
     body = await request.json();
@@ -104,6 +110,31 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, error: result.error }, { status: 400 });
     }
     return NextResponse.json({ ok: true, action: 'upsert_route', id: result.id });
+  }
+
+  if (action === 'link_existing') {
+    const clientRaw = body.clientId;
+    const clientId = typeof clientRaw === 'string' ? clientRaw.trim() : '';
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(clientId)) {
+      return NextResponse.json({ ok: false, error: 'client_id must be a UUID.' }, { status: 400 });
+    }
+    const result = await linkExistingClientDiscordCategory({
+      clientId,
+      categoryId: String(body.categoryId ?? ''),
+    });
+    return NextResponse.json(
+      {
+        action: 'link_existing',
+        ok: result.ok,
+        clientId: result.clientId,
+        categoryId: result.categoryId ?? null,
+        createdChannels: result.createdChannels,
+        linkedChannels: result.linkedChannels,
+        errors: result.errors,
+        error: result.ok ? undefined : result.errors.join(' ') || 'link_failed',
+      },
+      { status: result.ok ? 200 : 400 },
+    );
   }
 
   return NextResponse.json({ ok: false, error: 'unknown_action' }, { status: 400 });

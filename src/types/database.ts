@@ -239,6 +239,7 @@ export interface Client {
   end_date: string | null;
   notes_internal: string | null;
   account_manager_id: string | null;
+  discord_category_id: string | null;
   created_at: string;
   updated_at: string;
   created_by: string | null;

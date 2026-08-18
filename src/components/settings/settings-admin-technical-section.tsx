@@ -10,6 +10,7 @@ export function SettingsAdminTechnicalSection() {
     resend: Boolean(process.env.RESEND_API_KEY),
     cron: Boolean(process.env.CRON_SECRET),
     discordToken: Boolean(process.env.DISCORD_BOT_TOKEN),
+    discordGuild: Boolean((process.env.DISCORD_GUILD_ID ?? '').trim()),
     discordSync:
       ['1', 'true', 'yes'].includes((process.env.DISCORD_TASK_SYNC_ENABLED ?? '').trim().toLowerCase()),
     appUrl: process.env.NEXT_PUBLIC_APP_URL ?? '',
@@ -77,6 +78,14 @@ export function SettingsAdminTechnicalSection() {
             className={integrations.discordToken ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}
           >
             {integrations.discordToken ? 'Configuré' : 'Non défini'}
+          </span>
+        </li>
+        <li className="flex justify-between gap-2 border-b border-border/60 py-2">
+          <span className="text-muted-foreground">Discord serveur (DISCORD_GUILD_ID)</span>
+          <span
+            className={integrations.discordGuild ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}
+          >
+            {integrations.discordGuild ? 'Configuré' : 'Non défini'}
           </span>
         </li>
         <li className="flex justify-between gap-2 border-b border-border/60 py-2">

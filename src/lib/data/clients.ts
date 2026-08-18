@@ -16,6 +16,7 @@ function normalizeClientRow(row: Record<string, unknown>): Client {
     ...base,
     monthly_fee: Number(row.monthly_fee ?? base.monthly_fee ?? 0),
     currency: String(row.currency ?? base.currency ?? 'MAD'),
+    discord_category_id: (row.discord_category_id as string | null | undefined) ?? base.discord_category_id ?? null,
   };
 }
 

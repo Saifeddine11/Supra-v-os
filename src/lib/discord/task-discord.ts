@@ -6,6 +6,7 @@ import { appBaseUrl } from '@/lib/cron/app-base-url';
 import { hrefTasksOpenDetail } from '@/lib/tasks/task-deep-link';
 import {
   getDiscordBotToken,
+  getDiscordGuildId,
   isDiscordTaskSyncEnabled,
   normalizeDiscordSnowflake,
 } from '@/lib/discord/config';
@@ -22,6 +23,7 @@ import {
   buildTaskDiscordPayload,
 } from '@/lib/discord/embed';
 import { TASK_DEPARTMENT_OPTIONS } from '@/types/domain';
+import { getConfiguredDiscordStaffRoles } from '@/lib/discord/roles';
 import type {
   DiscordChannelRoute,
   TaskDepartment,
@@ -432,25 +434,30 @@ export async function postDiscordTestMessage(channelId: string): Promise<{ ok: b
 
 export async function listDiscordAdminStatus(): Promise<{
   tokenConfigured: boolean;
+  guildConfigured: boolean;
   syncEnabled: boolean;
   routes: DiscordChannelRoute[];
   employeesMissingDiscordId: { id: string; full_name: string; role: UserRole }[];
-  activeClients: { id: string; name: string }[];
+  activeClients: { id: string; name: string; discord_category_id: string | null }[];
   departments: TaskDepartment[];
+  rolesConfigured: ReturnType<typeof getConfiguredDiscordStaffRoles>;
 }> {
   const tokenConfigured = Boolean(getDiscordBotToken());
+  const guildConfigured = Boolean(getDiscordGuildId());
   const syncEnabled = isDiscordTaskSyncEnabled();
   const empty = {
     tokenConfigured,
+    guildConfigured,
     syncEnabled,
     routes: [] as DiscordChannelRoute[],
     employeesMissingDiscordId: [] as { id: string; full_name: string; role: UserRole }[],
-    activeClients: [] as { id: string; name: string }[],
+    activeClients: [] as { id: string; name: string; discord_category_id: string | null }[],
     departments: TASK_DEPARTMENT_OPTIONS,
+    rolesConfigured: getConfiguredDiscordStaffRoles(),
   };
   try {
     const admin = createAdminClient();
-    const [routes, emps, clients] = await Promise.all([
+    const [routes, emps, clientsWithCat] = await Promise.all([
       loadRoutes(),
       admin
         .from('employees')
@@ -460,15 +467,29 @@ export async function listDiscordAdminStatus(): Promise<{
         .is('discord_user_id', null)
         .neq('role', 'client')
         .order('full_name'),
-      admin.from('clients').select('id, name').eq('status', 'active').order('name'),
+      admin.from('clients').select('id, name, discord_category_id').eq('status', 'active').order('name'),
     ]);
+    let clientRows = (clientsWithCat.data ?? []) as {
+      id: string;
+      name: string;
+      discord_category_id: string | null;
+    }[];
+    if (clientsWithCat.error && /discord_category_id/i.test(clientsWithCat.error.message)) {
+      const fallback = await admin.from('clients').select('id, name').eq('status', 'active').order('name');
+      clientRows = (fallback.data ?? []).map((row) => ({
+        ...row,
+        discord_category_id: null,
+      })) as { id: string; name: string; discord_category_id: string | null }[];
+    }
     return {
       tokenConfigured,
+      guildConfigured,
       syncEnabled,
       routes,
       employeesMissingDiscordId: (emps.data ?? []) as { id: string; full_name: string; role: UserRole }[],
-      activeClients: (clients.data ?? []) as { id: string; name: string }[],
+      activeClients: clientRows,
       departments: TASK_DEPARTMENT_OPTIONS,
+      rolesConfigured: getConfiguredDiscordStaffRoles(),
     };
   } catch (e) {
     logDiscord(e instanceof Error ? e.message : 'admin status failed');
