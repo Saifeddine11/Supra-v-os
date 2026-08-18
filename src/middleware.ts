@@ -108,6 +108,9 @@ export async function middleware(request: NextRequest) {
   if (!user && pathname === '/api/ai/context') {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+  if (!user && pathname === '/api/discord/admin') {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 
   /**
    * Invite / recovery links often land on Site URL (`/`) or `/login` with `?code=`

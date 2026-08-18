@@ -17,7 +17,8 @@ import {
   isTaskUrgentForAlert,
   TASK_CRITICAL_ALERT_EXCLUDED_STATUSES_SQL,
 } from '@/lib/alerts/active-alert-rules';
-import type { TaskPriority, TaskStatus } from '@/types/database';
+import type { TaskPriority, TaskStatus, UserRole } from '@/types/database';
+import { sendDiscordMorningDigest } from '@/lib/discord/task-discord';
 
 export type MorningRemindersResult = {
   success: boolean;
@@ -25,6 +26,7 @@ export type MorningRemindersResult = {
   notificationsCreated: number;
   emailsSent: number;
   emailsSkipped: number;
+  discordDigestsSent: number;
   errors: string[];
 };
 
@@ -33,6 +35,7 @@ export async function runMorningReminders(): Promise<MorningRemindersResult> {
   let notificationsCreated = 0;
   let emailsSent = 0;
   let emailsSkipped = 0;
+  let discordDigestsSent = 0;
   let employeesProcessed = 0;
 
   const admin = createAdminClient();
@@ -41,12 +44,25 @@ export async function runMorningReminders(): Promise<MorningRemindersResult> {
   const dayEnd = endOfDay(now);
   const dateLabel = format(now, 'EEEE d MMMM yyyy');
 
-  const { data: employees, error: empErr } = await admin
+  let empQuery = admin
     .from('employees')
-    .select('id, user_id, full_name, email, is_active')
+    .select('id, user_id, full_name, email, role, discord_user_id, is_active')
     .eq('is_active', true)
     .is('archived_at', null)
     .not('user_id', 'is', null);
+
+  let { data: employees, error: empErr } = await empQuery;
+
+  if (empErr && /discord_user_id/i.test(empErr.message)) {
+    const fallback = await admin
+      .from('employees')
+      .select('id, user_id, full_name, email, role, is_active')
+      .eq('is_active', true)
+      .is('archived_at', null)
+      .not('user_id', 'is', null);
+    employees = fallback.data;
+    empErr = fallback.error;
+  }
 
   if (empErr) {
     return {
@@ -55,6 +71,7 @@ export async function runMorningReminders(): Promise<MorningRemindersResult> {
       notificationsCreated: 0,
       emailsSent: 0,
       emailsSkipped: 0,
+      discordDigestsSent: 0,
       errors: [empErr.message],
     };
   }
@@ -77,7 +94,7 @@ export async function runMorningReminders(): Promise<MorningRemindersResult> {
 
     const { data: tasks } = await admin
       .from('tasks')
-      .select('id,title,deadline,priority,status')
+      .select('id,title,deadline,priority,status,client_id')
       .or(taskOrParts.join(','))
       .not('status', 'in', TASK_CRITICAL_ALERT_EXCLUDED_STATUSES_SQL);
 
@@ -136,6 +153,22 @@ export async function runMorningReminders(): Promise<MorningRemindersResult> {
     if (!inserted) continue;
     notificationsCreated += 1;
 
+    const toLine = (t: (typeof open)[0]) => ({
+      id: t.id as string,
+      title: t.title as string,
+      clientId: (t.client_id as string | null) ?? null,
+    });
+    const discordOk = await sendDiscordMorningDigest({
+      employeeId: emp.id as string,
+      fullName: emp.full_name as string,
+      discordUserId: (emp.discord_user_id as string | null) ?? null,
+      role: (emp.role as UserRole | null) ?? null,
+      dueToday: dueToday.map(toLine),
+      overdue: overdue.map(toLine),
+      urgent: urgentOpen.map(toLine),
+    });
+    if (discordOk) discordDigestsSent += 1;
+
     const { html, text } = renderMorningReminderEmail({
       recipientName: emp.full_name.split(/\s+/)[0] ?? emp.full_name,
       date: dateLabel,
@@ -166,6 +199,7 @@ export async function runMorningReminders(): Promise<MorningRemindersResult> {
     notificationsCreated,
     emailsSent,
     emailsSkipped,
+    discordDigestsSent,
     errors,
   };
 }

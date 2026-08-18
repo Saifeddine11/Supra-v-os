@@ -67,6 +67,21 @@ export function EmployeeAdminForm({ employee }: { employee: Employee }) {
         <Input id="e-phone" name="phone" defaultValue={employee.phone ?? ''} />
       </div>
       <div className="grid gap-2">
+        <Label htmlFor="e-discord">ID utilisateur Discord</Label>
+        <Input
+          id="e-discord"
+          name="discord_user_id"
+          inputMode="numeric"
+          pattern="[0-9]{17,20}"
+          placeholder="17–20 chiffres"
+          defaultValue={employee.discord_user_id ?? ''}
+        />
+        <p className="text-xs text-muted-foreground">
+          Mode développeur Discord : clic droit sur le profil → Copier l’identifiant utilisateur. Sert uniquement aux
+          mentions. Laisser vide si non utilisé.
+        </p>
+      </div>
+      <div className="grid gap-2">
         <Label htmlFor="e-ini">Initiales (avatar)</Label>
         <Input id="e-ini" name="avatar_initials" maxLength={4} defaultValue={employee.avatar_initials ?? ''} />
       </div>

@@ -18,6 +18,7 @@ import {
 import { getTaskById } from '@/lib/data/tasks';
 import { logStaffActivity } from '@/lib/activity/log-activity';
 import { notifyTaskAssignees, notifyTaskBlocked } from '@/lib/notifications/task-events';
+import { scheduleTaskDiscordUpsert } from '@/lib/discord/task-discord';
 import type { TaskPriority, TaskStatus } from '@/types/database';
 import { isTaskStatusAllowedInWorkflow } from '@/types/domain';
 import { revalidatePath } from 'next/cache';
@@ -160,6 +161,8 @@ export async function updateTaskCore(
     console.error('[updateTaskCore] task_assignments:', e);
     return actionError(formatTaskMutationDbError(e));
   }
+
+  scheduleTaskDiscordUpsert(taskId);
 
   await logStaffActivity(ctx, {
     action: 'updated',

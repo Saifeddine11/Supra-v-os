@@ -42,6 +42,8 @@ alter table activity_logs        enable row level security;
 alter table agency_settings      enable row level security;
 alter table agency_monthly_goals  enable row level security;
 alter table user_notification_preferences enable row level security;
+alter table task_discord_messages enable row level security;
+alter table discord_channel_routes enable row level security;
 
 -- ============================================================================
 -- EMPLOYEES
@@ -899,8 +901,11 @@ revoke all on employees, clients, client_portals, projects, internal_projects,
               tasks, videos, editorial_calendars, video_templates, content_ideas,
               invoices, invoice_items, quotes, quote_items, payments, reports,
               documents, notifications, comments, activity_logs,
-              agency_settings, agency_monthly_goals, user_notification_preferences
+              agency_settings, agency_monthly_goals, user_notification_preferences,
+              task_discord_messages, discord_channel_routes
        from anon;
+
+revoke all on task_discord_messages, discord_channel_routes from authenticated;
 
 -- ============================================================================
 -- END OF POLICIES

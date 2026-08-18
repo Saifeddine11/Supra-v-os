@@ -16,6 +16,7 @@ import { actionError, actionOk, getPostgrestError, type ActionResult } from '@/l
 import type { TaskPriority, TaskStatus } from '@/types/database';
 import { isTaskStatusAllowedInWorkflow } from '@/types/domain';
 import { notifyTaskAssignees } from '@/lib/notifications/task-events';
+import { scheduleTaskDiscordUpsert } from '@/lib/discord/task-discord';
 import { logStaffActivity } from '@/lib/activity/log-activity';
 import { requireAssignableEmployee } from '@/lib/data/employee-guards';
 import {
@@ -147,6 +148,8 @@ export async function createTaskCore(
     console.error('[createTaskCore] task_assignments:', e);
     return actionError(formatTaskMutationDbError(e));
   }
+
+  scheduleTaskDiscordUpsert(data.id);
 
   await logStaffActivity(ctx, {
     action: 'created',

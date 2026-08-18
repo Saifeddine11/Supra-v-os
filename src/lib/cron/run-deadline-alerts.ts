@@ -22,7 +22,8 @@ import {
   isTaskOverdueForAlert,
   TASK_CRITICAL_ALERT_EXCLUDED_STATUSES_SQL,
 } from '@/lib/alerts/active-alert-rules';
-import type { TaskStatus } from '@/types/database';
+import type { TaskPriority, TaskStatus } from '@/types/database';
+import { sendDiscordDeadlineReminders } from '@/lib/discord/task-discord';
 
 export type DeadlineAlertsResult = {
   success: boolean;
@@ -30,6 +31,7 @@ export type DeadlineAlertsResult = {
   skippedDuplicates: number;
   emailsSent: number;
   emailsSkipped: number;
+  discordRemindersSent: number;
   errors: string[];
 };
 
@@ -41,6 +43,7 @@ export async function runDeadlineAlerts(): Promise<DeadlineAlertsResult> {
   let skippedDuplicates = 0;
   let emailsSent = 0;
   let emailsSkipped = 0;
+  let discordRemindersSent = 0;
   const admin = createAdminClient();
   const agencyCurrency = await getAgencyDisplayCurrencyWithClient(admin);
   const now = new Date();
@@ -468,12 +471,72 @@ export async function runDeadlineAlerts(): Promise<DeadlineAlertsResult> {
     }
   }
 
+  const toReminderTask = (t: {
+    id: string;
+    title: string;
+    deadline: string | null;
+    status: TaskStatus | string;
+    assignee_id: string | null;
+    priority: string;
+    client_id: string | null;
+  }) => ({
+    id: t.id,
+    title: t.title,
+    deadline: t.deadline,
+    status: t.status as TaskStatus,
+    assignee_id: t.assignee_id,
+    priority: t.priority as TaskPriority,
+    client_id: t.client_id,
+  });
+
+  const discord = await sendDiscordDeadlineReminders({
+    soon: (tasksSoon ?? [])
+      .filter((t) =>
+        isTaskActiveForCriticalAlerts({
+          status: t.status as TaskStatus,
+          deadline: t.deadline as string | null,
+        }),
+      )
+      .map((t) =>
+        toReminderTask({
+          id: t.id as string,
+          title: t.title as string,
+          deadline: (t.deadline as string | null) ?? null,
+          status: t.status as TaskStatus,
+          assignee_id: (t.assignee_id as string | null) ?? null,
+          priority: t.priority as string,
+          client_id: (t.client_id as string | null) ?? null,
+        }),
+      ),
+    overdue: (tasksOver ?? [])
+      .filter((t) =>
+        isTaskOverdueForAlert({
+          status: t.status as TaskStatus,
+          deadline: t.deadline as string | null,
+          now,
+        }),
+      )
+      .map((t) =>
+        toReminderTask({
+          id: t.id as string,
+          title: t.title as string,
+          deadline: (t.deadline as string | null) ?? null,
+          status: t.status as TaskStatus,
+          assignee_id: (t.assignee_id as string | null) ?? null,
+          priority: t.priority as string,
+          client_id: (t.client_id as string | null) ?? null,
+        }),
+      ),
+  });
+  discordRemindersSent = discord.sent;
+
   return {
     success: errors.length === 0,
     notificationsCreated,
     skippedDuplicates,
     emailsSent,
     emailsSkipped,
+    discordRemindersSent,
     errors,
   };
 }

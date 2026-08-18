@@ -23,6 +23,7 @@ import type { TaskPriority, TaskStatus, TaskEnriched } from '@/types/database';
 import { isTaskStatusAllowedInWorkflow } from '@/types/domain';
 import { createTaskCore } from '@/lib/tasks/create-task-core';
 import { notifyTaskAssignees, notifyTaskBlocked } from '@/lib/notifications/task-events';
+import { peekTaskDiscordLink, scheduleTaskDiscordRemoved, scheduleTaskDiscordUpsert } from '@/lib/discord/task-discord';
 import { logStaffActivity } from '@/lib/activity/log-activity';
 import { requireAssignableEmployee } from '@/lib/data/employee-guards';
 import { getTaskById } from '@/lib/data/tasks';
@@ -216,6 +217,8 @@ export async function updateTaskAction(id: string, formData: FormData): Promise<
     return actionError(formatTaskMutationDbError(e));
   }
 
+  scheduleTaskDiscordUpsert(id);
+
   await logStaffActivity(ctx, {
     action: 'updated',
     entityType: 'task',
@@ -262,6 +265,8 @@ export async function updateTaskStatusAction(id: string, status: TaskStatus): Pr
     console.error('[updateTaskStatusAction] update tasks:', error);
     return actionError(formatTaskMutationDbError(error));
   }
+
+  scheduleTaskDiscordUpsert(id);
 
   const { data: linkedVideo } = await readSb.from('tasks').select('video_id').eq('id', id).maybeSingle();
 
@@ -325,11 +330,14 @@ export async function deleteTaskAction(id: string): Promise<ActionResult> {
   }
 
   const { data: t } = await readSb.from('tasks').select('title').eq('id', id).maybeSingle();
+  const discordLink = await peekTaskDiscordLink(id);
   const { error } = await writeSb.from('tasks').delete().eq('id', id);
   if (error) {
     console.error('[deleteTaskAction] delete tasks:', error);
     return actionError(formatTaskMutationDbError(error));
   }
+
+  scheduleTaskDiscordRemoved(discordLink);
 
   await logStaffActivity(ctx, {
     action: 'deleted',
@@ -384,6 +392,8 @@ export async function archiveTaskAction(id: string): Promise<ActionResult> {
     console.error('[archiveTaskAction] update tasks:', error);
     return actionError(formatTaskMutationDbError(error));
   }
+
+  scheduleTaskDiscordUpsert(id);
 
   await logStaffActivity(ctx, {
     action: 'archived',

@@ -3,6 +3,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { TaskPriority, TaskStatus, VideoStatus } from '@/types/database';
 import { replaceTaskAssignments, legacyPrimaryAssignee } from '@/lib/data/task-assignments';
+import { scheduleTaskDiscordUpsert } from '@/lib/discord/task-discord';
 
 type SB = SupabaseClient;
 
@@ -111,6 +112,7 @@ export async function upsertVideoProductionTask(sb: SB, input: SyncVideoProducti
       .eq('id', taskId);
     if (upErr) throw new Error(upErr.message);
     await replaceTaskAssignments(sb, taskId, assignees);
+    scheduleTaskDiscordUpsert(taskId);
     return;
   }
 
@@ -128,6 +130,7 @@ export async function upsertVideoProductionTask(sb: SB, input: SyncVideoProducti
   const { data: inserted, error: insErr } = await sb.from('tasks').insert(row).select('id').single();
   if (insErr) throw new Error(insErr.message);
   await replaceTaskAssignments(sb, inserted.id as string, assignees);
+  scheduleTaskDiscordUpsert(inserted.id as string);
 }
 
 /** Ajoute un paragraphe en fin de description de la tâche production liée à la vidéo. */

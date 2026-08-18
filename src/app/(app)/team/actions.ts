@@ -227,6 +227,14 @@ export async function updateEmployeeAdminAction(employeeId: string, formData: Fo
   const is_active = String(formData.get('is_active') ?? 'true') === 'true';
   const avatar_initials_raw = String(formData.get('avatar_initials') ?? '').trim();
   const avatar_initials = initialsFromName(full_name || 'X', avatar_initials_raw || null);
+  const discordRaw = String(formData.get('discord_user_id') ?? '').trim();
+  let discord_user_id: string | null = null;
+  if (discordRaw) {
+    if (!/^[0-9]{17,20}$/.test(discordRaw)) {
+      return actionError('ID Discord invalide : 17 à 20 chiffres (mode développeur Discord).');
+    }
+    discord_user_id = discordRaw;
+  }
 
   if (!full_name) return actionError('Le nom est requis.');
   if (!emailNext) return actionError('L’e-mail est requis.');
@@ -256,6 +264,7 @@ export async function updateEmployeeAdminAction(employeeId: string, formData: Fo
       notes_internal,
       is_active,
       avatar_initials,
+      discord_user_id,
       updated_at: new Date().toISOString(),
     })
     .eq('id', employeeId);

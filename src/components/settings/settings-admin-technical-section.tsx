@@ -9,6 +9,9 @@ export function SettingsAdminTechnicalSection() {
     supabaseService: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
     resend: Boolean(process.env.RESEND_API_KEY),
     cron: Boolean(process.env.CRON_SECRET),
+    discordToken: Boolean(process.env.DISCORD_BOT_TOKEN),
+    discordSync:
+      ['1', 'true', 'yes'].includes((process.env.DISCORD_TASK_SYNC_ENABLED ?? '').trim().toLowerCase()),
     appUrl: process.env.NEXT_PUBLIC_APP_URL ?? '',
   };
 
@@ -68,6 +71,22 @@ export function SettingsAdminTechnicalSection() {
             {integrations.cron ? 'Configuré' : 'Non défini'}
           </span>
         </li>
+        <li className="flex justify-between gap-2 border-b border-border/60 py-2">
+          <span className="text-muted-foreground">Discord bot (DISCORD_BOT_TOKEN)</span>
+          <span
+            className={integrations.discordToken ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}
+          >
+            {integrations.discordToken ? 'Configuré' : 'Non défini'}
+          </span>
+        </li>
+        <li className="flex justify-between gap-2 border-b border-border/60 py-2">
+          <span className="text-muted-foreground">Discord sync tâches (DISCORD_TASK_SYNC_ENABLED)</span>
+          <span
+            className={integrations.discordSync ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'}
+          >
+            {integrations.discordSync ? 'Activé' : 'Désactivé (test seul)'}
+          </span>
+        </li>
         <li className="flex justify-between gap-2 py-2">
           <span className="text-muted-foreground">URL app (NEXT_PUBLIC_APP_URL)</span>
           <span className="max-w-[55%] truncate text-xs text-foreground">{integrations.appUrl || '—'}</span>
@@ -86,6 +105,10 @@ export function SettingsAdminTechnicalSection() {
           En production Hobby, seul <code className="text-[10px]">/api/cron/daily</code> est planifié dans{' '}
           <code className="text-[10px]">vercel.json</code>. Les autres routes restent pour tests manuels ou Vercel
           Pro.
+        </p>
+        <p className="mt-2">
+          Discord Phase 1 : routes de salons via <code className="text-[10px]">GET/POST /api/discord/admin</code>{' '}
+          (admin). Aucun cron Discord supplémentaire.
         </p>
       </div>
 

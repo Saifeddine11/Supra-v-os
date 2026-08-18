@@ -191,6 +191,8 @@ export interface Employee {
   weekly_capacity: number;
   hire_date: string | null;
   notes_internal: string | null;
+  /** Discord user snowflake for mentions. Null = no Discord mention. */
+  discord_user_id: string | null;
   manager_id: string | null;
   /** Compétences terrain (assignation) — ne remplace pas role pour les permissions. */
   operational_skills: UserRole[];
@@ -329,6 +331,27 @@ export interface VideoAssignment {
   video_id: string;
   employee_id: string;
   assignment_role: VideoAssignmentRole;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Discord message linkage — not a copy of the task. */
+export interface TaskDiscordMessage {
+  task_id: string;
+  discord_channel_id: string;
+  discord_message_id: string;
+  last_reminder_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** client_id / department_role null = fallback route. */
+export interface DiscordChannelRoute {
+  id: string;
+  client_id: string | null;
+  department_role: UserRole | null;
+  discord_channel_id: string;
+  is_enabled: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -727,6 +750,22 @@ export type Database = {
         Row: TaskAssignment;
         Insert: Partial<TaskAssignment> & { task_id: string; employee_id: string };
         Update: Partial<TaskAssignment>;
+        Relationships: [];
+      };
+      task_discord_messages: {
+        Row: TaskDiscordMessage;
+        Insert: Partial<TaskDiscordMessage> & {
+          task_id: string;
+          discord_channel_id: string;
+          discord_message_id: string;
+        };
+        Update: Partial<TaskDiscordMessage>;
+        Relationships: [];
+      };
+      discord_channel_routes: {
+        Row: DiscordChannelRoute;
+        Insert: Partial<DiscordChannelRoute> & { discord_channel_id: string };
+        Update: Partial<DiscordChannelRoute>;
         Relationships: [];
       };
       videos: { Row: Video; Insert: Partial<Video>; Update: Partial<Video>; Relationships: [] };
