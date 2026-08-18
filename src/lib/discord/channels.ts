@@ -23,9 +23,21 @@ export const DISCORD_OVERWRITE_TYPE_MEMBER = 1;
 export const DISCORD_STAFF_ALLOW_BITS =
   (1n << 10n) | (1n << 11n) | (1n << 14n) | (1n << 15n) | (1n << 16n) | (1n << 6n);
 
-/** VIEW_CHANNEL | SEND_MESSAGES | EMBED_LINKS | READ_MESSAGE_HISTORY */
+/** MANAGE_CHANNELS */
+export const DISCORD_MANAGE_CHANNELS_BIT = 1n << 4n;
+
+/** MANAGE_ROLES — required by Discord to edit channel permission overwrites */
+export const DISCORD_MANAGE_ROLES_BIT = 1n << 28n;
+
+export const DISCORD_BOT_MANAGEMENT_ALLOW_BITS =
+  DISCORD_MANAGE_CHANNELS_BIT | DISCORD_MANAGE_ROLES_BIT;
+
+/**
+ * VIEW_CHANNEL | SEND_MESSAGES | EMBED_LINKS | READ_MESSAGE_HISTORY |
+ * MANAGE_CHANNELS | MANAGE_ROLES
+ */
 export const DISCORD_BOT_SELF_ALLOW_BITS =
-  (1n << 10n) | (1n << 11n) | (1n << 14n) | (1n << 16n);
+  (1n << 10n) | (1n << 11n) | (1n << 14n) | (1n << 16n) | DISCORD_BOT_MANAGEMENT_ALLOW_BITS;
 
 /** VIEW_CHANNEL */
 export const DISCORD_VIEW_CHANNEL_BIT = 1n << 10n;
@@ -57,6 +69,13 @@ export function mergeBotSelfAllowBits(existingAllow: bigint, existingDeny: bigin
     allow: existingAllow | DISCORD_BOT_SELF_ALLOW_BITS,
     deny: existingDeny & ~DISCORD_BOT_SELF_ALLOW_BITS,
   };
+}
+
+export function botSelfOverwriteIncludesManagement(allow: bigint, deny: bigint): boolean {
+  return (
+    (allow & DISCORD_BOT_MANAGEMENT_ALLOW_BITS) === DISCORD_BOT_MANAGEMENT_ALLOW_BITS &&
+    (deny & DISCORD_BOT_MANAGEMENT_ALLOW_BITS) === 0n
+  );
 }
 
 export function mergeEveryoneDenyView(existingAllow: bigint, existingDeny: bigint): {

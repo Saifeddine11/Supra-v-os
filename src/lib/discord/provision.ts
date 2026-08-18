@@ -13,6 +13,7 @@ import {
   DISCORD_CHANNEL_TYPE_GUILD_TEXT,
   DISCORD_OVERWRITE_TYPE_MEMBER,
   DISCORD_OVERWRITE_TYPE_ROLE,
+  botSelfOverwriteIncludesManagement,
   mergeBotSelfAllowBits,
   mergeEveryoneDenyView,
   mergeStaffAllowBits,
@@ -161,6 +162,7 @@ export type DiscordChannelPermissionDiagnostic = {
   channelId: string;
   channelName: string;
   botSelfAccessSucceeded: boolean;
+  botManagementPermissionsIncluded: boolean;
   everyoneDenyApplied: boolean;
   error?: string;
 };
@@ -182,6 +184,7 @@ async function repairStandardPermissions(
     channelId: channel.id,
     channelName: channel.name,
     botSelfAccessSucceeded: false,
+    botManagementPermissionsIncluded: false,
     everyoneDenyApplied: false,
   };
   const guildId = getDiscordGuildId();
@@ -212,6 +215,24 @@ async function repairStandardPermissions(
     return { errors: [error], diagnostic };
   }
   diagnostic.botSelfAccessSucceeded = true;
+
+  const confirmed = await discordGetChannel(channel.id);
+  const storedBot = overwriteForTarget(
+    confirmed.ok ? confirmed.data.permission_overwrites : undefined,
+    botUserId,
+    DISCORD_OVERWRITE_TYPE_MEMBER,
+  );
+  diagnostic.botManagementPermissionsIncluded = storedBot
+    ? botSelfOverwriteIncludesManagement(
+        parseDiscordBitfield(storedBot.allow),
+        parseDiscordBitfield(storedBot.deny),
+      )
+    : botSelfOverwriteIncludesManagement(botMerged.allow, botMerged.deny);
+  if (!diagnostic.botManagementPermissionsIncluded) {
+    const error = `${channel.name} bot self-access: MANAGE_ROLES/MANAGE_CHANNELS missing after overwrite`;
+    diagnostic.error = error;
+    return { errors: [error], diagnostic };
+  }
 
   const errors: string[] = [];
   const everyone = overwriteForTarget(overwrites, guildId, DISCORD_OVERWRITE_TYPE_ROLE);
@@ -358,6 +379,7 @@ async function ensureStandardChannels(
         channelId,
         channelName: child.name,
         botSelfAccessSucceeded: false,
+        botManagementPermissionsIncluded: false,
         everyoneDenyApplied: false,
         error: bot.error,
       });
