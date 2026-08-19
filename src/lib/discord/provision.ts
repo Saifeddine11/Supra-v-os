@@ -13,7 +13,10 @@ import {
   DISCORD_CHANNEL_TYPE_GUILD_TEXT,
   DISCORD_OVERWRITE_TYPE_MEMBER,
   DISCORD_OVERWRITE_TYPE_ROLE,
+  INTERNAL_DISCORD_CATEGORY_SPECS,
   botSelfOverwriteIncludesManagement,
+  discordNamesMatch,
+  isDiscordCleanupCandidate,
   mergeBotSelfAllowBits,
   mergeEveryoneDenyView,
   mergeStaffAllowBits,
@@ -26,6 +29,8 @@ import {
   discordGetChannel,
   discordGetCurrentUser,
   discordListGuildChannels,
+  discordModifyGuildChannelPositions,
+  discordPatchChannel,
   discordPutChannelOverwrite,
   type DiscordChannel,
   type DiscordPermissionOverwrite,
@@ -45,13 +50,9 @@ export function canProvisionDiscordClients(): boolean {
   return Boolean(getDiscordBotToken() && getDiscordGuildId());
 }
 
-function namesMatch(a: string, b: string): boolean {
-  return a.normalize('NFC') === b.normalize('NFC');
-}
-
 function findChildByName(children: DiscordChannel[], name: string): DiscordChannel | undefined {
   return children.find(
-    (ch) => ch.type === DISCORD_CHANNEL_TYPE_GUILD_TEXT && namesMatch(ch.name, name),
+    (ch) => ch.type === DISCORD_CHANNEL_TYPE_GUILD_TEXT && discordNamesMatch(ch.name, name),
   );
 }
 
@@ -136,6 +137,7 @@ async function listCategoryTextChannels(categoryId: string): Promise<DiscordChan
 async function createTextChannel(
   categoryId: string,
   name: string,
+  position: number,
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   const guildId = getDiscordGuildId();
   if (!guildId) return { ok: false, error: 'DISCORD_GUILD_ID is not set.' };
@@ -143,11 +145,61 @@ async function createTextChannel(
     name,
     type: DISCORD_CHANNEL_TYPE_GUILD_TEXT,
     parent_id: categoryId,
+    position,
   });
   if (!created.ok) return { ok: false, error: created.error };
   const id = normalizeDiscordSnowflake(created.data.id);
   if (!id) return { ok: false, error: 'Discord returned an invalid channel id.' };
   return { ok: true, id };
+}
+
+async function renameChannelIfNeeded(
+  channel: DiscordChannel,
+  expectedName: string,
+): Promise<{ channel: DiscordChannel; error?: string }> {
+  if (discordNamesMatch(channel.name, expectedName)) return { channel };
+  const patched = await discordPatchChannel(channel.id, { name: expectedName });
+  if (!patched.ok) {
+    return { channel, error: `${channel.name} rename: ${patched.error}` };
+  }
+  return { channel: { ...channel, ...patched.data, name: expectedName } };
+}
+
+async function applyStandardClientChannelOrder(categoryId: string): Promise<string[]> {
+  const guildId = getDiscordGuildId();
+  if (!guildId) return ['DISCORD_GUILD_ID is not set.'];
+  const listed = await discordListGuildChannels(guildId);
+  if (!listed.ok) return [`channel order: ${listed.error}`];
+
+  const children = (listed.data ?? []).filter(
+    (ch) =>
+      ch.type === DISCORD_CHANNEL_TYPE_GUILD_TEXT &&
+      (ch.parent_id ?? null) === categoryId,
+  );
+  const used = new Set<string>();
+  const ordered: DiscordChannel[] = [];
+  for (const spec of CLIENT_DISCORD_CHANNEL_SPECS) {
+    const match = children.find((ch) => !used.has(ch.id) && discordNamesMatch(ch.name, spec.name));
+    if (!match) continue;
+    ordered.push(match);
+    used.add(match.id);
+  }
+  const extras = children
+    .filter((ch) => !used.has(ch.id))
+    .sort((a, b) => (a.position ?? 0) - (b.position ?? 0) || a.id.localeCompare(b.id));
+  ordered.push(...extras);
+
+  const alreadyOrdered = ordered.every((ch, i) => (ch.position ?? i) === i);
+  if (alreadyOrdered || ordered.length === 0) return [];
+
+  const payload = ordered.map((ch, position) => ({
+    id: ch.id,
+    position,
+    parent_id: categoryId,
+  }));
+  const moved = await discordModifyGuildChannelPositions(guildId, payload);
+  if (moved.ok) return [];
+  return [`channel order: ${moved.error}`];
 }
 
 function overwriteForTarget(
@@ -331,7 +383,7 @@ async function ensureStandardChannels(
     errors.push(`bot user id: ${bot.error}`);
   }
 
-  for (const spec of CLIENT_DISCORD_CHANNEL_SPECS) {
+  for (const [index, spec] of CLIENT_DISCORD_CHANNEL_SPECS.entries()) {
     const routeKey = spec.department ?? 'default';
     const storedId = existingRoutes.get(routeKey);
     let child: DiscordChannel | undefined;
@@ -348,7 +400,7 @@ async function ensureStandardChannels(
     if (!child) child = findChildByName(children, spec.name);
 
     if (!child) {
-      const made = await createTextChannel(categoryId, spec.name);
+      const made = await createTextChannel(categoryId, spec.name, index);
       if (!made.ok) {
         errors.push(`${spec.name}: ${made.error}`);
         continue;
@@ -361,6 +413,7 @@ async function ensureStandardChannels(
         type: DISCORD_CHANNEL_TYPE_GUILD_TEXT,
         name: spec.name,
         parent_id: categoryId,
+        position: index,
       };
     } else {
       linked += 1;
@@ -371,6 +424,12 @@ async function ensureStandardChannels(
       errors.push(`${spec.name}: invalid channel id`);
       continue;
     }
+    const renamed = await renameChannelIfNeeded(child, spec.name);
+    if (renamed.error) errors.push(renamed.error);
+    child = renamed.channel;
+    const renamedChild = child;
+    children = children.map((ch) => (ch.id === renamedChild.id ? renamedChild : ch));
+
     const routeErr = await persistRoute(clientId, spec, channelId);
     if (routeErr) errors.push(`${spec.name} route: ${routeErr}`);
 
@@ -390,6 +449,8 @@ async function ensureStandardChannels(
     errors.push(...repaired.errors);
     channelPermissionDiagnostics.push(repaired.diagnostic);
   }
+
+  errors.push(...(await applyStandardClientChannelOrder(categoryId)));
 
   return { created, linked, errors, channelPermissionDiagnostics };
 }
@@ -531,4 +592,199 @@ export async function linkExistingClientDiscordCategory(input: {
     errors: channels.errors,
     channelPermissionDiagnostics: channels.channelPermissionDiagnostics,
   };
+}
+
+export type DiscordLayoutChannel = {
+  id: string;
+  name: string;
+  parentId: string | null;
+};
+
+export type DiscordGuildLayoutReport = {
+  standardChannelOrder: string[];
+  linkedClients: {
+    clientId: string;
+    clientName: string;
+    categoryId: string;
+    channels: string[];
+    missing: string[];
+    extras: string[];
+    orderMatches: boolean;
+  }[];
+  internalCategories: {
+    name: string;
+    expected: string[];
+    found: boolean;
+    channels: string[];
+    orderMatches: boolean;
+  }[];
+  cleanupCandidates: DiscordLayoutChannel[];
+};
+
+export async function inspectDiscordGuildLayout(): Promise<
+  { ok: true; report: DiscordGuildLayoutReport } | { ok: false; error: string }
+> {
+  const guildId = getDiscordGuildId();
+  if (!getDiscordBotToken() || !guildId) {
+    return { ok: false, error: 'Discord bot token or guild id is not configured.' };
+  }
+  const listed = await discordListGuildChannels(guildId);
+  if (!listed.ok) return { ok: false, error: listed.error };
+  const channels = listed.data ?? [];
+
+  const admin = createAdminClient();
+  const { data: clients } = await admin
+    .from('clients')
+    .select('id, name, discord_category_id')
+    .not('discord_category_id', 'is', null);
+
+  const linkedClients = (clients ?? []).flatMap((row) => {
+    const categoryId = normalizeDiscordSnowflake(row.discord_category_id);
+    if (!categoryId) return [];
+    const children = channels
+      .filter(
+        (ch) =>
+          ch.type === DISCORD_CHANNEL_TYPE_GUILD_TEXT &&
+          (ch.parent_id ?? null) === categoryId,
+      )
+      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0) || a.id.localeCompare(b.id));
+    const names = children.map((ch) => ch.name);
+    const missing = CLIENT_DISCORD_CHANNEL_SPECS.filter(
+      (spec) => !children.some((ch) => discordNamesMatch(ch.name, spec.name)),
+    ).map((spec) => spec.name);
+    const extras = children
+      .filter((ch) => !CLIENT_DISCORD_CHANNEL_SPECS.some((spec) => discordNamesMatch(ch.name, spec.name)))
+      .map((ch) => ch.name);
+    const expected = CLIENT_DISCORD_CHANNEL_SPECS.map((spec) => spec.name);
+    const prefix = names.slice(0, expected.length);
+    const orderMatches =
+      missing.length === 0 && prefix.every((name, i) => discordNamesMatch(name, expected[i] ?? ''));
+    return [
+      {
+        clientId: row.id,
+        clientName: String(row.name ?? 'Client'),
+        categoryId,
+        channels: names,
+        missing,
+        extras,
+        orderMatches,
+      },
+    ];
+  });
+
+  const internalCategories = INTERNAL_DISCORD_CATEGORY_SPECS.map((spec) => {
+    const category = channels.find(
+      (ch) =>
+        ch.type === DISCORD_CHANNEL_TYPE_GUILD_CATEGORY && discordNamesMatch(ch.name, spec.name),
+    );
+    const children = category
+      ? channels
+          .filter(
+            (ch) =>
+              ch.type === DISCORD_CHANNEL_TYPE_GUILD_TEXT &&
+              (ch.parent_id ?? null) === category.id,
+          )
+          .sort((a, b) => (a.position ?? 0) - (b.position ?? 0) || a.id.localeCompare(b.id))
+      : [];
+    const childNames = children.map((ch) => ch.name);
+    const orderMatches =
+      Boolean(category) &&
+      spec.channels.length === childNames.length &&
+      spec.channels.every((name, i) => discordNamesMatch(childNames[i] ?? '', name));
+    return {
+      name: spec.name,
+      expected: [...spec.channels],
+      found: Boolean(category),
+      channels: childNames,
+      orderMatches,
+    };
+  });
+
+  const cleanupCandidates = channels.filter(isDiscordCleanupCandidate).map((ch) => ({
+    id: ch.id,
+    name: ch.name,
+    parentId: ch.parent_id ?? null,
+  }));
+
+  return {
+    ok: true,
+    report: {
+      standardChannelOrder: CLIENT_DISCORD_CHANNEL_SPECS.map((spec) => spec.name),
+      linkedClients,
+      internalCategories,
+      cleanupCandidates,
+    },
+  };
+}
+
+export async function syncLinkedClientChannelLayout(clientId?: string): Promise<{
+  ok: boolean;
+  clientId: string;
+  categoryId: string | null;
+  renamed: number;
+  errors: string[];
+}> {
+  const empty = {
+    ok: false,
+    clientId: clientId ?? '',
+    categoryId: null as string | null,
+    renamed: 0,
+    errors: [] as string[],
+  };
+  if (!clientId) return { ...empty, errors: ['client_id is required.'] };
+  if (!canProvisionDiscordClients()) {
+    return { ...empty, errors: ['Discord bot token or guild id is not configured.'] };
+  }
+  const client = await loadClientDiscordState(clientId);
+  if (!client) return { ...empty, errors: ['Client introuvable.'] };
+  if (!client.categoryId) {
+    return { ...empty, errors: ['Client has no linked Discord category.'] };
+  }
+
+  const errors: string[] = [];
+  let renamed = 0;
+  const children = await listCategoryTextChannels(client.categoryId);
+  const existingRoutes = await loadClientRoutes(clientId);
+
+  for (const spec of CLIENT_DISCORD_CHANNEL_SPECS) {
+    const routeKey = spec.department ?? 'default';
+    const storedId = existingRoutes.get(routeKey);
+    let child = storedId ? children.find((ch) => ch.id === storedId) : undefined;
+    if (!child) child = findChildByName(children, spec.name);
+    if (!child) {
+      errors.push(`${spec.name}: missing`);
+      continue;
+    }
+    const before = child.name;
+    const result = await renameChannelIfNeeded(child, spec.name);
+    if (result.error) errors.push(result.error);
+    else if (!discordNamesMatch(before, spec.name)) renamed += 1;
+  }
+
+  errors.push(...(await applyStandardClientChannelOrder(client.categoryId)));
+  return {
+    ok: errors.length === 0,
+    clientId,
+    categoryId: client.categoryId,
+    renamed,
+    errors,
+  };
+}
+
+export async function syncAllLinkedClientChannelLayouts(): Promise<{
+  ok: boolean;
+  results: Awaited<ReturnType<typeof syncLinkedClientChannelLayout>>[];
+}> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from('clients')
+    .select('id')
+    .not('discord_category_id', 'is', null);
+  if (error) return { ok: false, results: [{ ok: false, clientId: '', categoryId: null, renamed: 0, errors: [error.message] }] };
+  const results = [];
+  for (const row of data ?? []) {
+    results.push(await syncLinkedClientChannelLayout(row.id));
+    await sleep(350);
+  }
+  return { ok: results.every((r) => r.ok), results };
 }

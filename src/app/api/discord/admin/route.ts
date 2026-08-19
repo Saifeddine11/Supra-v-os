@@ -6,7 +6,12 @@ import {
   postDiscordTestMessage,
   upsertDiscordChannelRoute,
 } from '@/lib/discord/task-discord';
-import { linkExistingClientDiscordCategory } from '@/lib/discord/provision';
+import {
+  inspectDiscordGuildLayout,
+  linkExistingClientDiscordCategory,
+  syncAllLinkedClientChannelLayouts,
+  syncLinkedClientChannelLayout,
+} from '@/lib/discord/provision';
 import { isTaskDepartment } from '@/lib/tasks/task-department';
 import type { TaskDepartment } from '@/types/database';
 
@@ -33,10 +38,11 @@ export async function GET() {
   const auth = await requireAdmin();
   if (!auth.ok) return auth.res;
 
-  const status = await listDiscordAdminStatus();
+  const [status, layout] = await Promise.all([listDiscordAdminStatus(), inspectDiscordGuildLayout()]);
   return NextResponse.json({
     ok: true,
     ...status,
+    guildLayout: layout.ok ? layout.report : { error: layout.error },
     routingHelp: {
       matchOrder: [
         'client_id + department (most specific)',
@@ -53,6 +59,8 @@ export async function GET() {
         'POST { action: "link_existing", clientId, categoryId }. Verifies the category ID, maps the six standard channels inside it, creates only missing ones, repairs standard permission overwrites, never creates a second category.',
       howToCopyCategoryId:
         'Discord Developer Mode → right-click the client category → Copy ID. Never identify a client by category name.',
+      howToSyncChannelLayout:
+        'POST { action: "sync_channel_layout" } or { action: "sync_channel_layout", clientId }. Renames/reorders the six standard client channels only. Does not change category IDs, routes, or permission overwrites.',
     },
   });
 }
@@ -134,6 +142,26 @@ export async function POST(request: Request) {
         errors: result.errors,
         error: result.ok ? undefined : result.errors.join(' ') || 'link_failed',
       },
+      { status: result.ok ? 200 : 400 },
+    );
+  }
+
+  if (action === 'sync_channel_layout') {
+    const clientRaw = body.clientId;
+    const clientId = typeof clientRaw === 'string' ? clientRaw.trim() : '';
+    if (clientId) {
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(clientId)) {
+        return NextResponse.json({ ok: false, error: 'client_id must be a UUID.' }, { status: 400 });
+      }
+      const result = await syncLinkedClientChannelLayout(clientId);
+      return NextResponse.json(
+        { action: 'sync_channel_layout', ...result, error: result.ok ? undefined : result.errors.join(' ') || 'layout_sync_failed' },
+        { status: result.ok ? 200 : 400 },
+      );
+    }
+    const result = await syncAllLinkedClientChannelLayouts();
+    return NextResponse.json(
+      { action: 'sync_channel_layout', ...result, error: result.ok ? undefined : 'layout_sync_failed' },
       { status: result.ok ? 200 : 400 },
     );
   }

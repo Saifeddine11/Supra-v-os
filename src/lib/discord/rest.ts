@@ -24,6 +24,7 @@ export type DiscordChannel = {
   type: number;
   name: string;
   parent_id: string | null;
+  position?: number;
   permission_overwrites?: DiscordPermissionOverwrite[];
 };
 
@@ -139,9 +140,28 @@ export async function discordCreateGuildChannel(
     name: string;
     type: number;
     parent_id?: string;
+    position?: number;
   },
 ): Promise<DiscordRestResult<DiscordChannel>> {
   return discordFetch<DiscordChannel>('POST', `/guilds/${guildId}/channels`, payload);
+}
+
+export async function discordPatchChannel(
+  channelId: string,
+  payload: {
+    name?: string;
+    position?: number;
+    parent_id?: string | null;
+  },
+): Promise<DiscordRestResult<DiscordChannel>> {
+  return discordFetch<DiscordChannel>('PATCH', `/channels/${channelId}`, payload);
+}
+
+export async function discordModifyGuildChannelPositions(
+  guildId: string,
+  positions: { id: string; position: number; parent_id?: string }[],
+): Promise<DiscordRestResult<Record<string, never>>> {
+  return discordFetch('PATCH', `/guilds/${guildId}/channels`, positions);
 }
 
 export async function discordGetCurrentUser(): Promise<DiscordRestResult<{ id: string }>> {
