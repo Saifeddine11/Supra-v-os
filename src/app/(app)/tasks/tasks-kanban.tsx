@@ -14,7 +14,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import type { Client, Employee, TaskStatus } from '@/types/database';
 import type { TaskEnriched } from '@/types/database';
-import { TASK_KANBAN_STATUSES, TASK_STATUS_MAP, taskStatusForKanbanBucket } from '@/types/domain';
+import { TASK_KANBAN_COLUMNS, taskStatusForKanbanBucket } from '@/types/domain';
 import { TaskKanbanColumn } from './kanban/task-kanban-column';
 import { TaskDetailDialog } from './kanban/task-detail-dialog';
 import { requestCriticalAlertsRefresh } from '@/lib/alerts/request-critical-alerts-refresh';
@@ -29,7 +29,7 @@ import {
 
 function resolveDropStatus(overId: unknown, tasks: TaskEnriched[]): TaskStatus | null {
   if (overId == null || typeof overId !== 'string') return null;
-  if (TASK_KANBAN_STATUSES.includes(overId as TaskStatus)) return overId as TaskStatus;
+  if (TASK_KANBAN_COLUMNS.some((col) => col.key === overId)) return overId as TaskStatus;
   const hitTask = tasks.find((t) => t.id === overId);
   return hitTask ? hitTask.status : null;
 }
@@ -91,11 +91,11 @@ function TasksKanbanBoard({
     }),
   );
 
-  const byStatus = TASK_KANBAN_STATUSES.map((status) => ({
-    status,
-    label: TASK_STATUS_MAP[status].label,
-    color: TASK_STATUS_MAP[status].color,
-    items: localTasks.filter((t) => taskStatusForKanbanBucket(t.status) === status),
+  const byStatus = TASK_KANBAN_COLUMNS.map((col) => ({
+    status: col.key,
+    label: col.label,
+    color: col.color,
+    items: localTasks.filter((t) => taskStatusForKanbanBucket(t.status) === col.key),
   }));
 
   const handleDragEnd = useCallback(

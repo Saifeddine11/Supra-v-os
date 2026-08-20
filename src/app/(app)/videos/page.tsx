@@ -32,7 +32,7 @@ export default async function VideosPage({
   searchParams?: Promise<{ view?: string; filter?: string; client?: string }>;
 }) {
   const sp = await searchParams;
-  const view = sp?.view === 'kanban' ? 'kanban' : 'table';
+  const view = sp?.view === 'table' ? 'table' : 'kanban';
   const filter = sp?.filter;
   const clientFilter = sp?.client?.trim() || null;
   const ctx = await getAuthContext();

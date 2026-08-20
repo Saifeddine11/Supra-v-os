@@ -264,7 +264,7 @@ export const VIDEO_DELIVERED_STATUSES: readonly VideoStatus[] = ['validated', 'p
 /** Statut interne lors d’un drop / sélection « Livré » (`delivered` n’existe pas en base). */
 export const VIDEO_DELIVERED_TARGET_STATUS: VideoStatus = 'published';
 
-/** Colonnes visibles sur le kanban /tasks (ordre d’affichage). */
+/** Colonnes visibles sur le kanban /tasks (ordre d’affichage). `waiting_client` reste un statut DB, hors board. */
 export const TASK_KANBAN_COLUMNS: Array<{
   key: TaskStatus;
   label: string;
@@ -272,15 +272,22 @@ export const TASK_KANBAN_COLUMNS: Array<{
 }> = [
   { key: 'todo',           label: 'À faire',            color: '#9CA3AF' },
   { key: 'in_progress',    label: 'En cours',           color: '#FF450F' },
-  { key: 'waiting_client', label: 'Attente client',     color: '#C4789B' },
   { key: 'waiting_team',   label: 'En attente équipe',  color: '#5B8FD4' },
   { key: 'review',         label: 'En révision',        color: '#E07B3A' },
-  { key: 'blocked',        label: 'Bloqué',             color: '#E05252' },
   { key: 'done',           label: 'Terminé',            color: '#3DBD7D' },
+  { key: 'blocked',        label: 'Bloqué',             color: '#E05252' },
 ];
 
-/** Statuts sélectionnables (kanban, formulaires, filtres calendrier). */
-export const TASK_KANBAN_STATUSES: TaskStatus[] = TASK_KANBAN_COLUMNS.map((c) => c.key);
+/** Statuts sélectionnables (formulaires, filtres calendrier, workflow) — inclut waiting_client. */
+export const TASK_KANBAN_STATUSES: TaskStatus[] = [
+  'todo',
+  'in_progress',
+  'waiting_client',
+  'waiting_team',
+  'review',
+  'done',
+  'blocked',
+];
 
 /** Identity helper — each workflow status is its own kanban column. */
 export function taskStatusForKanbanBucket(status: TaskStatus): TaskStatus {
