@@ -195,7 +195,6 @@ async function applyStandardClientChannelOrder(categoryId: string): Promise<stri
   const payload = ordered.map((ch, position) => ({
     id: ch.id,
     position,
-    parent_id: categoryId,
   }));
   const moved = await discordModifyGuildChannelPositions(guildId, payload);
   if (moved.ok) return [];
