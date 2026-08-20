@@ -1,0 +1,23 @@
+node_modules/
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native builds
+ios/
+android/
+
+# Env — only .env.example is committed
+.env
+.env.local
+.env.*.local
+
+# macOS
+.DS_Store
+*.pem
+
+# Debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
