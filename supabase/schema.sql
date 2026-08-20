@@ -532,10 +532,11 @@ create table discord_reminder_deliveries (
   entity_id        uuid not null,
   reminder_type    text not null,
   occurrence_date  date not null,
+  dedupe_key       text not null default '',
   created_at       timestamptz not null default now(),
-  primary key (entity_type, entity_id, reminder_type, occurrence_date),
+  primary key (entity_type, entity_id, reminder_type, occurrence_date, dedupe_key),
   constraint discord_reminder_deliveries_entity_type_check
-    check (entity_type in ('task', 'video')),
+    check (entity_type in ('task', 'video', 'agency')),
   constraint discord_reminder_deliveries_reminder_type_check
     check (
       reminder_type in (
@@ -543,7 +544,10 @@ create table discord_reminder_deliveries (
         'task_overdue',
         'waiting_team_validation',
         'shooting_j_minus_1',
-        'shooting_day'
+        'shooting_day',
+        'daily_report_ask',
+        'daily_report_missing',
+        'kanban_advancement'
       )
     )
 );

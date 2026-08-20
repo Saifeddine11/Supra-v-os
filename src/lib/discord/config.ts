@@ -47,6 +47,25 @@ export function getDiscordValidationApproverUserId(): string | null {
   return normalizeDiscordSnowflake(process.env.DISCORD_VALIDATION_APPROVER_USER_ID ?? '');
 }
 
+/**
+ * End-of-day compte-rendu pings (18:00 / 18:30 Africa/Casablanca).
+ * Independent of task-card sync and operational reminders. Default off.
+ */
+export function isDiscordDailyReportReminderEnabled(): boolean {
+  if (!getDiscordBotToken()) return false;
+  return envFlagEnabled('DISCORD_DAILY_REPORT_REMINDER_ENABLED');
+}
+
+/** 👥 ÉQUIPE → 💬・général. Never resolved by channel name. */
+export function getDiscordTeamGeneralChannelId(): string | null {
+  return normalizeDiscordSnowflake(process.env.DISCORD_TEAM_GENERAL_CHANNEL_ID ?? '');
+}
+
+/** 📝・compte-rendu forum. Never resolved by channel name. */
+export function getDiscordTeamReportChannelId(): string | null {
+  return normalizeDiscordSnowflake(process.env.DISCORD_TEAM_REPORT_CHANNEL_ID ?? '');
+}
+
 export function discordApiBase(): string {
   return 'https://discord.com/api/v10';
 }

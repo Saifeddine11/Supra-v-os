@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { portalVideoAllowsClientAction, validatePortalToken } from '@/lib/portal/validate';
 import { emailStaffAboutClientFeedback } from '@/lib/portal/portal-staff-email';
 import { logPortalActivity, notifyAdminsAndPMs } from '@/lib/portal/notify-staff';
+import { scheduleVideoKanbanAdvancement } from '@/lib/discord/kanban-advancement';
 import { joinedRelationName } from '@/lib/supabase/joined-name';
 import { actionError, actionOk, type ActionResult } from '@/lib/actions/types';
 
@@ -37,6 +38,8 @@ export async function portalApproveVideoAction(
     .eq('id', videoId);
 
   if (error) return actionError(error.message);
+
+  scheduleVideoKanbanAdvancement(videoId, video.status, 'validated');
 
   await notifyAdminsAndPMs({
     title: 'Validation client',

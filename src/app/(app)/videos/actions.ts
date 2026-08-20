@@ -24,6 +24,7 @@ import {
 } from '@/lib/data/employee-guards';
 import { legacyPrimaryAssignees, replaceVideoAssignments } from '@/lib/data/video-assignments';
 import { syncVideoLinkedProductionTaskFromDb, upsertVideoProductionTask } from '@/lib/tasks/video-production-task';
+import { scheduleVideoKanbanAdvancement } from '@/lib/discord/kanban-advancement';
 import { getVideoById, type VideoWithClient } from '@/lib/data/videos';
 import { validateOperationalFutureDate } from '@/lib/dates/validate-future-date';
 
@@ -336,7 +337,7 @@ export async function updateVideoAction(id: string, formData: FormData): Promise
 
   const { data: curVideoDates } = await supabase
     .from('videos')
-    .select('shooting_date,client_delivery_at')
+    .select('shooting_date,client_delivery_at,status')
     .eq('id', id)
     .maybeSingle();
   const dateCheck = validateVideoFormOperationalDates(formData, {
@@ -384,6 +385,12 @@ export async function updateVideoAction(id: string, formData: FormData): Promise
     .eq('id', id);
 
   if (error) return actionError(formatVideoMutationDbError(error));
+
+  scheduleVideoKanbanAdvancement(
+    id,
+    curVideoDates?.status as VideoStatus | undefined,
+    String(formData.get('status') ?? 'idea') as VideoStatus,
+  );
 
   try {
     await replaceVideoAssignments(supabase, id, editorIds, cameramanIds);
@@ -466,6 +473,8 @@ export async function updateVideoStatusAction(
 
   const { error } = await supabase.from('videos').update(patch).eq('id', id);
   if (error) return actionError(formatVideoMutationDbError(error));
+
+  scheduleVideoKanbanAdvancement(id, prevStatus, status);
 
   await logStaffActivity(ctx, {
     action: 'updated',

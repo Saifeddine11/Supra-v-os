@@ -298,6 +298,42 @@ export function isTaskStatusAllowedInWorkflow(status: TaskStatus): boolean {
   return TASK_KANBAN_STATUSES.includes(status);
 }
 
+/** Visible forward chain. `blocked` / `archived` / `waiting_client` are never advancement. */
+export const TASK_KANBAN_FORWARD_ORDER: readonly TaskStatus[] = [
+  'todo',
+  'in_progress',
+  'waiting_team',
+  'review',
+  'done',
+];
+
+export function taskKanbanColumnLabel(status: TaskStatus): string {
+  return TASK_KANBAN_COLUMNS.find((c) => c.key === status)?.label ?? TASK_STATUS_MAP[status]?.label ?? status;
+}
+
+export function isForwardTaskKanbanMove(from: TaskStatus, to: TaskStatus): boolean {
+  if (from === to) return false;
+  if (from === 'blocked' || to === 'blocked') return false;
+  if (from === 'archived' || to === 'archived') return false;
+  const a = TASK_KANBAN_FORWARD_ORDER.indexOf(from);
+  const b = TASK_KANBAN_FORWARD_ORDER.indexOf(to);
+  if (a < 0 || b < 0) return false;
+  return b > a;
+}
+
+export function videoKanbanColumnLabel(status: VideoStatus): string {
+  return VIDEO_KANBAN_COLUMNS.find((c) => c.statuses.includes(status))?.label ?? VIDEO_STATUS_MAP[status]?.label ?? status;
+}
+
+export function isForwardVideoKanbanMove(from: VideoStatus, to: VideoStatus): boolean {
+  if (from === to) return false;
+  if (from === 'archived' || to === 'archived' || from === 'cancelled' || to === 'cancelled') return false;
+  const a = VIDEO_KANBAN_COLUMNS.findIndex((c) => c.statuses.includes(from));
+  const b = VIDEO_KANBAN_COLUMNS.findIndex((c) => c.statuses.includes(to));
+  if (a < 0 || b < 0) return false;
+  return b > a;
+}
+
 // ─── PERMISSION HELPERS ─────────────────────────────────────────────────────
 
 export const FINANCIAL_ROLES: UserRole[] = ['admin', 'commercial', 'finance'];

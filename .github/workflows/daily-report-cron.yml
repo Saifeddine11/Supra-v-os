@@ -1,0 +1,29 @@
+# Pings SUPRA /api/cron/daily-report so 18:00 / 18:30 Africa/Casablanca can run
+# on Vercel Hobby (daily crons only, ±59 min — cannot host this schedule).
+# Window 16:00–18:45 UTC covers UTC+1 and Ramadan UTC+0. The app gates on Casablanca.
+#
+# GitHub repo secret required: CRON_SECRET (same value as Vercel).
+
+name: daily-report-cron
+
+on:
+  schedule:
+    - cron: '*/15 16-18 * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: none
+    steps:
+      - name: Trigger daily report cron
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "Missing GitHub secret CRON_SECRET"
+            exit 1
+          fi
+          curl -fsS -H "Authorization: Bearer $CRON_SECRET" \
+            "https://app.suprav3.com/api/cron/daily-report"

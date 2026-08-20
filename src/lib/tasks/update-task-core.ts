@@ -19,6 +19,7 @@ import { getTaskById } from '@/lib/data/tasks';
 import { logStaffActivity } from '@/lib/activity/log-activity';
 import { notifyTaskAssignees, notifyTaskBlocked } from '@/lib/notifications/task-events';
 import { scheduleTaskDiscordUpsert } from '@/lib/discord/task-discord';
+import { scheduleTaskKanbanAdvancement } from '@/lib/discord/kanban-advancement';
 import {
   isWaitingTeamValidationStatus,
   scheduleWaitingTeamValidationReminder,
@@ -171,6 +172,7 @@ export async function updateTaskCore(
   }
 
   scheduleTaskDiscordUpsert(taskId);
+  scheduleTaskKanbanAdvancement(taskId, current.status, status);
   if (isWaitingTeamValidationStatus(status) && !isWaitingTeamValidationStatus(current.status)) {
     scheduleWaitingTeamValidationReminder(taskId);
   }

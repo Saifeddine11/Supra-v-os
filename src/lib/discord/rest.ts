@@ -24,8 +24,19 @@ export type DiscordChannel = {
   type: number;
   name: string;
   parent_id: string | null;
+  owner_id?: string | null;
   position?: number;
   permission_overwrites?: DiscordPermissionOverwrite[];
+  thread_metadata?: {
+    archived?: boolean;
+    create_timestamp?: string | null;
+    archive_timestamp?: string | null;
+  };
+};
+
+type DiscordThreadList = {
+  threads: DiscordChannel[];
+  has_more?: boolean;
 };
 
 function authHeader(token: string): string {
@@ -166,6 +177,23 @@ export async function discordModifyGuildChannelPositions(
 
 export async function discordGetCurrentUser(): Promise<DiscordRestResult<{ id: string }>> {
   return discordFetch<{ id: string }>('GET', '/users/@me');
+}
+
+export async function discordListActiveGuildThreads(
+  guildId: string,
+): Promise<DiscordRestResult<DiscordThreadList>> {
+  return discordFetch<DiscordThreadList>('GET', `/guilds/${guildId}/threads/active`);
+}
+
+export async function discordListPublicArchivedThreads(
+  channelId: string,
+  before?: string,
+): Promise<DiscordRestResult<DiscordThreadList>> {
+  const q = before ? `?before=${encodeURIComponent(before)}&limit=100` : '?limit=100';
+  return discordFetch<DiscordThreadList>(
+    'GET',
+    `/channels/${channelId}/threads/archived/public${q}`,
+  );
 }
 
 export async function discordPutChannelOverwrite(

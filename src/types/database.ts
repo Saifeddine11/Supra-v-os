@@ -371,13 +371,17 @@ export type DiscordReminderType =
   | 'task_overdue'
   | 'waiting_team_validation'
   | 'shooting_j_minus_1'
-  | 'shooting_day';
+  | 'shooting_day'
+  | 'daily_report_ask'
+  | 'daily_report_missing'
+  | 'kanban_advancement';
 
 export interface DiscordReminderDelivery {
-  entity_type: 'task' | 'video';
+  entity_type: 'task' | 'video' | 'agency';
   entity_id: string;
   reminder_type: DiscordReminderType;
   occurrence_date: string;
+  dedupe_key: string;
   created_at: string;
 }
 
@@ -795,7 +799,11 @@ export type Database = {
       };
       discord_reminder_deliveries: {
         Row: DiscordReminderDelivery;
-        Insert: Pick<DiscordReminderDelivery, 'entity_type' | 'entity_id' | 'reminder_type' | 'occurrence_date'> & {
+        Insert: Pick<
+          DiscordReminderDelivery,
+          'entity_type' | 'entity_id' | 'reminder_type' | 'occurrence_date'
+        > & {
+          dedupe_key?: string;
           created_at?: string;
         };
         Update: Partial<DiscordReminderDelivery>;

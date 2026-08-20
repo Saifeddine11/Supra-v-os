@@ -23,6 +23,7 @@ import {
   videoCanPostponeShooting,
   viewerCanRespondToShootingConfirmation,
 } from '@/lib/videos/shooting-confirmation';
+import { scheduleVideoKanbanAdvancement } from '@/lib/discord/kanban-advancement';
 import { validateOperationalFutureDate } from '@/lib/dates/validate-future-date';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -176,6 +177,8 @@ export async function confirmVideoShootingDoneAction(videoId: string): Promise<A
     return actionError(formatVideoShootingActionError(upErr));
   }
 
+  scheduleVideoKanbanAdvancement(id, v.status, 'editing');
+
   try {
     await admin.from('video_shooting_events').insert({
       video_id: id,
@@ -308,6 +311,8 @@ export async function markVideoShootingInProgressAction(formData: FormData): Pro
     console.error('[markVideoShootingInProgressAction]', upErr);
     return actionError(formatVideoShootingActionError(upErr));
   }
+
+  scheduleVideoKanbanAdvancement(id, v.status, 'shooting_in_progress');
 
   try {
     await admin.from('video_shooting_events').insert({

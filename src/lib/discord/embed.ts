@@ -268,3 +268,39 @@ export function buildMorningDigestPayload(input: {
     ],
   };
 }
+
+export function buildTaskKanbanAdvancementPayload(input: {
+  title: string;
+  fromLabel: string;
+  toLabel: string;
+  mentionIds: string[];
+}): Record<string, unknown> {
+  const mentions = input.mentionIds.map((id) => `<@${id}>`).join(' ');
+  const lines = [
+    '📈 Avancement',
+    `“${input.title}” est passé de ${input.fromLabel} → ${input.toLabel}.`,
+  ];
+  if (mentions) lines.push(mentions);
+  return {
+    content: lines.join('\n'),
+    allowed_mentions: input.mentionIds.length
+      ? { parse: [], users: input.mentionIds }
+      : { parse: [] },
+  };
+}
+
+export function buildVideoKanbanAdvancementPayload(input: {
+  title: string;
+  fromLabel: string;
+  toLabel: string;
+  clientName: string;
+}): Record<string, unknown> {
+  return {
+    content: [
+      '🎬 Avancement vidéo',
+      `“${input.title}” est passée de ${input.fromLabel} → ${input.toLabel}.`,
+      `Client : ${input.clientName}`,
+    ].join('\n'),
+    allowed_mentions: { parse: [] },
+  };
+}

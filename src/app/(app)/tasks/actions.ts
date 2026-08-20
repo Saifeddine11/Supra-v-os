@@ -25,6 +25,7 @@ import { createTaskCore } from '@/lib/tasks/create-task-core';
 import { parseTaskDepartmentInput } from '@/lib/tasks/task-department';
 import { notifyTaskAssignees, notifyTaskBlocked } from '@/lib/notifications/task-events';
 import { peekTaskDiscordLink, scheduleTaskDiscordRemoved, scheduleTaskDiscordUpsert } from '@/lib/discord/task-discord';
+import { scheduleTaskKanbanAdvancement } from '@/lib/discord/kanban-advancement';
 import {
   isWaitingTeamValidationStatus,
   scheduleWaitingTeamValidationReminder,
@@ -231,6 +232,7 @@ export async function updateTaskAction(id: string, formData: FormData): Promise<
   }
 
   scheduleTaskDiscordUpsert(id);
+  scheduleTaskKanbanAdvancement(id, curTask?.status as TaskStatus | undefined, status);
   if (isWaitingTeamValidationStatus(status) && !isWaitingTeamValidationStatus(curTask?.status as string | null)) {
     scheduleWaitingTeamValidationReminder(id);
   }
@@ -285,6 +287,7 @@ export async function updateTaskStatusAction(id: string, status: TaskStatus): Pr
   }
 
   scheduleTaskDiscordUpsert(id);
+  scheduleTaskKanbanAdvancement(id, currentStatusRow?.status as TaskStatus | undefined, status);
   if (
     isWaitingTeamValidationStatus(status) &&
     !isWaitingTeamValidationStatus(currentStatusRow?.status as string | null)
