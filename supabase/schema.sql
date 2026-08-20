@@ -55,7 +55,7 @@ create type project_status as enum (
   'archived'
 );
 
--- Task status (waiting_team: legacy enum value — migrated to blocked, not shown in UI)
+-- Task status (waiting_team = internal/CEO validation; blocked = genuinely blocked)
 create type task_status as enum (
   'todo',
   'in_progress',

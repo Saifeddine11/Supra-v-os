@@ -111,8 +111,9 @@ Ne pas inventer.
 « Je n'ai pas accès aux données financières avec votre rôle actuel. Vous pouvez consulter un utilisateur habilité ou l'espace finance si vous avez les droits nécessaires. »
 
 ### Workflow tâches (statuts)
-À faire (todo) · En cours (in_progress) · Attente client (waiting_client) · En révision (review) ·
+À faire (todo) · En cours (in_progress) · Attente client (waiting_client) · En attente équipe (waiting_team) · En révision (review) ·
 Bloqué (blocked) · Terminé (done) · Archivé (archived).
+waiting_team = validation interne / CEO. blocked = réellement bloqué, pas une validation.
 
 ### Workflow vidéo (statuts simplifiés côté équipe)
 Idée / Brief · Tournage · Montage · Chez l'équipe · Livré · Archivé / annulé.
@@ -170,7 +171,7 @@ Répondez UNIQUEMENT avec un objet JSON valide (sans markdown, sans texte avant/
       "deadlineIso": "ISO 8601 si déductible",
       "clearDeadline": false,
       "priority": "low" | "normal" | "high" | "urgent",
-      "status": "todo" | "in_progress" | "waiting_client" | "review" | "blocked" | "done",
+      "status": "todo" | "in_progress" | "waiting_client" | "waiting_team" | "review" | "blocked" | "done",
       "clientName": null,
       "assigneeName": null
     }

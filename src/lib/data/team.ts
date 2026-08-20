@@ -7,6 +7,7 @@ const OPEN_TASK_STATUSES: TaskStatus[] = [
   'todo',
   'in_progress',
   'waiting_client',
+  'waiting_team',
   'review',
   'blocked',
 ];

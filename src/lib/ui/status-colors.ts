@@ -211,7 +211,7 @@ export function getTaskStatusColorKey(status: TaskStatus): OperationalColorKey {
     case 'waiting_client':
       return 'waitClient';
     case 'waiting_team':
-      return 'urgent';
+      return 'waitClient';
     case 'review':
       return 'postProd';
     case 'done':

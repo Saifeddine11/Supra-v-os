@@ -8,6 +8,7 @@ const STATUS_PHRASES: Array<{ pattern: RegExp; status: AiTaskUpdateStatus }> = [
   { pattern: /\b(?:à|a)\s*faire\b|\btodo\b/i, status: 'todo' },
   { pattern: /\ben\s+cours\b|\bin[\s-]?progress\b/i, status: 'in_progress' },
   { pattern: /\battente\s+client\b|\bwaiting[\s_-]?client\b/i, status: 'waiting_client' },
+  { pattern: /\ben\s+attente\s+[ée]quipe\b|\battente\s+[ée]quipe\b|\bwaiting[\s_-]?team\b/i, status: 'waiting_team' },
   { pattern: /\ben\s+r[ée]vision\b|\breview\b/i, status: 'review' },
   { pattern: /\bbloqu[ée]\b|\bblocked\b/i, status: 'blocked' },
   { pattern: /\btermin[ée]\b|\bdone\b|\bfait\b/i, status: 'done' },

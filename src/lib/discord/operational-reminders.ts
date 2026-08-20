@@ -56,9 +56,9 @@ function isUniqueViolation(error: { code?: string; message?: string } | null | u
   return error.code === '23505' || /duplicate key|unique constraint/i.test(error.message ?? '');
 }
 
-/** UI writes `blocked`; legacy rows may still be `waiting_team`. */
+/** CEO / team validation only — never `blocked`. */
 export function isWaitingTeamValidationStatus(status: TaskStatus | string | null | undefined): boolean {
-  return status === 'waiting_team' || status === 'blocked';
+  return status === 'waiting_team';
 }
 
 function taskUrl(taskId: string): string {
@@ -360,7 +360,7 @@ async function sendWaitingTeamMorningReminders(
   const { data: tasks, error } = await admin
     .from('tasks')
     .select('id, title, status, client_id, assignee_id, department')
-    .in('status', ['waiting_team', 'blocked']);
+    .eq('status', 'waiting_team');
   if (error) {
     errors.push(error.message);
     return { sent, skipped, errors };

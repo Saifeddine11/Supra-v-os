@@ -37,11 +37,10 @@ export interface StatusConfig {
 export const TASK_STATUS_MAP: Record<TaskStatus, StatusConfig> = {
   todo:            { label: 'À faire',          color: '#9CA3AF' },
   in_progress:     { label: 'En cours',         color: '#FF450F' },
-  waiting_client:  { label: 'Attente client',   color: '#C4789B' },
-  /** Legacy enum value — migrated to `blocked`; kept for badges on old rows. */
-  waiting_team:    { label: 'Bloqué',           color: '#E05252' },
-  review:          { label: 'En révision',      color: '#E07B3A' },
-  blocked:         { label: 'Bloqué',           color: '#E05252' },
+  waiting_client:  { label: 'Attente client',     color: '#C4789B' },
+  waiting_team:    { label: 'En attente équipe',  color: '#5B8FD4' },
+  review:          { label: 'En révision',        color: '#E07B3A' },
+  blocked:         { label: 'Bloqué',             color: '#E05252' },
   done:            { label: 'Terminé',          color: '#3DBD7D' },
   archived:        { label: 'Archivé',          color: '#525252' },
 };
@@ -271,24 +270,21 @@ export const TASK_KANBAN_COLUMNS: Array<{
   label: string;
   color: string;
 }> = [
-  { key: 'todo',           label: 'À faire',         color: '#9CA3AF' },
-  { key: 'in_progress',    label: 'En cours',        color: '#FF450F' },
-  { key: 'waiting_client', label: 'Attente client',  color: '#C4789B' },
-  { key: 'review',         label: 'En révision',     color: '#E07B3A' },
-  { key: 'blocked',        label: 'Bloqué',          color: '#E05252' },
-  { key: 'done',           label: 'Terminé',         color: '#3DBD7D' },
+  { key: 'todo',           label: 'À faire',            color: '#9CA3AF' },
+  { key: 'in_progress',    label: 'En cours',           color: '#FF450F' },
+  { key: 'waiting_client', label: 'Attente client',     color: '#C4789B' },
+  { key: 'waiting_team',   label: 'En attente équipe',  color: '#5B8FD4' },
+  { key: 'review',         label: 'En révision',        color: '#E07B3A' },
+  { key: 'blocked',        label: 'Bloqué',             color: '#E05252' },
+  { key: 'done',           label: 'Terminé',            color: '#3DBD7D' },
 ];
 
 /** Statuts sélectionnables (kanban, formulaires, filtres calendrier). */
 export const TASK_KANBAN_STATUSES: TaskStatus[] = TASK_KANBAN_COLUMNS.map((c) => c.key);
 
-/** Ancien statut retiré du workflow — bucket d’affichage kanban avant/après migration DB. */
-export const TASK_KANBAN_LEGACY_BUCKET: Partial<Record<TaskStatus, TaskStatus>> = {
-  waiting_team: 'blocked',
-};
-
+/** Identity helper — each workflow status is its own kanban column. */
 export function taskStatusForKanbanBucket(status: TaskStatus): TaskStatus {
-  return TASK_KANBAN_LEGACY_BUCKET[status] ?? status;
+  return status;
 }
 
 export function isTaskStatusAllowedInWorkflow(status: TaskStatus): boolean {

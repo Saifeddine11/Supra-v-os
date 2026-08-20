@@ -113,7 +113,7 @@ export function taskToStatusTone(task: {
     new Date(task.deadline!).getTime() < Date.now();
   if (overdue || task.status === 'blocked') return 'danger';
   if (task.priority === 'urgent' && task.status !== 'done' && task.status !== 'archived') return 'danger';
-  if (task.status === 'waiting_client' || task.status === 'waiting_team') return 'warning'; // waiting_team: legacy rows
+  if (task.status === 'waiting_client' || task.status === 'waiting_team') return 'warning';
   if (task.status === 'in_progress') return 'info';
   if (task.status === 'review') return 'review';
   if (task.status === 'done') return 'success';
