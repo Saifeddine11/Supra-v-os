@@ -485,7 +485,9 @@ create table task_assignments (
 create index idx_task_assignments_task on task_assignments(task_id);
 create index idx_task_assignments_employee on task_assignments(employee_id);
 
--- Discord linkage (not a second task store — channel/message IDs only)
+-- Discord linkage (not a second task store — channel/message IDs only).
+-- discord_message_id all-zero sentinel 000000000000000000 = in-flight post claim;
+-- task_id PK serializes concurrent creates so a task cannot post twice.
 create table task_discord_messages (
   task_id              uuid primary key references tasks(id) on delete cascade,
   discord_channel_id   text not null,

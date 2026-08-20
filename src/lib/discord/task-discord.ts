@@ -37,7 +37,23 @@ type DiscordLink = {
   discord_channel_id: string;
   discord_message_id: string;
   last_reminder_at: string | null;
+  updated_at?: string;
 };
+
+/** In-flight claim stored in task_discord_messages.discord_message_id (PK lock). */
+const DISCORD_POST_CLAIM_SENTINEL = '000000000000000000';
+const DISCORD_POST_CLAIM_STALE_MS = 30_000;
+
+const scheduledTaskDiscordSync = new Set<string>();
+
+function isLiveDiscordMessageId(id: string | null | undefined): boolean {
+  return Boolean(id && id !== DISCORD_POST_CLAIM_SENTINEL && normalizeDiscordSnowflake(id));
+}
+
+function isUniqueViolation(error: { code?: string; message?: string } | null | undefined): boolean {
+  if (!error) return false;
+  return error.code === '23505' || /duplicate key|unique constraint/i.test(error.message ?? '');
+}
 
 function logDiscord(message: string): void {
   console.error(`[discord] ${message}`);
@@ -63,7 +79,7 @@ async function loadLink(taskId: string): Promise<DiscordLink | null> {
   const admin = createAdminClient();
   const { data, error } = await admin
     .from('task_discord_messages')
-    .select('task_id, discord_channel_id, discord_message_id, last_reminder_at')
+    .select('task_id, discord_channel_id, discord_message_id, last_reminder_at, updated_at')
     .eq('task_id', taskId)
     .maybeSingle();
   if (error) {
@@ -73,19 +89,20 @@ async function loadLink(taskId: string): Promise<DiscordLink | null> {
   return (data as DiscordLink | null) ?? null;
 }
 
-async function upsertLink(taskId: string, channelId: string, messageId: string): Promise<void> {
+async function upsertLink(taskId: string, channelId: string, messageId: string): Promise<boolean> {
   const admin = createAdminClient();
-  const now = new Date().toISOString();
-  const { error } = await admin.from('task_discord_messages').upsert(
-    {
-      task_id: taskId,
-      discord_channel_id: channelId,
-      discord_message_id: messageId,
-      updated_at: now,
-    },
-    { onConflict: 'task_id' },
-  );
-  if (error) logDiscord(`link upsert: ${error.message}`);
+  const row = {
+    task_id: taskId,
+    discord_channel_id: channelId,
+    discord_message_id: messageId,
+    updated_at: new Date().toISOString(),
+  };
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const { error } = await admin.from('task_discord_messages').upsert(row, { onConflict: 'task_id' });
+    if (!error) return true;
+    logDiscord(`link upsert: ${error.message}`);
+  }
+  return false;
 }
 
 function runAfterResponse(work: () => Promise<void>): void {
@@ -106,7 +123,113 @@ function runAfterResponse(work: () => Promise<void>): void {
 export function scheduleTaskDiscordUpsert(taskId: string | null | undefined): void {
   const id = (taskId ?? '').trim();
   if (!id || !isDiscordTaskSyncEnabled()) return;
-  runAfterResponse(() => syncTaskToDiscord(id));
+  if (scheduledTaskDiscordSync.has(id)) return;
+  scheduledTaskDiscordSync.add(id);
+  runAfterResponse(async () => {
+    try {
+      await syncTaskToDiscord(id);
+    } finally {
+      scheduledTaskDiscordSync.delete(id);
+    }
+  });
+}
+
+/**
+ * Atomic create lock via task_discord_messages.task_id PK.
+ * Inserts an all-zero sentinel message id; unique violation means another worker
+ * already claimed or posted. Live mappings are returned for edit-in-place.
+ */
+async function claimTaskDiscordPost(
+  taskId: string,
+  channelId: string,
+  replaceMessageId?: string,
+): Promise<'won' | 'lost' | { existing: DiscordLink }> {
+  const admin = createAdminClient();
+  const existing = await loadLink(taskId);
+  const now = new Date().toISOString();
+
+  if (
+    existing &&
+    replaceMessageId &&
+    existing.discord_message_id === replaceMessageId &&
+    isLiveDiscordMessageId(existing.discord_message_id)
+  ) {
+    const { data: replaced, error } = await admin
+      .from('task_discord_messages')
+      .update({
+        discord_channel_id: channelId,
+        discord_message_id: DISCORD_POST_CLAIM_SENTINEL,
+        updated_at: now,
+      })
+      .eq('task_id', taskId)
+      .eq('discord_message_id', replaceMessageId)
+      .select('task_id')
+      .maybeSingle();
+    if (error) {
+      logDiscord(`claim replace: ${error.message}`);
+      return 'lost';
+    }
+    return replaced ? 'won' : 'lost';
+  }
+
+  if (existing && isLiveDiscordMessageId(existing.discord_message_id)) {
+    return { existing };
+  }
+
+  if (!existing) {
+    const { error } = await admin.from('task_discord_messages').insert({
+      task_id: taskId,
+      discord_channel_id: channelId,
+      discord_message_id: DISCORD_POST_CLAIM_SENTINEL,
+      updated_at: now,
+    });
+    if (!error) return 'won';
+    if (isUniqueViolation(error)) {
+      const again = await loadLink(taskId);
+      if (again && isLiveDiscordMessageId(again.discord_message_id)) return { existing: again };
+      return 'lost';
+    }
+    logDiscord(`claim insert: ${error.message}`);
+    return 'lost';
+  }
+
+  const updatedAt = existing.updated_at ? new Date(existing.updated_at).getTime() : 0;
+  if (
+    existing.discord_message_id === DISCORD_POST_CLAIM_SENTINEL &&
+    !Number.isNaN(updatedAt) &&
+    Date.now() - updatedAt < DISCORD_POST_CLAIM_STALE_MS
+  ) {
+    return 'lost';
+  }
+
+  const staleBefore = new Date(Date.now() - DISCORD_POST_CLAIM_STALE_MS).toISOString();
+  const { data: stolen, error: stealErr } = await admin
+    .from('task_discord_messages')
+    .update({
+      discord_channel_id: channelId,
+      discord_message_id: DISCORD_POST_CLAIM_SENTINEL,
+      updated_at: now,
+    })
+    .eq('task_id', taskId)
+    .eq('discord_message_id', DISCORD_POST_CLAIM_SENTINEL)
+    .lt('updated_at', staleBefore)
+    .select('task_id')
+    .maybeSingle();
+  if (stealErr) {
+    logDiscord(`claim steal: ${stealErr.message}`);
+    return 'lost';
+  }
+  return stolen ? 'won' : 'lost';
+}
+
+async function releaseTaskDiscordClaim(taskId: string): Promise<void> {
+  const admin = createAdminClient();
+  const { error } = await admin
+    .from('task_discord_messages')
+    .delete()
+    .eq('task_id', taskId)
+    .eq('discord_message_id', DISCORD_POST_CLAIM_SENTINEL);
+  if (error) logDiscord(`claim release: ${error.message}`);
 }
 
 /**
@@ -118,7 +241,7 @@ export async function peekTaskDiscordLink(
   try {
     if (!getDiscordBotToken()) return null;
     const link = await loadLink(taskId);
-    if (!link) return null;
+    if (!link || !isLiveDiscordMessageId(link.discord_message_id)) return null;
     return { channelId: link.discord_channel_id, messageId: link.discord_message_id };
   } catch (e) {
     logDiscord(e instanceof Error ? e.message : 'peek link failed');
@@ -130,6 +253,7 @@ export function scheduleTaskDiscordRemoved(
   link: { channelId: string; messageId: string } | null,
 ): void {
   if (!link || !getDiscordBotToken()) return;
+  if (!isLiveDiscordMessageId(link.messageId)) return;
   runAfterResponse(async () => {
     const res = await discordDeleteChannelMessage(link.channelId, link.messageId);
     if (!res.ok && res.status !== 404) {
@@ -200,37 +324,55 @@ export async function syncTaskToDiscord(taskId: string): Promise<void> {
     taskUrl: taskUrl(taskId),
   });
 
-  if (
-    existing &&
-    existing.discord_channel_id === channelId &&
-    existing.discord_message_id
-  ) {
-    const edited = await discordEditChannelMessage(
-      channelId,
-      existing.discord_message_id,
-      payload,
-    );
-    if (edited.ok) return;
+  const editedLive = async (link: DiscordLink | null): Promise<'ok' | 'missing' | 'none'> => {
+    if (
+      !link ||
+      link.discord_channel_id !== channelId ||
+      !isLiveDiscordMessageId(link.discord_message_id)
+    ) {
+      return 'none';
+    }
+    const edited = await discordEditChannelMessage(channelId, link.discord_message_id, payload);
+    if (edited.ok) return 'ok';
     if (edited.status !== 404) {
       logDiscord(`edit message: ${edited.error}`);
-      return;
+      return 'ok';
     }
-  } else if (existing) {
-    const del = await discordDeleteChannelMessage(
-      existing.discord_channel_id,
-      existing.discord_message_id,
-    );
-    if (!del.ok && del.status !== 404) {
-      logDiscord(`move delete: ${del.error}`);
+    return 'missing';
+  };
+
+  const firstEdit = await editedLive(existing);
+  if (firstEdit === 'ok') return;
+
+  let replaceMessageId: string | undefined;
+  if (existing && isLiveDiscordMessageId(existing.discord_message_id)) {
+    replaceMessageId = existing.discord_message_id;
+    if (existing.discord_channel_id !== channelId) {
+      const del = await discordDeleteChannelMessage(existing.discord_channel_id, existing.discord_message_id);
+      if (!del.ok && del.status !== 404) {
+        logDiscord(`move delete: ${del.error}`);
+      }
     }
+  }
+
+  const claimed = await claimTaskDiscordPost(taskId, channelId, replaceMessageId);
+  if (claimed !== 'won') {
+    const mapped = typeof claimed === 'object' ? claimed.existing : await loadLink(taskId);
+    if ((await editedLive(mapped)) === 'ok') return;
+    return;
   }
 
   const created = await discordCreateChannelMessage(channelId, payload);
   if (!created.ok) {
     logDiscord(`create message: ${created.error}`);
+    await releaseTaskDiscordClaim(taskId);
     return;
   }
-  await upsertLink(taskId, created.data.channel_id || channelId, created.data.id);
+  const mapped = created.data.channel_id || channelId;
+  const stored = await upsertLink(taskId, mapped, created.data.id);
+  if (!stored) {
+    logDiscord(`posted ${created.data.id} but failed to persist task_discord_messages for ${taskId}`);
+  }
 }
 
 const REMINDER_WINDOW_MS = 20 * 3600_000;
@@ -310,6 +452,10 @@ export async function sendDiscordDeadlineReminders(input: {
     const now = Date.now();
     for (const { task: t, kind } of tagged) {
       const link = linkByTask.get(t.id);
+      if (link && !isLiveDiscordMessageId(link.discord_message_id)) {
+        skipped += 1;
+        continue;
+      }
       if (link?.last_reminder_at) {
         const last = new Date(link.last_reminder_at).getTime();
         if (!Number.isNaN(last) && now - last < REMINDER_WINDOW_MS) {
