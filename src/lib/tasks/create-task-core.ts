@@ -17,6 +17,10 @@ import type { TaskDepartment, TaskPriority, TaskStatus } from '@/types/database'
 import { isTaskStatusAllowedInWorkflow } from '@/types/domain';
 import { notifyTaskAssignees } from '@/lib/notifications/task-events';
 import { scheduleTaskDiscordUpsert } from '@/lib/discord/task-discord';
+import {
+  isWaitingTeamValidationStatus,
+  scheduleWaitingTeamValidationReminder,
+} from '@/lib/discord/operational-reminders';
 import { logStaffActivity } from '@/lib/activity/log-activity';
 import { requireAssignableEmployee } from '@/lib/data/employee-guards';
 import {
@@ -152,6 +156,9 @@ export async function createTaskCore(
   }
 
   scheduleTaskDiscordUpsert(data.id);
+  if (isWaitingTeamValidationStatus(status)) {
+    scheduleWaitingTeamValidationReminder(data.id);
+  }
 
   await logStaffActivity(ctx, {
     action: 'created',

@@ -7,8 +7,9 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /**
- * Hobby-friendly single cron: runs overdue invoices → deadline alerts → morning reminders.
- * Individual routes under `/api/cron/*` remain for manual tests or Vercel Pro schedules.
+ * Daily cron: overdue invoices → deadline alerts → morning reminders
+ * (in-app/email + Discord operational reminders when enabled).
+ * Scheduled every day (including weekend shoots) at 07:30 UTC.
  */
 export async function GET(request: Request) {
   if (!verifyCronSecret(request)) return cronUnauthorizedResponse();

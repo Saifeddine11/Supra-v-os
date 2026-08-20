@@ -97,6 +97,148 @@ export function buildDeadlineReminderPayload(input: {
   };
 }
 
+export function buildTaskDueTodayReminderPayload(input: {
+  title: string;
+  mentionIds: string[];
+  taskUrl: string | null;
+}): Record<string, unknown> {
+  const mentions = input.mentionIds.map((id) => `<@${id}>`).join(' ');
+  const title = input.taskUrl ? `[${input.title}](${input.taskUrl})` : `“${input.title}”`;
+  const who = mentions || 'l’équipe';
+  return {
+    content: `⏰ ${who} — échéance aujourd’hui pour ${title}. La tâche n’est pas encore terminée. Merci de la clôturer ou de mettre à jour son statut.`,
+    allowed_mentions: input.mentionIds.length
+      ? { parse: [], users: input.mentionIds }
+      : { parse: [] },
+  };
+}
+
+export function buildTaskOverdueReminderPayload(input: {
+  title: string;
+  mentionIds: string[];
+  taskUrl: string | null;
+}): Record<string, unknown> {
+  const mentions = input.mentionIds.map((id) => `<@${id}>`).join(' ');
+  const title = input.taskUrl ? `[${input.title}](${input.taskUrl})` : `“${input.title}”`;
+  const who = mentions || 'l’équipe';
+  return {
+    content: `⏰ ${who} — échéance dépassée pour ${title}. La tâche n’est pas encore terminée. Merci de la clôturer ou de mettre à jour son statut.`,
+    allowed_mentions: input.mentionIds.length
+      ? { parse: [], users: input.mentionIds }
+      : { parse: [] },
+  };
+}
+
+export function buildWaitingTeamValidationPayload(input: {
+  title: string;
+  approverUserId: string | null;
+  assigneeMentionIds: string[];
+  taskUrl: string | null;
+}): Record<string, unknown> {
+  const users = [
+    ...new Set([input.approverUserId, ...input.assigneeMentionIds].filter((id): id is string => Boolean(id))),
+  ];
+  const approver = input.approverUserId ? `<@${input.approverUserId}>` : 'Direction';
+  const assignees =
+    input.assigneeMentionIds.length > 0
+      ? input.assigneeMentionIds.map((id) => `<@${id}>`).join(' ')
+      : 'l’assigné';
+  const title = input.taskUrl ? `[${input.title}](${input.taskUrl})` : `“${input.title}”`;
+  return {
+    content: `✅ ${approver} — validation requise pour ${title}. ${assignees} attend${input.assigneeMentionIds.length > 1 ? 'ent' : ''} ton OK avant de passer la tâche en Terminée.`,
+    allowed_mentions: users.length ? { parse: [], users } : { parse: [] },
+  };
+}
+
+function checklistBlock(items: string[]): string {
+  return items.map((item) => `☐ ${item}`).join('\n');
+}
+
+export function buildShootingJMinus1Payload(input: {
+  title: string;
+  videoUrl: string | null;
+  mentionUserIds: string[];
+  mentionRoleIds: string[];
+  locationLine: string | null;
+  contactLine: string | null;
+}): Record<string, unknown> {
+  const userMentions = input.mentionUserIds.map((id) => `<@${id}>`).join(' ');
+  const roleMentions = input.mentionRoleIds.map((id) => `<@&${id}>`).join(' ');
+  const who = [userMentions, roleMentions].filter(Boolean).join(' ');
+  const title = input.videoUrl ? `[${input.title}](${input.videoUrl})` : `“${input.title}”`;
+  const extra: string[] = [];
+  if (input.locationLine) extra.push(`☐ lieu / adresse confirmés — ${input.locationLine}`);
+  if (input.contactLine) extra.push(`☐ contact sur place — ${input.contactLine}`);
+  const body = checklistBlock([
+    'script / brief validé',
+    'shot list prête',
+    'horaires confirmés',
+    ...extra,
+    'talents / figurants confirmés si applicable',
+    'produits / accessoires prêts',
+    'tenues / maquillage si applicable',
+    'caméra + objectifs',
+    'micros / audio',
+    'lumières',
+    'trépied / gimbal',
+    'batteries chargées + batteries de secours',
+    'cartes mémoire disponibles / vidées',
+    'chargeurs / câbles / adaptateurs',
+    'transport / logistique',
+  ]);
+  return {
+    content: [who, `🎬 Tournage demain — ${title}`, '', body].filter((line) => line !== undefined).join('\n'),
+    allowed_mentions: {
+      parse: [],
+      users: input.mentionUserIds,
+      roles: input.mentionRoleIds,
+    },
+  };
+}
+
+export function buildShootingDayPayload(input: {
+  title: string;
+  videoUrl: string | null;
+  mentionUserIds: string[];
+  mentionRoleIds: string[];
+  locationLine: string | null;
+  contactLine: string | null;
+}): Record<string, unknown> {
+  const userMentions = input.mentionUserIds.map((id) => `<@${id}>`).join(' ');
+  const roleMentions = input.mentionRoleIds.map((id) => `<@&${id}>`).join(' ');
+  const who = [userMentions, roleMentions].filter(Boolean).join(' ');
+  const title = input.videoUrl ? `[${input.title}](${input.videoUrl})` : `“${input.title}”`;
+  const extra: string[] = [];
+  if (input.locationLine) extra.push(`☐ adresse — ${input.locationLine}`);
+  if (input.contactLine) extra.push(`☐ contact — ${input.contactLine}`);
+  const body = checklistBlock([
+    'caméra',
+    'objectifs',
+    'batteries chargées',
+    'batteries de secours',
+    'cartes mémoire vidées / formatées',
+    'micros + batteries',
+    'lumières',
+    'trépied / gimbal',
+    'chargeurs',
+    'powerbank',
+    'câbles / adaptateurs',
+    'script / shot list',
+    'produits / accessoires',
+    ...extra,
+  ]);
+  return {
+    content: [who, `🎥 Tournage aujourd’hui — check matériel avant départ — ${title}`, '', body]
+      .filter((line) => line !== undefined)
+      .join('\n'),
+    allowed_mentions: {
+      parse: [],
+      users: input.mentionUserIds,
+      roles: input.mentionRoleIds,
+    },
+  };
+}
+
 export function buildMorningDigestPayload(input: {
   recipientName: string;
   mentionId: string | null;

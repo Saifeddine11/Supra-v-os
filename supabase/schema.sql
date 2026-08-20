@@ -526,6 +526,31 @@ create unique index discord_channel_routes_global_uidx
   on discord_channel_routes ((true))
   where client_id is null and department is null;
 
+-- Discord operational reminder deliveries (not a copy of tasks/videos)
+create table discord_reminder_deliveries (
+  entity_type      text not null,
+  entity_id        uuid not null,
+  reminder_type    text not null,
+  occurrence_date  date not null,
+  created_at       timestamptz not null default now(),
+  primary key (entity_type, entity_id, reminder_type, occurrence_date),
+  constraint discord_reminder_deliveries_entity_type_check
+    check (entity_type in ('task', 'video')),
+  constraint discord_reminder_deliveries_reminder_type_check
+    check (
+      reminder_type in (
+        'task_due_today',
+        'task_overdue',
+        'waiting_team_validation',
+        'shooting_j_minus_1',
+        'shooting_day'
+      )
+    )
+);
+
+create index discord_reminder_deliveries_occurrence_idx
+  on discord_reminder_deliveries (occurrence_date, reminder_type);
+
 create unique index tasks_one_production_task_per_video on tasks (video_id)
   where video_id is not null;
 

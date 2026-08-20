@@ -365,6 +365,22 @@ export interface DiscordChannelRoute {
   updated_at: string;
 }
 
+/** Idempotent Discord reminder log — not a copy of task/video fields. */
+export type DiscordReminderType =
+  | 'task_due_today'
+  | 'task_overdue'
+  | 'waiting_team_validation'
+  | 'shooting_j_minus_1'
+  | 'shooting_day';
+
+export interface DiscordReminderDelivery {
+  entity_type: 'task' | 'video';
+  entity_id: string;
+  reminder_type: DiscordReminderType;
+  occurrence_date: string;
+  created_at: string;
+}
+
 export interface TaskAssignment {
   id: string;
   task_id: string;
@@ -775,6 +791,14 @@ export type Database = {
         Row: DiscordChannelRoute;
         Insert: Partial<DiscordChannelRoute> & { discord_channel_id: string };
         Update: Partial<DiscordChannelRoute>;
+        Relationships: [];
+      };
+      discord_reminder_deliveries: {
+        Row: DiscordReminderDelivery;
+        Insert: Pick<DiscordReminderDelivery, 'entity_type' | 'entity_id' | 'reminder_type' | 'occurrence_date'> & {
+          created_at?: string;
+        };
+        Update: Partial<DiscordReminderDelivery>;
         Relationships: [];
       };
       videos: { Row: Video; Insert: Partial<Video>; Update: Partial<Video>; Relationships: [] };

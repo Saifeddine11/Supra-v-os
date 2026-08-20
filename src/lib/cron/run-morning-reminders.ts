@@ -19,6 +19,7 @@ import {
 } from '@/lib/alerts/active-alert-rules';
 import type { TaskDepartment, TaskPriority, TaskStatus } from '@/types/database';
 import { sendDiscordMorningDigest } from '@/lib/discord/task-discord';
+import { runDiscordOperationalReminders } from '@/lib/discord/operational-reminders';
 
 export type MorningRemindersResult = {
   success: boolean;
@@ -27,6 +28,8 @@ export type MorningRemindersResult = {
   emailsSent: number;
   emailsSkipped: number;
   discordDigestsSent: number;
+  discordOperationalSent: number;
+  discordOperationalSkipped: number;
   errors: string[];
 };
 
@@ -36,6 +39,8 @@ export async function runMorningReminders(): Promise<MorningRemindersResult> {
   let emailsSent = 0;
   let emailsSkipped = 0;
   let discordDigestsSent = 0;
+  let discordOperationalSent = 0;
+  let discordOperationalSkipped = 0;
   let employeesProcessed = 0;
 
   const admin = createAdminClient();
@@ -75,6 +80,8 @@ export async function runMorningReminders(): Promise<MorningRemindersResult> {
       emailsSent: 0,
       emailsSkipped: 0,
       discordDigestsSent: 0,
+      discordOperationalSent: 0,
+      discordOperationalSkipped: 0,
       errors: [empErr.message],
     };
   }
@@ -208,6 +215,11 @@ export async function runMorningReminders(): Promise<MorningRemindersResult> {
     }
   }
 
+  const operational = await runDiscordOperationalReminders();
+  discordOperationalSent = operational.sent;
+  discordOperationalSkipped = operational.skipped;
+  errors.push(...operational.errors);
+
   return {
     success: errors.length === 0,
     employeesProcessed,
@@ -215,6 +227,8 @@ export async function runMorningReminders(): Promise<MorningRemindersResult> {
     emailsSent,
     emailsSkipped,
     discordDigestsSent,
+    discordOperationalSent,
+    discordOperationalSkipped,
     errors,
   };
 }

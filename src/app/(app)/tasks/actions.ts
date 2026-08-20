@@ -25,6 +25,10 @@ import { createTaskCore } from '@/lib/tasks/create-task-core';
 import { parseTaskDepartmentInput } from '@/lib/tasks/task-department';
 import { notifyTaskAssignees, notifyTaskBlocked } from '@/lib/notifications/task-events';
 import { peekTaskDiscordLink, scheduleTaskDiscordRemoved, scheduleTaskDiscordUpsert } from '@/lib/discord/task-discord';
+import {
+  isWaitingTeamValidationStatus,
+  scheduleWaitingTeamValidationReminder,
+} from '@/lib/discord/operational-reminders';
 import { logStaffActivity } from '@/lib/activity/log-activity';
 import { requireAssignableEmployee } from '@/lib/data/employee-guards';
 import { getTaskById } from '@/lib/data/tasks';
@@ -186,7 +190,7 @@ export async function updateTaskAction(id: string, formData: FormData): Promise<
 
   const prevMap = await fetchAssignmentsForTasks(readSb, [id]);
   const prevSet = new Set((prevMap.get(id) ?? []).map((a) => a.id));
-  const { data: curTask } = await readSb.from('tasks').select('assignee_id').eq('id', id).maybeSingle();
+  const { data: curTask } = await readSb.from('tasks').select('assignee_id, status').eq('id', id).maybeSingle();
   if (curTask?.assignee_id) prevSet.add(curTask.assignee_id as string);
 
   const primary = legacyPrimaryAssignee(assigneeIds);
@@ -227,6 +231,9 @@ export async function updateTaskAction(id: string, formData: FormData): Promise<
   }
 
   scheduleTaskDiscordUpsert(id);
+  if (isWaitingTeamValidationStatus(status) && !isWaitingTeamValidationStatus(curTask?.status as string | null)) {
+    scheduleWaitingTeamValidationReminder(id);
+  }
 
   await logStaffActivity(ctx, {
     action: 'updated',
@@ -261,6 +268,8 @@ export async function updateTaskStatusAction(id: string, status: TaskStatus): Pr
     return actionError('Tâche inaccessible.');
   }
 
+  const { data: currentStatusRow } = await readSb.from('tasks').select('status').eq('id', id).maybeSingle();
+
   const patch: Record<string, unknown> = {
     status,
     updated_at: new Date().toISOString(),
@@ -276,6 +285,12 @@ export async function updateTaskStatusAction(id: string, status: TaskStatus): Pr
   }
 
   scheduleTaskDiscordUpsert(id);
+  if (
+    isWaitingTeamValidationStatus(status) &&
+    !isWaitingTeamValidationStatus(currentStatusRow?.status as string | null)
+  ) {
+    scheduleWaitingTeamValidationReminder(id);
+  }
 
   const { data: linkedVideo } = await readSb.from('tasks').select('video_id').eq('id', id).maybeSingle();
 

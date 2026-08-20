@@ -13,13 +13,16 @@ export function SettingsAdminTechnicalSection() {
     discordGuild: Boolean((process.env.DISCORD_GUILD_ID ?? '').trim()),
     discordSync:
       ['1', 'true', 'yes'].includes((process.env.DISCORD_TASK_SYNC_ENABLED ?? '').trim().toLowerCase()),
+    discordOperationalReminders:
+      ['1', 'true', 'yes'].includes((process.env.DISCORD_OPERATIONAL_REMINDERS_ENABLED ?? '').trim().toLowerCase()),
+    discordValidationApprover: Boolean((process.env.DISCORD_VALIDATION_APPROVER_USER_ID ?? '').trim()),
     appUrl: process.env.NEXT_PUBLIC_APP_URL ?? '',
   };
 
   const cronLabels = [
     {
       path: '/api/cron/daily',
-      label: 'Job quotidien Vercel Hobby (lun–ven 7h30 UTC) : factures → échéances → rappels matin',
+      label: 'Job quotidien Vercel (tous les jours 7h30 UTC, ~8h30 Casablanca) : factures → échéances → rappels matin + Discord opérationnel',
     },
     { path: '/api/cron/morning-reminders', label: 'Unitaire (tests / Pro)' },
     { path: '/api/cron/overdue-invoices', label: 'Unitaire (tests / Pro)' },
@@ -96,6 +99,28 @@ export function SettingsAdminTechnicalSection() {
             {integrations.discordSync ? 'Activé' : 'Désactivé (test seul)'}
           </span>
         </li>
+        <li className="flex justify-between gap-2 border-b border-border/60 py-2">
+          <span className="text-muted-foreground">Discord rappels opérationnels (DISCORD_OPERATIONAL_REMINDERS_ENABLED)</span>
+          <span
+            className={
+              integrations.discordOperationalReminders
+                ? 'text-emerald-600 dark:text-emerald-400'
+                : 'text-muted-foreground'
+            }
+          >
+            {integrations.discordOperationalReminders ? 'Activé' : 'Désactivé'}
+          </span>
+        </li>
+        <li className="flex justify-between gap-2 border-b border-border/60 py-2">
+          <span className="text-muted-foreground">Discord validateur waiting_team (DISCORD_VALIDATION_APPROVER_USER_ID)</span>
+          <span
+            className={
+              integrations.discordValidationApprover ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'
+            }
+          >
+            {integrations.discordValidationApprover ? 'Configuré' : 'Non défini'}
+          </span>
+        </li>
         <li className="flex justify-between gap-2 py-2">
           <span className="text-muted-foreground">URL app (NEXT_PUBLIC_APP_URL)</span>
           <span className="max-w-[55%] truncate text-xs text-foreground">{integrations.appUrl || '—'}</span>
@@ -111,13 +136,12 @@ export function SettingsAdminTechnicalSection() {
           ))}
         </ul>
         <p className="mt-2">
-          En production Hobby, seul <code className="text-[10px]">/api/cron/daily</code> est planifié dans{' '}
-          <code className="text-[10px]">vercel.json</code>. Les autres routes restent pour tests manuels ou Vercel
-          Pro.
+          En production, <code className="text-[10px]">/api/cron/daily</code> tourne tous les jours (y compris
+          week-end) à 7h30 UTC via <code className="text-[10px]">vercel.json</code>. Les autres routes restent pour
+          tests manuels. 09h00 Africa/Casablanca n’est pas un cron séparé (pas de cron payant supplémentaire).
         </p>
         <p className="mt-2">
-          Discord Phase 1 : routes de salons via <code className="text-[10px]">GET/POST /api/discord/admin</code>{' '}
-          (admin). Aucun cron Discord supplémentaire.
+          Discord Phase 1 : sync tâches + rappels opérationnels (flag séparé). Aucun cron Discord supplémentaire.
         </p>
       </div>
 

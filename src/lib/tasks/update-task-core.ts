@@ -19,6 +19,10 @@ import { getTaskById } from '@/lib/data/tasks';
 import { logStaffActivity } from '@/lib/activity/log-activity';
 import { notifyTaskAssignees, notifyTaskBlocked } from '@/lib/notifications/task-events';
 import { scheduleTaskDiscordUpsert } from '@/lib/discord/task-discord';
+import {
+  isWaitingTeamValidationStatus,
+  scheduleWaitingTeamValidationReminder,
+} from '@/lib/discord/operational-reminders';
 import type { TaskDepartment, TaskPriority, TaskStatus } from '@/types/database';
 import { isTaskStatusAllowedInWorkflow } from '@/types/domain';
 import { revalidatePath } from 'next/cache';
@@ -167,6 +171,9 @@ export async function updateTaskCore(
   }
 
   scheduleTaskDiscordUpsert(taskId);
+  if (isWaitingTeamValidationStatus(status) && !isWaitingTeamValidationStatus(current.status)) {
+    scheduleWaitingTeamValidationReminder(taskId);
+  }
 
   await logStaffActivity(ctx, {
     action: 'updated',

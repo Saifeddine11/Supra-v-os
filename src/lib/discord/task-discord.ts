@@ -7,6 +7,7 @@ import { hrefTasksOpenDetail } from '@/lib/tasks/task-deep-link';
 import {
   getDiscordBotToken,
   getDiscordGuildId,
+  isDiscordOperationalRemindersEnabled,
   isDiscordTaskSyncEnabled,
   normalizeDiscordSnowflake,
 } from '@/lib/discord/config';
@@ -401,7 +402,7 @@ export async function sendDiscordDeadlineReminders(input: {
     ...input.soon.map((task) => ({ task, kind: 'soon' as const })),
     ...input.overdue.map((task) => ({ task, kind: 'overdue' as const })),
   ];
-  if (!isDiscordTaskSyncEnabled() || tagged.length === 0) {
+  if (!isDiscordTaskSyncEnabled() || isDiscordOperationalRemindersEnabled() || tagged.length === 0) {
     return { sent, skipped };
   }
 
@@ -513,7 +514,7 @@ export async function sendDiscordMorningDigest(input: {
   overdue: { id: string; title: string; clientId: string | null; department: TaskDepartment | null }[];
   urgent: { id: string; title: string; clientId: string | null; department: TaskDepartment | null }[];
 }): Promise<boolean> {
-  if (!isDiscordTaskSyncEnabled()) return false;
+  if (!isDiscordTaskSyncEnabled() || isDiscordOperationalRemindersEnabled()) return false;
   try {
     const mentionId = normalizeDiscordSnowflake(input.discordUserId);
     const routes = await loadRoutes();

@@ -22,11 +22,29 @@ export function getDiscordGuildId(): string | null {
   return normalizeDiscordSnowflake(process.env.DISCORD_GUILD_ID ?? '');
 }
 
+function envFlagEnabled(name: string): boolean {
+  const v = (process.env[name] ?? '').trim().toLowerCase();
+  return v === '1' || v === 'true' || v === 'yes';
+}
+
 /** Live SUPRA → Discord task posts. Client provisioning and the test route work without this flag. */
 export function isDiscordTaskSyncEnabled(): boolean {
   if (!getDiscordBotToken()) return false;
-  const v = (process.env.DISCORD_TASK_SYNC_ENABLED ?? '').trim().toLowerCase();
-  return v === '1' || v === 'true' || v === 'yes';
+  return envFlagEnabled('DISCORD_TASK_SYNC_ENABLED');
+}
+
+/**
+ * Phase 1.1 operational Discord reminders (deadlines, waiting_team, shooting).
+ * Independent of task-card sync. Default off until verified.
+ */
+export function isDiscordOperationalRemindersEnabled(): boolean {
+  if (!getDiscordBotToken()) return false;
+  return envFlagEnabled('DISCORD_OPERATIONAL_REMINDERS_ENABLED');
+}
+
+/** Discord user snowflake for CEO / waiting_team validation mentions. Not an employee lookup. */
+export function getDiscordValidationApproverUserId(): string | null {
+  return normalizeDiscordSnowflake(process.env.DISCORD_VALIDATION_APPROVER_USER_ID ?? '');
 }
 
 export function discordApiBase(): string {
