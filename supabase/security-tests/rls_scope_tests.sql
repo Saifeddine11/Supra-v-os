@@ -15,6 +15,7 @@ where proname like 'auth\_staff\_%' escape '\'
    or proname in (
      'auth_user_role',
      'auth_employee_id',
+     'auth_client_id',
      'auth_can_view_global_finance',
      'auth_is_admin_or_pm'
    )
