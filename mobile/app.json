@@ -1,0 +1,70 @@
+{
+  "expo": {
+    "name": "Supra v OS",
+    "slug": "supra-v-os",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "supravos",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "backgroundColor": "#F8F4EF",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F8F4EF"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.suprav3.mobile",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIBackgroundModes": [
+          "remote-notification",
+          "remote-notification"
+        ]
+      }
+    },
+    "android": {
+      "package": "com.suprav3.mobile",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#080706"
+      },
+      "permissions": [
+        "NOTIFICATIONS",
+        "POST_NOTIFICATIONS",
+        "NOTIFICATIONS",
+        "POST_NOTIFICATIONS"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "@react-native-community/datetimepicker",
+      [
+        "expo-notifications",
+        {
+          "color": "#FF3D0A",
+          "defaultChannel": "default"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": false
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "b0587761-b3e0-47cf-afa2-86a2df463b81"
+      }
+    },
+    "owner": "saifeddine11",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/b0587761-b3e0-47cf-afa2-86a2df463b81"
+    }
+  }
+}

@@ -1,6 +1,8 @@
 import 'server-only';
 
+import { after } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { sendPushNotificationToUsers } from '@/lib/notifications/expo-push';
 import type { NotificationPriority, NotificationType, UserRole } from '@/types/database';
 
 export type NotificationInsert = {
@@ -15,13 +17,53 @@ export type NotificationInsert = {
 };
 
 /**
+ * Planifie le push HORS du chemin critique de l'action métier.
+ *
+ * Pourquoi pas un simple « fire-and-forget » (promesse non attendue) : en
+ * serverless (Vercel), le runtime peut être gelé dès la réponse envoyée et la
+ * promesse détachée ne serait jamais terminée — push perdu silencieusement.
+ * `after()` (Next 15) exécute le travail APRÈS la réponse tout en gardant
+ * l'invocation vivante : non bloquant ET fiable.
+ *
+ * Repli : hors contexte de requête (script/worker), `after()` lève ; on
+ * bascule alors sur une exécution détachée protégée (le process reste vivant
+ * dans ce cas de figure).
+ *
+ * Dans tous les cas : aucune exception ne remonte, aucun jeton n'est loggé.
+ */
+function schedulePush(run: () => Promise<void>): void {
+  const safe = () =>
+    run().catch((e) => {
+      console.error(
+        '[insertNotifications] push failed:',
+        e instanceof Error ? e.message : 'unknown',
+      );
+    });
+
+  try {
+    after(safe);
+  } catch {
+    void safe();
+  }
+}
+
+/**
  * Insert one or more notifications (service role — bypasses RLS).
+ *
+ * Point d'entrée UNIQUE des notifications in-app : c'est donc ici qu'est
+ * déclenché le push mobile, afin que tous les flux existants (assignation,
+ * échéance, retard, livraison, validation, alertes critiques…) en héritent
+ * sans duplication. Le push suit strictement `recipient_user_id` — aucun
+ * envoi à tout le monde.
+ *
+ * Le push est best-effort : une erreur d'envoi ne doit jamais faire échouer
+ * la création de la notification ni l'action métier appelante.
  */
 export async function insertNotifications(rows: NotificationInsert[]): Promise<void> {
   if (rows.length === 0) return;
   const admin = createAdminClient();
   const now = new Date().toISOString();
-  await admin.from('notifications').insert(
+  const { error } = await admin.from('notifications').insert(
     rows.map((r) => ({
       recipient_user_id: r.recipient_user_id,
       type: r.type,
@@ -34,6 +76,32 @@ export async function insertNotifications(rows: NotificationInsert[]): Promise<v
       updated_at: now,
     }))
   );
+
+  if (error) {
+    console.error('[insertNotifications] insert:', error.message);
+    return; // pas de push si la notification n'a pas été créée
+  }
+
+  // Notification in-app = source de vérité (déjà écrite ci-dessus).
+  // Le push part hors du chemin critique : zéro latence ajoutée à l'action.
+  const pushEntries = rows.map((r) => ({
+    userId: r.recipient_user_id,
+    payload: {
+      title: r.title,
+      body: r.message,
+      priority: (r.priority === 'urgent' || r.priority === 'high'
+        ? 'high'
+        : 'default') as 'high' | 'default',
+      data: {
+        type: r.type,
+        link_url: r.link_url ?? null,
+        related_entity_type: r.related_entity_type ?? null,
+        related_entity_id: r.related_entity_id ?? null,
+      },
+    },
+  }));
+
+  schedulePush(() => sendPushNotificationToUsers(pushEntries));
 }
 
 export type DedupeKey = {
@@ -83,10 +151,24 @@ export async function createNotificationOnce(
   return { inserted: true };
 }
 
+/**
+ * Resolves the Auth user id of an employee for notification delivery.
+ *
+ * Returns null for inactive, archived, or Auth-less employees: a deactivated
+ * collaborator must never receive notifications. Same filters as
+ * `getUserIdsByRoles` below, so both recipient paths behave identically.
+ */
 export async function getEmployeeUserId(employeeId: string | null | undefined): Promise<string | null> {
   if (!employeeId) return null;
   const admin = createAdminClient();
-  const { data } = await admin.from('employees').select('user_id').eq('id', employeeId).maybeSingle();
+  const { data } = await admin
+    .from('employees')
+    .select('user_id')
+    .eq('id', employeeId)
+    .eq('is_active', true)
+    .is('archived_at', null)
+    .not('user_id', 'is', null)
+    .maybeSingle();
   return data?.user_id ?? null;
 }
 
