@@ -17,6 +17,7 @@ create extension if not exists "pgcrypto";
 create type user_role as enum (
   'admin',
   'project_manager',
+  'department_supervisor',
   'editor',
   'cameraman',
   'developer',
@@ -232,6 +233,8 @@ create table employees (
   user_id         uuid references auth.users(id) on delete cascade unique,
   full_name       text not null,
   role            user_role not null default 'editor',
+  department      task_department,            -- canonical pole; supervisor scope follows this
+  is_department_supervisor boolean not null default false,
   email           text not null unique,
   phone           text,
   avatar_url      text,
@@ -252,6 +255,7 @@ create table employees (
 
 create index idx_employees_user on employees(user_id);
 create index idx_employees_role on employees(role);
+create index idx_employees_department on employees(department);
 create index idx_employees_active on employees(is_active);
 create index idx_employees_archived on employees(archived_at);
 
@@ -1131,6 +1135,8 @@ begin
 
   if new.id is distinct from old.id
      or new.role is distinct from old.role
+     or new.department is distinct from old.department
+     or new.is_department_supervisor is distinct from old.is_department_supervisor
      or new.is_active is distinct from old.is_active
      or new.email is distinct from old.email
      or new.user_id is distinct from old.user_id

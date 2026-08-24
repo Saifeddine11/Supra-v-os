@@ -31,6 +31,8 @@ import { SectionCard } from '@/components/shared/section-card';
 import { CalendarToolbar, type CalendarNav } from './calendar-toolbar';
 import { CalendarMobileDefaultRedirect } from './calendar-mobile-default';
 import dynamic from 'next/dynamic';
+import { TaskFormConstraintsProvider } from '../task-form-constraints';
+import { lockedTaskDepartmentForActor } from '@/lib/auth/supervision-server';
 
 const TasksCalendarExperience = dynamic(
   () => import('./tasks-calendar-experience').then((m) => ({ default: m.TasksCalendarExperience })),
@@ -168,6 +170,7 @@ export default async function TasksCalendarPage({
     view === 'month' ? 'Mois' : view === 'week' ? 'Semaine' : 'Jour';
 
   return (
+    <TaskFormConstraintsProvider lockedDepartment={calCtx ? lockedTaskDepartmentForActor(calCtx) : null}>
     <div className="space-y-6">
       <Suspense fallback={null}>
         <CalendarMobileDefaultRedirect />
@@ -222,5 +225,6 @@ export default async function TasksCalendarPage({
         </p>
       </SectionCard>
     </div>
+    </TaskFormConstraintsProvider>
   );
 }

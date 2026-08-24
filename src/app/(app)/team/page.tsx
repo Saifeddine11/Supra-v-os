@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { listTeamMembersWithStats, type TeamListFilters } from '@/lib/data/team';
 import { getAuthContext } from '@/lib/auth/permissions';
 import { canManageEmployees } from '@/lib/auth/capabilities';
-import { ROLE_LABELS } from '@/types/domain';
+import { ROLE_LABELS, TASK_DEPARTMENT_MAP } from '@/types/domain';
 import type { UserRole } from '@/types/database';
 import { Badge } from '@/components/ui/badge';
 import { SectionCard } from '@/components/shared/section-card';
@@ -14,6 +14,7 @@ import { NewTeamMemberDialog } from './new-member-dialog';
 import { TeamMemberRowActions } from './team-member-row-actions';
 import { cn } from '@/lib/utils/cn';
 import { getStatusTableRowClasses, teamMemberTableRowTone } from '@/lib/ui/status-block-tone';
+import { isDepartmentSupervisor } from '@/lib/auth/supervision';
 
 export const metadata: Metadata = { title: 'Équipe' };
 
@@ -60,7 +61,7 @@ export default async function TeamPage({
     overdueOnly: sp?.overdue === '1',
   };
 
-  const rows = await listTeamMembersWithStats(filters);
+  const rows = await listTeamMembersWithStats(filters, ctx);
 
   return (
     <div className="space-y-6">
@@ -130,13 +131,32 @@ export default async function TeamPage({
                           color={e.avatar_color}
                           size="sm"
                         />
-                        <span className="font-medium text-foreground hover:text-primary">{e.full_name}</span>
+                        <span className="min-w-0">
+                          <span className="block font-medium text-foreground hover:text-primary">{e.full_name}</span>
+                          {isDepartmentSupervisor(e) ? (
+                            <span className="block text-xs text-muted-foreground">
+                              Superviseur
+                              {e.department ? ` · ${TASK_DEPARTMENT_MAP[e.department].label}` : ''}
+                            </span>
+                          ) : e.department ? (
+                            <span className="block text-xs text-muted-foreground">
+                              {TASK_DEPARTMENT_MAP[e.department].label}
+                            </span>
+                          ) : null}
+                        </span>
                       </Link>
                     </td>
                     <td className="px-4 py-3">
-                      <Badge variant="outline" className="font-normal">
-                        {ROLE_LABELS[e.role]}
-                      </Badge>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <Badge variant="outline" className="font-normal">
+                          {ROLE_LABELS[e.role]}
+                        </Badge>
+                        {isDepartmentSupervisor(e) ? (
+                          <Badge variant="primary" className="text-[10px] uppercase tracking-wider">
+                            Superviseur
+                          </Badge>
+                        ) : null}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex max-w-[220px] flex-wrap gap-1">

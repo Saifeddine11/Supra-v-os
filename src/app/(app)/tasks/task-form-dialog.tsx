@@ -25,6 +25,7 @@ import {
 } from '@/components/shared/operational-datetime-field';
 import { toDatetimeLocalValue } from '@/lib/dates/datetime-local';
 import { getClientColor } from '@/lib/ui/client-colors';
+import { useTaskFormConstraints } from './task-form-constraints';
 
 const STATUSES: TaskStatus[] = [...TASK_KANBAN_STATUSES];
 const PRIORITIES: TaskPriority[] = ['low', 'normal', 'high', 'urgent'];
@@ -69,6 +70,9 @@ export function TaskFormDialog({
   const isEdit = Boolean(task);
   const taskKey = task?.id ?? '__create__';
   const videoLinked = Boolean(task?.video_id);
+  const { lockedDepartment } = useTaskFormConstraints();
+  const departmentLocked = Boolean(lockedDepartment);
+  const departmentValue = lockedDepartment ?? task?.department ?? (videoLinked ? 'production_video' : '');
 
   useEffect(() => {
     if (!open) setErr(null);
@@ -163,22 +167,32 @@ export function TaskFormDialog({
             </div>
             <div className="grid gap-2">
               <Label htmlFor="task-department">Département</Label>
-              <select
-                id="task-department"
-                name="department"
-                required={!isEdit}
-                defaultValue={
-                  task?.department ?? (videoLinked ? 'production_video' : '')
-                }
-                className="h-10 rounded-lg border border-border bg-muted px-3 text-sm"
-              >
-                <option value="">{isEdit ? '—' : 'Choisir un département'}</option>
-                {TASK_DEPARTMENT_OPTIONS.map((d) => (
-                  <option key={d} value={d}>
-                    {TASK_DEPARTMENT_MAP[d].label}
-                  </option>
-                ))}
-              </select>
+              {departmentLocked ? (
+                <>
+                  <input type="hidden" name="department" value={lockedDepartment ?? ''} />
+                  <p className="flex h-10 items-center rounded-lg border border-border bg-muted px-3 text-sm text-foreground">
+                    {lockedDepartment ? TASK_DEPARTMENT_MAP[lockedDepartment].label : '—'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Le pôle est fixé sur votre département. Vous ne pouvez assigner que les membres de ce pôle.
+                  </p>
+                </>
+              ) : (
+                <select
+                  id="task-department"
+                  name="department"
+                  required={!isEdit}
+                  defaultValue={departmentValue}
+                  className="h-10 rounded-lg border border-border bg-muted px-3 text-sm"
+                >
+                  <option value="">{isEdit ? '—' : 'Choisir un département'}</option>
+                  {TASK_DEPARTMENT_OPTIONS.map((d) => (
+                    <option key={d} value={d}>
+                      {TASK_DEPARTMENT_MAP[d].label}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
           </div>
           <div className="grid gap-2">

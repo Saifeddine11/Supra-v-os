@@ -3,6 +3,7 @@ import type { AuthContext } from '@/lib/auth/permissions';
 import { getAuthContext } from '@/lib/auth/permissions';
 import {
   shouldScopeTasksToAssignee,
+  shouldScopeTasksToDepartment,
   taskListingDenied,
 } from '@/lib/auth/data-scope';
 import { canManageAllTasks } from '@/lib/auth/capabilities';
@@ -103,6 +104,10 @@ export async function listTasks(
     .neq('status', 'archived')
     .order('deadline', { ascending: true, nullsFirst: false });
 
+  if (shouldScopeTasksToDepartment(auth) && auth.employee?.department) {
+    q = q.eq('department', auth.employee.department);
+  }
+
   if (shouldScopeTasksToAssignee(auth) && auth.employee) {
     const eid = auth.employee.id;
     const fromPivot = await fetchTaskIdsAssignedToEmployee(supabase, eid);
@@ -175,6 +180,12 @@ export async function getTaskById(
   if (!data || !auth?.role) return null;
   if (taskListingDenied(auth)) return null;
   if (canManageAllTasks(auth.role)) {
+    const [enriched] = await enrichTasks([data as Task]);
+    return enriched ?? null;
+  }
+  if (shouldScopeTasksToDepartment(auth)) {
+    const dept = auth.employee?.department ?? null;
+    if (!dept || data.department !== dept) return null;
     const [enriched] = await enrichTasks([data as Task]);
     return enriched ?? null;
   }

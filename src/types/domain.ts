@@ -48,9 +48,9 @@ export const TASK_STATUS_MAP: Record<TaskStatus, StatusConfig> = {
 export const TASK_DEPARTMENT_MAP: Record<TaskDepartment, StatusConfig> = {
   production_video:      { label: 'Production vidéo',      color: '#FF450F' },
   video_distribution:    { label: 'Distribution vidéo',    color: '#D14A28' },
-  community_management:  { label: 'Community management',  color: '#C4789B' },
-  media_buying:          { label: 'Media buying',          color: '#E07B3A' },
-  web_seo:               { label: 'Web / SEO',             color: '#5B8FD4' },
+  community_management:  { label: 'Community Management',  color: '#C4789B' },
+  media_buying:          { label: 'Media Buying',          color: '#E07B3A' },
+  web_seo:               { label: 'Web & SEO',             color: '#5B8FD4' },
 };
 
 export const TASK_DEPARTMENT_OPTIONS: TaskDepartment[] = [
@@ -191,6 +191,7 @@ export const PROJECT_TYPE_OPTIONS = [
 export const ROLE_LABELS: Record<UserRole, string> = {
   admin:             'Administrateur',
   project_manager:   'Chef de projet',
+  department_supervisor: 'Superviseur',
   editor:            'Monteur',
   cameraman:         'Caméraman',
   developer:         'Développeur',

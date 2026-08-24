@@ -6,12 +6,19 @@ import { getAuthContext } from '@/lib/auth/permissions';
 import { canManageEmployees } from '@/lib/auth/capabilities';
 import { actionError, actionOk, getPostgrestError, type ActionResult } from '@/lib/actions/types';
 import { logStaffActivity } from '@/lib/activity/log-activity';
-import type { UserRole } from '@/types/database';
+import type { TaskDepartment, UserRole } from '@/types/database';
 import { OPERATIONAL_SKILL_ROLES, ROLE_LABELS, TEAM_ASSIGNABLE_ROLES } from '@/types/domain';
 import {
   normalizeOperationalSkills,
   parseOperationalSkillsFromForm,
 } from '@/lib/employees/operational-skills';
+import { parseTaskDepartmentInput } from '@/lib/tasks/task-department';
+import {
+  inferDepartmentFromRole,
+  isDepartmentSupervisor,
+  resolveEmployeeDepartment,
+  restoreRoleAfterSupervision,
+} from '@/lib/auth/supervision';
 import {
   assertLastActiveAdminNotRemoved,
   countActiveAdminsExcluding,
@@ -22,6 +29,11 @@ import { inviteEmployeeAuth } from '@/lib/employees/auth-provision';
 function parseAssignableRole(raw: string): UserRole | null {
   const r = raw.trim() as UserRole;
   return TEAM_ASSIGNABLE_ROLES.includes(r) ? r : null;
+}
+
+function skillsWithJobRole(skills: UserRole[], role: UserRole): UserRole[] {
+  if (!OPERATIONAL_SKILL_ROLES.includes(role)) return normalizeOperationalSkills(skills);
+  return normalizeOperationalSkills([...skills, role]);
 }
 
 function initialsFromName(name: string, explicit?: string | null): string {
@@ -71,6 +83,7 @@ export async function createEmployeeAction(
   if (operational_skills.length === 0 && OPERATIONAL_SKILL_ROLES.includes(role)) {
     operational_skills = normalizeOperationalSkills([role]);
   }
+  const department = inferDepartmentFromRole(role);
 
   const supabase = await createClient();
 
@@ -81,6 +94,7 @@ export async function createEmployeeAction(
       email,
       phone,
       role,
+      department,
       operational_skills,
       weekly_capacity,
       avatar_initials,
@@ -213,7 +227,7 @@ export async function updateEmployeeAdminAction(employeeId: string, formData: Fo
   const supabase = await createClient();
   const { data: cur, error: curErr } = await supabase
     .from('employees')
-    .select('user_id, email, role, is_active, archived_at, operational_skills')
+    .select('user_id, email, role, department, is_active, archived_at, operational_skills')
     .eq('id', employeeId)
     .maybeSingle();
   if (curErr) return actionError(getPostgrestError(curErr));
@@ -304,11 +318,14 @@ export async function changeEmployeeRoleAction(
 
   const newRole = parseAssignableRole(newRoleRaw);
   if (!newRole) return actionError('Rôle invalide.');
+  if (newRole === 'department_supervisor' || isDepartmentSupervisor(newRole)) {
+    return actionError('Utilisez l’action « Définir comme superviseur du pôle ».');
+  }
 
   const supabase = await createClient();
   const { data: cur, error: curErr } = await supabase
     .from('employees')
-    .select('role, full_name, is_active, archived_at')
+    .select('role, department, is_department_supervisor, operational_skills, full_name, is_active, archived_at')
     .eq('id', employeeId)
     .maybeSingle();
   if (curErr) return actionError(getPostgrestError(curErr));
@@ -332,10 +349,17 @@ export async function changeEmployeeRoleAction(
   );
   if (!lastAdmin.ok) return lastAdmin;
 
+  const mappedDept = inferDepartmentFromRole(newRole);
+  const nextDepartment =
+    (cur.department as TaskDepartment | null) ?? mappedDept;
+  const clearSupervisor = newRole === 'admin' || newRole === 'project_manager';
+
   const { error } = await supabase
     .from('employees')
     .update({
       role: newRole,
+      department: nextDepartment,
+      ...(clearSupervisor ? { is_department_supervisor: false } : {}),
       updated_at: new Date().toISOString(),
     })
     .eq('id', employeeId);
@@ -358,6 +382,282 @@ export async function changeEmployeeRoleAction(
   revalidatePath('/team');
   revalidatePath(`/team/${employeeId}`);
   return actionOk();
+  } catch (e) {
+    return caughtActionError(e);
+  }
+}
+
+export async function updateEmployeeDepartmentAction(
+  employeeId: string,
+  departmentRaw: string,
+): Promise<ActionResult> {
+  try {
+    const ctx = await getAuthContext();
+    if (!ctx || !canManageEmployees(ctx.role)) {
+      return actionError('Réservé aux administrateurs.');
+    }
+
+    const parsed = parseTaskDepartmentInput(departmentRaw);
+    if (!parsed.ok) return actionError(parsed.error);
+
+    const supabase = await createClient();
+    const { data: cur, error: curErr } = await supabase
+      .from('employees')
+      .select('department, is_department_supervisor, full_name')
+      .eq('id', employeeId)
+      .maybeSingle();
+    if (curErr) return actionError(getPostgrestError(curErr));
+    if (!cur) return actionError('Collaborateur introuvable.');
+
+    if (!parsed.value && isDepartmentSupervisor(cur)) {
+      return actionError('Retirez d’abord le rôle de superviseur ou attribuez un autre pôle.');
+    }
+
+    const { error } = await supabase
+      .from('employees')
+      .update({
+        department: parsed.value,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', employeeId);
+    if (error) return actionError(getPostgrestError(error));
+
+    await logStaffActivity(ctx, {
+      action: 'employee_updated',
+      entityType: 'employee',
+      entityId: employeeId,
+      metadata: {
+        employee_name: cur.full_name,
+        department: parsed.value,
+      },
+    });
+
+    revalidatePath('/team');
+    revalidatePath(`/team/${employeeId}`);
+    revalidatePath('/dashboard');
+    return actionOk();
+  } catch (e) {
+    return caughtActionError(e);
+  }
+}
+
+async function loadEmployeeForSupervision(employeeId: string) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('employees')
+    .select('id, role, department, is_department_supervisor, operational_skills, full_name, is_active, archived_at')
+    .eq('id', employeeId)
+    .maybeSingle();
+  return { supabase, data, error };
+}
+
+export async function makeDepartmentSupervisorAction(employeeId: string): Promise<ActionResult> {
+  try {
+    const ctx = await getAuthContext();
+    if (!ctx || !canManageEmployees(ctx.role)) {
+      return actionError('Réservé aux administrateurs.');
+    }
+
+    const { supabase, data: cur, error: curErr } = await loadEmployeeForSupervision(employeeId);
+    if (curErr) return actionError(getPostgrestError(curErr));
+    if (!cur) return actionError('Collaborateur introuvable.');
+    if (isDepartmentSupervisor(cur)) return actionOk();
+    if (cur.role === 'admin' || cur.role === 'project_manager') {
+      return actionError('Direction et chef de projet ont déjà un périmètre plus large.');
+    }
+
+    const department = resolveEmployeeDepartment({
+      department: (cur.department as TaskDepartment | null) ?? null,
+      role: cur.role as UserRole,
+      operational_skills: (cur.operational_skills ?? []) as UserRole[],
+    });
+    if (!department) {
+      return actionError('Ce collaborateur n’a pas de pôle. Renseignez d’abord son département.');
+    }
+
+    const nextSkills = skillsWithJobRole((cur.operational_skills ?? []) as UserRole[], cur.role as UserRole);
+    const { error } = await supabase
+      .from('employees')
+      .update({
+        is_department_supervisor: true,
+        department,
+        operational_skills: nextSkills,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', employeeId);
+    if (error) return actionError(getPostgrestError(error));
+
+    await logStaffActivity(ctx, {
+      action: 'employee_role_changed',
+      entityType: 'employee',
+      entityId: employeeId,
+      metadata: {
+        employee_name: cur.full_name,
+        old_role: cur.role,
+        old_role_label: ROLE_LABELS[cur.role as UserRole],
+        is_department_supervisor: true,
+        department,
+      },
+    });
+
+    revalidatePath('/team');
+    revalidatePath(`/team/${employeeId}`);
+    revalidatePath('/dashboard');
+    return actionOk();
+  } catch (e) {
+    return caughtActionError(e);
+  }
+}
+
+export async function removeDepartmentSupervisorAction(employeeId: string): Promise<ActionResult> {
+  try {
+    const ctx = await getAuthContext();
+    if (!ctx || !canManageEmployees(ctx.role)) {
+      return actionError('Réservé aux administrateurs.');
+    }
+
+    const { supabase, data: cur, error: curErr } = await loadEmployeeForSupervision(employeeId);
+    if (curErr) return actionError(getPostgrestError(curErr));
+    if (!cur) return actionError('Collaborateur introuvable.');
+    if (!isDepartmentSupervisor(cur)) return actionOk();
+
+    const restored =
+      (cur.role as UserRole) === 'department_supervisor'
+        ? restoreRoleAfterSupervision({
+            department: (cur.department as TaskDepartment | null) ?? null,
+            operational_skills: (cur.operational_skills ?? []) as UserRole[],
+            role: cur.role as UserRole,
+          })
+        : (cur.role as UserRole);
+
+    const { error } = await supabase
+      .from('employees')
+      .update({
+        is_department_supervisor: false,
+        role: restored,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', employeeId);
+    if (error) return actionError(getPostgrestError(error));
+
+    await logStaffActivity(ctx, {
+      action: 'employee_role_changed',
+      entityType: 'employee',
+      entityId: employeeId,
+      metadata: {
+        employee_name: cur.full_name,
+        old_role: cur.role,
+        new_role: restored,
+        new_role_label: ROLE_LABELS[restored],
+      },
+    });
+
+    revalidatePath('/team');
+    revalidatePath(`/team/${employeeId}`);
+    revalidatePath('/dashboard');
+    return actionOk();
+  } catch (e) {
+    return caughtActionError(e);
+  }
+}
+
+export async function makeProjectManagerAction(employeeId: string): Promise<ActionResult> {
+  try {
+    const ctx = await getAuthContext();
+    if (!ctx || !canManageEmployees(ctx.role)) {
+      return actionError('Réservé aux administrateurs.');
+    }
+
+    const { supabase, data: cur, error: curErr } = await loadEmployeeForSupervision(employeeId);
+    if (curErr) return actionError(getPostgrestError(curErr));
+    if (!cur) return actionError('Collaborateur introuvable.');
+    if (cur.role === 'project_manager') return actionOk();
+
+    const lastAdmin = await assertLastActiveAdminNotRemoved(
+      supabase,
+      employeeId,
+      'project_manager',
+      cur.is_active,
+      cur.archived_at,
+    );
+    if (!lastAdmin.ok) return lastAdmin;
+
+    const nextSkills = skillsWithJobRole((cur.operational_skills ?? []) as UserRole[], cur.role as UserRole);
+    const { error } = await supabase
+      .from('employees')
+      .update({
+        role: 'project_manager',
+        is_department_supervisor: false,
+        operational_skills: nextSkills,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', employeeId);
+    if (error) return actionError(getPostgrestError(error));
+
+    await logStaffActivity(ctx, {
+      action: 'employee_role_changed',
+      entityType: 'employee',
+      entityId: employeeId,
+      metadata: {
+        employee_name: cur.full_name,
+        old_role: cur.role,
+        old_role_label: ROLE_LABELS[cur.role as UserRole],
+        new_role: 'project_manager',
+        new_role_label: ROLE_LABELS.project_manager,
+      },
+    });
+
+    revalidatePath('/team');
+    revalidatePath(`/team/${employeeId}`);
+    revalidatePath('/dashboard');
+    return actionOk();
+  } catch (e) {
+    return caughtActionError(e);
+  }
+}
+
+export async function removeProjectManagerAction(employeeId: string): Promise<ActionResult> {
+  try {
+    const ctx = await getAuthContext();
+    if (!ctx || !canManageEmployees(ctx.role)) {
+      return actionError('Réservé aux administrateurs.');
+    }
+
+    const { supabase, data: cur, error: curErr } = await loadEmployeeForSupervision(employeeId);
+    if (curErr) return actionError(getPostgrestError(curErr));
+    if (!cur) return actionError('Collaborateur introuvable.');
+    if (cur.role !== 'project_manager') return actionOk();
+
+    const restored = restoreRoleAfterSupervision({
+      department: (cur.department as TaskDepartment | null) ?? null,
+      operational_skills: (cur.operational_skills ?? []) as UserRole[],
+    });
+
+    const { error } = await supabase
+      .from('employees')
+      .update({
+        role: restored,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', employeeId);
+    if (error) return actionError(getPostgrestError(error));
+
+    await logStaffActivity(ctx, {
+      action: 'employee_role_changed',
+      entityType: 'employee',
+      entityId: employeeId,
+      metadata: {
+        employee_name: cur.full_name,
+        old_role: cur.role,
+        new_role: restored,
+        new_role_label: ROLE_LABELS[restored],
+      },
+    });
+
+    revalidatePath('/team');
+    revalidatePath(`/team/${employeeId}`);
+    revalidatePath('/dashboard');
+    return actionOk();
   } catch (e) {
     return caughtActionError(e);
   }

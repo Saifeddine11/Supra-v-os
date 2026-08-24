@@ -18,6 +18,7 @@ import {
 const STAFF: UserRole[] = [
   'admin',
   'project_manager',
+  'department_supervisor',
   'commercial',
   'finance',
   'editor',
@@ -37,9 +38,16 @@ function navKey(role: UserRole): UserRole {
   return role === 'designer' ? 'developer' : role;
 }
 
+export type NavFlags = { isDepartmentSupervisor?: boolean };
+
+function supervisorNav(role: UserRole, flags?: NavFlags): boolean {
+  return role === 'department_supervisor' || Boolean(flags?.isDepartmentSupervisor);
+}
+
 /** Filtre un item de navigation selon le rôle. */
-export function navItemVisible(href: string, role: UserRole): boolean {
+export function navItemVisible(href: string, role: UserRole, flags?: NavFlags): boolean {
   const r = navKey(role);
+  const sup = supervisorNav(role, flags);
 
   switch (href) {
     case '/dashboard':
@@ -51,17 +59,21 @@ export function navItemVisible(href: string, role: UserRole): boolean {
       return (
         r === 'admin' ||
         r === 'project_manager' ||
+        r === 'department_supervisor' ||
+        sup ||
         r === 'editor' ||
         r === 'cameraman' ||
         r === 'community_manager'
       );
     case '/editorial':
-      return r === 'admin' || r === 'project_manager' || r === 'community_manager';
+      return r === 'admin' || r === 'project_manager' || r === 'department_supervisor' || sup || r === 'community_manager';
     case '/tasks':
     case '/tasks/calendar':
       return (
         r === 'admin' ||
         r === 'project_manager' ||
+        r === 'department_supervisor' ||
+        sup ||
         r === 'editor' ||
         r === 'cameraman' ||
         r === 'developer' ||
@@ -79,7 +91,7 @@ export function navItemVisible(href: string, role: UserRole): boolean {
     case '/internal':
       return r === 'admin' || r === 'project_manager';
     case '/team':
-      return r === 'admin';
+      return r === 'admin' || r === 'project_manager' || r === 'department_supervisor' || sup;
     case '/invoices':
       return canViewInvoices(role);
     case '/quotes':
@@ -92,6 +104,8 @@ export function navItemVisible(href: string, role: UserRole): boolean {
       return (
         r === 'admin' ||
         r === 'project_manager' ||
+        r === 'department_supervisor' ||
+        sup ||
         r === 'commercial' ||
         r === 'editor' ||
         r === 'cameraman' ||
@@ -109,7 +123,7 @@ export function navItemVisible(href: string, role: UserRole): boolean {
   }
 }
 
-export function getNavGroupsForRole(role: UserRole | null): NavGroup[] {
+export function getNavGroupsForRole(role: UserRole | null, flags?: NavFlags): NavGroup[] {
   if (!isStaff(role)) {
     return [
       {
@@ -121,7 +135,7 @@ export function getNavGroupsForRole(role: UserRole | null): NavGroup[] {
 
   const out: NavGroup[] = [];
   for (const group of APP_NAV_GROUPS) {
-    const items = group.items.filter((item) => navItemVisible(item.href, role));
+    const items = group.items.filter((item) => navItemVisible(item.href, role, flags));
     if (items.length) out.push({ ...group, items });
   }
   return out;
@@ -130,7 +144,7 @@ export function getNavGroupsForRole(role: UserRole | null): NavGroup[] {
 /**
  * Vérifie l’accès à une route normalisée (ex. /clients, /tasks/calendar).
  */
-export function canAccessPath(role: UserRole | null, pathname: string): boolean {
+export function canAccessPath(role: UserRole | null, pathname: string, flags?: NavFlags): boolean {
   if (!isStaff(role)) return false;
   const p = pathname.split('?')[0] ?? pathname;
   if (p.startsWith('/access-denied')) return true;
@@ -139,20 +153,20 @@ export function canAccessPath(role: UserRole | null, pathname: string): boolean 
     return true;
   }
 
-  if (p.startsWith('/tasks/calendar')) return navItemVisible('/tasks/calendar', role);
-  if (p.startsWith('/tasks')) return navItemVisible('/tasks', role);
-  if (p.startsWith('/clients')) return navItemVisible('/clients', role);
-  if (p.startsWith('/videos')) return navItemVisible('/videos', role);
-  if (p.startsWith('/editorial')) return navItemVisible('/editorial', role);
-  if (p.startsWith('/projects')) return navItemVisible('/projects', role);
-  if (p.startsWith('/internal')) return navItemVisible('/internal', role);
-  if (p.startsWith('/team')) return navItemVisible('/team', role);
-  if (p.startsWith('/invoices')) return navItemVisible('/invoices', role);
-  if (p.startsWith('/quotes')) return navItemVisible('/quotes', role);
-  if (p.startsWith('/payments')) return navItemVisible('/payments', role);
-  if (p.startsWith('/reports')) return navItemVisible('/reports', role);
-  if (p.startsWith('/documents')) return navItemVisible('/documents', role);
-  if (p.startsWith('/portal-admin')) return navItemVisible('/portal-admin', role);
+  if (p.startsWith('/tasks/calendar')) return navItemVisible('/tasks/calendar', role, flags);
+  if (p.startsWith('/tasks')) return navItemVisible('/tasks', role, flags);
+  if (p.startsWith('/clients')) return navItemVisible('/clients', role, flags);
+  if (p.startsWith('/videos')) return navItemVisible('/videos', role, flags);
+  if (p.startsWith('/editorial')) return navItemVisible('/editorial', role, flags);
+  if (p.startsWith('/projects')) return navItemVisible('/projects', role, flags);
+  if (p.startsWith('/internal')) return navItemVisible('/internal', role, flags);
+  if (p.startsWith('/team')) return navItemVisible('/team', role, flags);
+  if (p.startsWith('/invoices')) return navItemVisible('/invoices', role, flags);
+  if (p.startsWith('/quotes')) return navItemVisible('/quotes', role, flags);
+  if (p.startsWith('/payments')) return navItemVisible('/payments', role, flags);
+  if (p.startsWith('/reports')) return navItemVisible('/reports', role, flags);
+  if (p.startsWith('/documents')) return navItemVisible('/documents', role, flags);
+  if (p.startsWith('/portal-admin')) return navItemVisible('/portal-admin', role, flags);
 
   return false;
 }

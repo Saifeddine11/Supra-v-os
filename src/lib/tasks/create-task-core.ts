@@ -12,6 +12,11 @@ import {
   shouldScopeTasksToAssignee,
   taskListingDenied,
 } from '@/lib/auth/data-scope';
+import {
+  assertAssigneesInSupervisionScope,
+  resolveCreatedTaskDepartment,
+} from '@/lib/auth/supervision-server';
+import { isDepartmentSupervisor } from '@/lib/auth/supervision';
 import { actionError, actionOk, getPostgrestError, type ActionResult } from '@/lib/actions/types';
 import type { TaskDepartment, TaskPriority, TaskStatus } from '@/types/database';
 import { isTaskStatusAllowedInWorkflow } from '@/types/domain';
@@ -109,13 +114,24 @@ export async function createTaskCore(
     return actionError('Client non autorisé pour cette tâche.');
   }
 
-  if (shouldScopeTasksToAssignee(ctx) && ctx.employee) {
+  if (shouldScopeTasksToAssignee(ctx) && ctx.employee && !isDepartmentSupervisor(ctx.employee ?? ctx.role)) {
     const eid = ctx.employee.id;
     if (assigneeIds.some((id) => id && id !== eid)) {
       return actionError('Vous ne pouvez vous assigner des tâches qu’à vous-même.');
     }
     if (assigneeIds.length === 0) assigneeIds = [eid];
   }
+
+  const departmentResolved = resolveCreatedTaskDepartment(ctx, input.department ?? null);
+  if (!departmentResolved.ok) return actionError(departmentResolved.error);
+
+  const assigneeScope = await assertAssigneesInSupervisionScope(
+    readSb,
+    ctx,
+    assigneeIds,
+    departmentResolved.value,
+  );
+  if (assigneeScope) return assigneeScope;
 
   for (const aid of assigneeIds) {
     const assignCheck = await requireAssignableEmployee(readSb, aid);
@@ -136,7 +152,7 @@ export async function createTaskCore(
     assignee_id: primary.assignee_id,
     status,
     priority: (input.priority ?? 'normal') as TaskPriority,
-    department: input.department ?? null,
+    department: departmentResolved.value,
     deadline: deadlineRaw ? new Date(deadlineRaw).toISOString() : null,
     created_by: user.id,
   };

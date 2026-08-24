@@ -29,7 +29,7 @@ export async function enforceRouteAccessForPathname(
     if (!ctx.employee || !ctx.role) {
       redirect('/access-denied');
     }
-    if (!canAccessPath(ctx.role, pathname)) {
+    if (!canAccessPath(ctx.role, pathname, { isDepartmentSupervisor: ctx.employee?.is_department_supervisor })) {
       redirect('/access-denied');
     }
   });
@@ -41,7 +41,7 @@ export async function enforceRouteAccess(segmentPath: string, existing?: AuthCon
   if (!ctx.employee || !ctx.role) {
     redirect('/access-denied');
   }
-  if (!canAccessPath(ctx.role, segmentPath)) {
+  if (!canAccessPath(ctx.role, segmentPath, { isDepartmentSupervisor: ctx.employee?.is_department_supervisor })) {
     redirect('/access-denied');
   }
 }

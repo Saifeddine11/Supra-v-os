@@ -2,6 +2,9 @@ import { createClient } from '@/lib/supabase/server';
 import type { Employee, Task, TaskStatus, UserRole, Video } from '@/types/database';
 import { fetchVideoIdsAssignedToEmployee } from '@/lib/data/video-assignments';
 import { fetchTaskIdsAssignedToEmployee } from '@/lib/data/task-assignments';
+import type { AuthContext } from '@/lib/auth/permissions';
+import { getAuthContext } from '@/lib/auth/permissions';
+import { canViewTeamDirectory, isDepartmentSupervisor } from '@/lib/auth/supervision';
 
 const OPEN_TASK_STATUSES: TaskStatus[] = [
   'todo',
@@ -155,7 +158,13 @@ async function enrichEmployeesToRows(emps: Employee[]): Promise<TeamMemberRow[]>
   });
 }
 
-export async function listTeamMembersWithStats(filters: TeamListFilters = {}): Promise<TeamMemberRow[]> {
+export async function listTeamMembersWithStats(
+  filters: TeamListFilters = {},
+  ctx: AuthContext | null = null,
+): Promise<TeamMemberRow[]> {
+  const auth = ctx ?? (await getAuthContext());
+  if (!auth?.role || !canViewTeamDirectory(auth.role, auth.employee?.is_department_supervisor)) return [];
+
   const supabase = await createClient();
   let q = supabase.from('employees').select('*').order('full_name');
 
@@ -176,6 +185,12 @@ export async function listTeamMembersWithStats(filters: TeamListFilters = {}): P
   if (emps.length === 0) return [];
 
   let rows = await enrichEmployeesToRows(emps);
+
+  if (isDepartmentSupervisor(auth.employee ?? auth.role)) {
+    const dept = auth.employee?.department ?? null;
+    if (!dept) return [];
+    rows = rows.filter((r) => r.department === dept);
+  }
 
   const s = filters.search?.trim().toLowerCase();
   if (s) {

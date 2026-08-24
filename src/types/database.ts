@@ -16,6 +16,7 @@
 export type UserRole =
   | 'admin'
   | 'project_manager'
+  | 'department_supervisor'
   | 'editor'
   | 'cameraman'
   | 'developer'
@@ -189,6 +190,10 @@ export interface Employee {
   user_id: string | null;
   full_name: string;
   role: UserRole;
+  /** Canonical pole — same enum as tasks.department. Supervisor scope follows this value. */
+  department: TaskDepartment | null;
+  /** Management responsibility for `department`. Independent of `role` (métier). */
+  is_department_supervisor: boolean;
   email: string;
   phone: string | null;
   avatar_url: string | null;

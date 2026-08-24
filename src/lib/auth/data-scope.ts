@@ -13,6 +13,7 @@ import {
 import { employeeHasTaskAssignment } from '@/lib/data/task-assignments';
 import type { AuthContext } from '@/lib/auth/permissions';
 import { canModifyQuotes, canViewInvoices } from '@/lib/auth/capabilities';
+import { isDepartmentSupervisor } from '@/lib/auth/supervision';
 import type { Project, UserRole } from '@/types/database';
 
 /** Rôles pouvant créer une fiche vidéo (aligné RLS `videos_insert_authorized` + produit). */
@@ -79,6 +80,11 @@ export function shouldScopeTasksToAssignee(ctx: AuthContext): boolean {
   return r != null && TASK_SELF_SCOPE_ROLES.includes(r);
 }
 
+export function shouldScopeTasksToDepartment(ctx: AuthContext): boolean {
+  if (ctx.role === 'admin' || ctx.role === 'project_manager') return false;
+  return isDepartmentSupervisor(ctx.employee ?? ctx.role);
+}
+
 export async function fetchManagedClientIds(sb: ScopedSupabase, employeeId: string): Promise<string[]> {
   const { data, error } = await sb.from('clients').select('id').eq('account_manager_id', employeeId);
   if (error) throw new Error(error.message);
@@ -94,7 +100,7 @@ export async function resolveVisibleClientIds(
   ctx: AuthContext
 ): Promise<'all' | string[]> {
   if (!ctx.role || !ctx.employee) return [];
-  if (hasFullOrgDataAccess(ctx) || ctx.role === 'finance') return 'all';
+  if (hasFullOrgDataAccess(ctx) || ctx.role === 'finance' || isDepartmentSupervisor(ctx.employee ?? ctx.role)) return 'all';
   if (ctx.role === 'commercial') return fetchManagedClientIds(sb, ctx.employee.id);
 
   const er = effectiveRole(ctx.role);
@@ -316,11 +322,15 @@ export async function assertTaskRecordVisible(
   ctx: AuthContext,
   taskId: string
 ): Promise<boolean> {
-  const { data: t, error } = await sb.from('tasks').select('assignee_id').eq('id', taskId).maybeSingle();
+  const { data: t, error } = await sb.from('tasks').select('assignee_id, department').eq('id', taskId).maybeSingle();
   if (error) throw new Error(error.message);
   if (!t) return false;
   if (hasFullOrgDataAccess(ctx)) return true;
   if (taskListingDenied(ctx)) return false;
+  if (shouldScopeTasksToDepartment(ctx)) {
+    const dept = ctx.employee?.department ?? null;
+    return Boolean(dept && t.department === dept);
+  }
   if (shouldScopeTasksToAssignee(ctx)) {
     const eid = ctx.employee?.id;
     if (!eid) return false;

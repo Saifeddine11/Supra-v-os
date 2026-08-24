@@ -12,6 +12,8 @@ import type { TaskPriority } from '@/types/database';
 import { SectionCard } from '@/components/shared/section-card';
 import { EmptyState } from '@/components/shared/empty-state';
 import { TasksToolbar } from './tasks-toolbar';
+import { TaskFormConstraintsProvider } from './task-form-constraints';
+import { lockedTaskDepartmentForActor } from '@/lib/auth/supervision-server';
 
 export const metadata: Metadata = { title: 'Tâches' };
 
@@ -54,8 +56,10 @@ export default async function TasksPage({
   const canChangeStatus = canChangeTaskStatus(ctx?.role ?? null);
   const canCreate = canCreateTasks(ctx?.role ?? null);
   const allowKanbanDrag = Boolean(ctx && canChangeStatus && !taskListingDenied(ctx));
+  const lockedDepartment = ctx ? lockedTaskDepartmentForActor(ctx) : null;
 
   return (
+    <TaskFormConstraintsProvider lockedDepartment={lockedDepartment}>
     <div className="space-y-3.5">
       <Suspense fallback={null}>
         <TasksNewTaskOpener clients={clientOptions} employees={employees} />
@@ -104,5 +108,6 @@ export default async function TasksPage({
         )}
       </SectionCard>
     </div>
+    </TaskFormConstraintsProvider>
   );
 }

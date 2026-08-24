@@ -1,9 +1,11 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { getTeamMemberDetail } from '@/lib/data/team';
 import { getAuthContext } from '@/lib/auth/permissions';
 import { canManageEmployees } from '@/lib/auth/capabilities';
+import { departmentLabel, isDepartmentSupervisor } from '@/lib/auth/supervision';
+import { assertActorCanViewEmployeeRow } from '@/lib/auth/supervision-server';
 import { ROLE_LABELS, TASK_STATUS_MAP, VIDEO_STATUS_MAP } from '@/types/domain';
 import { Badge } from '@/components/ui/badge';
 import { SectionCard } from '@/components/shared/section-card';
@@ -40,8 +42,11 @@ export default async function TeamMemberPage({ params }: { params: Promise<{ id:
     listActivityForEntity('employee', id, 40),
   ]);
   if (!member) notFound();
+  if (!ctx || !assertActorCanViewEmployeeRow(ctx, { id: member.id, department: member.department })) {
+    redirect('/access-denied');
+  }
 
-  const canAdmin = canManageEmployees(ctx?.role ?? null);
+  const canAdmin = canManageEmployees(ctx.role);
 
   return (
     <div className="space-y-8">
@@ -61,8 +66,13 @@ export default async function TeamMemberPage({ params }: { params: Promise<{ id:
               {member.full_name}
             </h1>
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <span className="text-xs text-muted-foreground">Rôle principal</span>
+              <span className="text-xs text-muted-foreground">Métier</span>
               <Badge variant="outline">{ROLE_LABELS[member.role]}</Badge>
+              {isDepartmentSupervisor(member) ? (
+                <Badge variant="primary" className="text-[10px] uppercase tracking-wider">
+                  Superviseur
+                </Badge>
+              ) : null}
               <Badge variant="outline" className="font-normal">
                 {AVAIL_LABEL[member.availability]}
               </Badge>
@@ -72,6 +82,15 @@ export default async function TeamMemberPage({ params }: { params: Promise<{ id:
                   <span className="text-destructive"> · {member.overdue_tasks} en retard</span>
                 ) : null}
               </span>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="text-xs text-muted-foreground">Pôle</span>
+              <span className="text-sm text-foreground">{departmentLabel(member.department)}</span>
+              {isDepartmentSupervisor(member) && member.department ? (
+                <span className="text-xs text-muted-foreground">
+                  · Superviseur de {departmentLabel(member.department)}
+                </span>
+              ) : null}
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <span className="text-xs text-muted-foreground">Compétences</span>
@@ -154,17 +173,31 @@ export default async function TeamMemberPage({ params }: { params: Promise<{ id:
         </SectionCard>
 
         {canAdmin ? (
-          <SectionCard title="Rôle et compétences" description="Réservé administrateur — rôle = permissions ; compétences = assignations">
+          <SectionCard title="Rôle et compétences" description="Réservé administrateur — métier, pôle et responsabilité">
             <EmployeeRoleForm
               employeeId={member.id}
+              fullName={member.full_name}
               currentRole={member.role}
+              department={member.department}
+              isDepartmentSupervisor={isDepartmentSupervisor(member)}
               operationalSkills={member.operational_skills ?? []}
             />
           </SectionCard>
         ) : (
           <SectionCard title="Rôle et compétences" description="Lecture seule">
             <p className="text-sm text-muted-foreground">
-              Rôle principal : {ROLE_LABELS[member.role]}
+              Métier : {ROLE_LABELS[member.role]}
+            </p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Pôle : {departmentLabel(member.department)}
+            </p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Responsabilité :{' '}
+              {isDepartmentSupervisor(member)
+                ? `Superviseur${member.department ? ` · ${departmentLabel(member.department)}` : ''}`
+                : member.role === 'project_manager'
+                  ? 'Chef de projet'
+                  : 'Membre du pôle'}
             </p>
             <p className="mt-2 text-sm text-muted-foreground">
               Compétences :{' '}

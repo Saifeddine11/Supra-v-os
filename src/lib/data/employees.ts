@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import type { AuthContext } from '@/lib/auth/permissions';
 import { getAuthContext } from '@/lib/auth/permissions';
 import { canManageAllTasks } from '@/lib/auth/capabilities';
-import { hasFullOrgDataAccess, taskListingDenied, shouldScopeTasksToAssignee } from '@/lib/auth/data-scope';
+import { hasFullOrgDataAccess, taskListingDenied, shouldScopeTasksToAssignee, shouldScopeTasksToDepartment } from '@/lib/auth/data-scope';
 import { fetchVideoIdsAssignedToEmployee } from '@/lib/data/video-assignments';
 import type { Employee, UserRole } from '@/types/database';
 import {
@@ -35,6 +35,18 @@ export async function listEmployeesForSelect(
   if (!auth?.role) return [];
 
   if (taskListingDenied(auth)) return [];
+
+  if (shouldScopeTasksToDepartment(auth) && auth.employee?.department) {
+    const { data, error } = await supabase
+      .from('employees')
+      .select('id, full_name, role')
+      .eq('is_active', true)
+      .is('archived_at', null)
+      .eq('department', auth.employee.department)
+      .order('full_name');
+    if (error) throw new Error(error.message);
+    return data ?? [];
+  }
 
   if (shouldScopeTasksToAssignee(auth) && auth.employee && !canManageAllTasks(auth.role)) {
     const { data } = await supabase

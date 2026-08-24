@@ -28,7 +28,9 @@ function isNavActive(pathname: string, href: string) {
 export function AppSidebar({ employee, email }: AppSidebarProps) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const navGroups = getNavGroupsForRole(employee.role);
+  const navGroups = getNavGroupsForRole(employee.role, {
+    isDepartmentSupervisor: employee.is_department_supervisor,
+  });
 
   const linkClass = (href: string) => {
     const active = isNavActive(pathname, href);

@@ -61,6 +61,8 @@ import { parseCockpitPeriod } from '@/lib/dashboard/period';
 import { fetchAdminCockpit } from '@/lib/data/dashboard-cockpit';
 import { AdminCockpit } from '@/components/dashboard/cockpit/admin-cockpit';
 import { CockpitSkeleton } from '@/components/dashboard/cockpit/cockpit-skeleton';
+import { fetchSupervisorDashboard } from '@/lib/data/dashboard-supervisor';
+import { SupervisorDepartmentBoard } from '@/components/dashboard/supervisor-department-board';
 
 export const metadata: Metadata = {
   title: 'Tableau de bord',
@@ -135,6 +137,9 @@ function introForDashboard(
       return 'Projets et tâches qui vous sont assignés, avec les échéances clés.';
     }
     return 'Vue centrée sur votre charge personnelle — sans journaux internes.';
+  }
+  if (variant === 'supervisor') {
+    return 'Pilotage de pôle : équipe, tâches, charge et travail en cours — limité à votre département.';
   }
   if (variant === 'manager') {
     return 'Pilotage opérationnel : clients, projets, production et charge équipe. Les journaux RH et Auth ne sont pas affichés ici.';
@@ -355,8 +360,9 @@ export default async function DashboardPage({
     redirect('/login?next=/dashboard');
   }
 
-  const variant = getDashboardVariant(ctx.role);
-  const scope = dashboardScopeFromRole(ctx.role);
+  const isSupervisor = Boolean(ctx.employee.is_department_supervisor);
+  const variant = getDashboardVariant(ctx.role, isSupervisor);
+  const scope = dashboardScopeFromRole(ctx.role, isSupervisor);
   const sp = await searchParams;
   const period = parseCockpitPeriod(sp?.period);
 
@@ -391,6 +397,23 @@ export default async function DashboardPage({
     );
   }
 
+  if (variant === 'supervisor') {
+    return (
+      <div className="space-y-8">
+        <LoginPerfBeacon label="dashboard first render" />
+        <DashboardGreetingHeader
+          fullName={ctx.employee.full_name}
+          role={ctx.employee.role}
+          variant={variant}
+          scope={scope}
+        />
+        <Suspense fallback={<PageLoadingSkeleton titleWidth="w-56" />}>
+          <SupervisorDashboardLive ctx={ctx} />
+        </Suspense>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
       <LoginPerfBeacon label="dashboard first render" />
@@ -405,6 +428,21 @@ export default async function DashboardPage({
       </Suspense>
     </div>
   );
+}
+
+async function SupervisorDashboardLive({ ctx }: { ctx: AuthContext }) {
+  const data = await fetchSupervisorDashboard(ctx);
+  if (!data) {
+    return (
+      <SectionCard title="Pôle" description="Aucun département n’est renseigné sur votre profil.">
+        <p className="text-sm text-muted-foreground">
+          Contactez Direction pour associer votre compte à un pôle. Le périmètre de supervision suit automatiquement
+          ce département.
+        </p>
+      </SectionCard>
+    );
+  }
+  return <SupervisorDepartmentBoard data={data} />;
 }
 
 async function AdminCockpitLive({
@@ -423,7 +461,7 @@ async function DashboardLiveBody({ ctx }: { ctx: AuthContext }) {
   const pageStart = performance.now();
   if (!ctx.employee) return null;
 
-  const variant = getDashboardVariant(ctx.role);
+  const variant = getDashboardVariant(ctx.role, Boolean(ctx.employee.is_department_supervisor));
   const wantOpsBlocks = ctx.role === 'admin' || ctx.role === 'project_manager';
   const wantCommercialFollow = ctx.role === 'commercial';
 

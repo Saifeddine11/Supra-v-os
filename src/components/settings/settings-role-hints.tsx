@@ -4,8 +4,33 @@ import type { UserRole } from '@/types/database';
 /**
  * Rappels métier (liens vers les modules) — pas de données techniques.
  */
-export function SettingsRoleHints({ role }: { role: UserRole }) {
+export function SettingsRoleHints({
+  role,
+  isDepartmentSupervisor = false,
+}: {
+  role: UserRole;
+  isDepartmentSupervisor?: boolean;
+}) {
   const linkCls = 'font-medium text-primary hover:underline';
+
+  if (isDepartmentSupervisor && role !== 'admin' && role !== 'project_manager') {
+    return (
+      <ul className="list-inside list-disc space-y-2 text-sm text-muted-foreground">
+        <li>
+          <Link href="/team" className={linkCls}>
+            Équipe
+          </Link>{' '}
+          — membres de votre pôle.
+        </li>
+        <li>
+          <Link href="/tasks" className={linkCls}>
+            Tâches
+          </Link>{' '}
+          — toutes les tâches de votre département.
+        </li>
+      </ul>
+    );
+  }
 
   switch (role) {
     case 'admin':
@@ -49,6 +74,23 @@ export function SettingsRoleHints({ role }: { role: UserRole }) {
               Calendrier des tâches
             </Link>{' '}
             — planning et deadlines.
+          </li>
+        </ul>
+      );
+    case 'department_supervisor':
+      return (
+        <ul className="list-inside list-disc space-y-2 text-sm text-muted-foreground">
+          <li>
+            <Link href="/team" className={linkCls}>
+              Équipe
+            </Link>{' '}
+            — membres de votre pôle.
+          </li>
+          <li>
+            <Link href="/tasks" className={linkCls}>
+              Tâches
+            </Link>{' '}
+            — toutes les tâches de votre département.
           </li>
         </ul>
       );

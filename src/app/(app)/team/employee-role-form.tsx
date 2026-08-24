@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { UserRole } from '@/types/database';
+import type { TaskDepartment, UserRole } from '@/types/database';
 import { Label } from '@/components/ui/label';
 import {
   AlertDialog,
@@ -14,25 +14,37 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { changeEmployeeRoleAction, updateEmployeeSkillsAction } from './actions';
-import { ROLE_LABELS, TEAM_ASSIGNABLE_ROLES } from '@/types/domain';
+import {
+  changeEmployeeRoleAction,
+  updateEmployeeDepartmentAction,
+  updateEmployeeSkillsAction,
+} from './actions';
+import { ROLE_LABELS, TASK_DEPARTMENT_MAP, TASK_DEPARTMENT_OPTIONS, TEAM_ASSIGNABLE_ROLES } from '@/types/domain';
 import { OperationalSkillsFields } from './operational-skills-fields';
 import { Button } from '@/components/ui/button';
+import { SupervisorRoleActions } from './supervisor-role-actions';
 
 const selectCls =
   'flex h-10 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground';
 
 export function EmployeeRoleForm({
   employeeId,
+  fullName,
   currentRole,
+  department,
+  isDepartmentSupervisor,
   operationalSkills,
 }: {
   employeeId: string;
+  fullName: string;
   currentRole: UserRole;
+  department: TaskDepartment | null;
+  isDepartmentSupervisor: boolean;
   operationalSkills: UserRole[];
 }) {
   const router = useRouter();
   const [role, setRole] = useState<UserRole>(currentRole);
+  const [dept, setDept] = useState<TaskDepartment | ''>(department ?? '');
   const [err, setErr] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [confirmPromote, setConfirmPromote] = useState(false);
@@ -45,6 +57,10 @@ export function EmployeeRoleForm({
   useEffect(() => {
     setRole(currentRole);
   }, [currentRole]);
+
+  useEffect(() => {
+    setDept(department ?? '');
+  }, [department]);
 
   async function apply(target: UserRole, opts?: { confirmPromoteAdmin?: boolean; confirmDemoteAdmin?: boolean }) {
     setErr(null);
@@ -70,7 +86,27 @@ export function EmployeeRoleForm({
       setRole(target);
       router.refresh();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : 'Impossible de modifier le rôle.');
+      setErr(e instanceof Error ? e.message : 'Impossible de modifier le métier.');
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function applyDepartment(next: TaskDepartment | '') {
+    setErr(null);
+    setPending(true);
+    try {
+      const res = await updateEmployeeDepartmentAction(employeeId, next);
+      if (!res.ok) {
+        setDept(department ?? '');
+        setErr(res.error);
+        return;
+      }
+      setDept(next);
+      router.refresh();
+    } catch (e) {
+      setDept(department ?? '');
+      setErr(e instanceof Error ? e.message : 'Impossible de modifier le pôle.');
     } finally {
       setPending(false);
     }
@@ -79,14 +115,14 @@ export function EmployeeRoleForm({
   return (
     <div className="grid max-w-md gap-6">
       <div className="grid gap-2">
-        <Label htmlFor="role-select">Rôle principal</Label>
+        <Label htmlFor="role-select">Métier</Label>
         <p className="text-xs text-muted-foreground">
-          Le rôle principal contrôle les accès, la navigation et le tableau de bord. Il ne peut être modifié qu’ici (permissions).
+          Fonction du collaborateur. Indépendant de la responsabilité de pôle.
         </p>
         <select
           id="role-select"
           className={selectCls}
-          value={role}
+          value={role === 'department_supervisor' ? currentRole : role}
           onChange={(e) => {
             const next = e.target.value as UserRole;
             void apply(next);
@@ -100,13 +136,42 @@ export function EmployeeRoleForm({
           ))}
         </select>
       </div>
+
+      <div className="grid gap-2">
+        <Label htmlFor="dept-select">Pôle</Label>
+        <select
+          id="dept-select"
+          className={selectCls}
+          value={dept}
+          onChange={(e) => {
+            const next = e.target.value as TaskDepartment | '';
+            void applyDepartment(next);
+          }}
+          disabled={pending}
+        >
+          <option value="">—</option>
+          {TASK_DEPARTMENT_OPTIONS.map((d) => (
+            <option key={d} value={d}>
+              {TASK_DEPARTMENT_MAP[d].label}
+            </option>
+          ))}
+        </select>
+      </div>
       {err ? <p className="text-sm text-destructive">{err}</p> : null}
+
+      <SupervisorRoleActions
+        employeeId={employeeId}
+        fullName={fullName}
+        currentRole={currentRole}
+        department={department}
+        isDepartmentSupervisor={isDepartmentSupervisor}
+      />
 
       <div className="grid gap-2 border-t border-border pt-4">
         <Label>Compétences opérationnelles</Label>
         <p className="text-xs text-muted-foreground">
-          Les compétences servent aux assignations terrain (vidéos, charge, filtres équipe). Elles n’accordent pas de droits
-          d’administration.
+          Les compétences servent aux assignations terrain (vidéos, charge, filtres équipe). Elles n’accordent pas de
+          droits d’administration.
         </p>
         <form
           className="grid gap-3"

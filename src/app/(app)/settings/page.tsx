@@ -116,7 +116,7 @@ export default async function SettingsPage({
           title="Raccourcis métier"
           description="Accès rapide aux modules utiles pour votre rôle — sans configuration technique."
         >
-          <SettingsRoleHints role={role} />
+          <SettingsRoleHints role={role} isDepartmentSupervisor={Boolean(ctx.employee?.is_department_supervisor)} />
         </SectionCard>
       ) : null}
 

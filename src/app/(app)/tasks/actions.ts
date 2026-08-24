@@ -15,11 +15,15 @@ import {
 import {
   assertClientRecordVisible,
   assertTaskRecordVisible,
-  shouldScopeTasksToAssignee,
   taskListingDenied,
 } from '@/lib/auth/data-scope';
+import {
+  assertAssigneesInSupervisionScope,
+  resolveUpdatedTaskDepartment,
+} from '@/lib/auth/supervision-server';
+import { isDepartmentSupervisor } from '@/lib/auth/supervision';
 import { actionError, actionOk, getPostgrestError, type ActionResult } from '@/lib/actions/types';
-import type { TaskPriority, TaskStatus, TaskEnriched } from '@/types/database';
+import type { TaskDepartment, TaskEnriched, TaskPriority, TaskStatus } from '@/types/database';
 import { isTaskStatusAllowedInWorkflow } from '@/types/domain';
 import { createTaskCore } from '@/lib/tasks/create-task-core';
 import { parseTaskDepartmentInput } from '@/lib/tasks/task-department';
@@ -180,9 +184,32 @@ export async function updateTaskAction(id: string, formData: FormData): Promise<
     if (vrow?.editor_id) s.add(vrow.editor_id as string);
     if (vrow?.cameraman_id) s.add(vrow.cameraman_id as string);
     assigneeIds = [...s];
-  } else if (!canManageAllTasks(ctx.role) && ctx.employee) {
+  } else if (!canManageAllTasks(ctx.role) && !isDepartmentSupervisor(ctx.employee ?? ctx.role) && ctx.employee) {
     assigneeIds = [ctx.employee.id];
   }
+
+  const { data: curTask } = await readSb
+    .from('tasks')
+    .select('assignee_id, status, department')
+    .eq('id', id)
+    .maybeSingle();
+
+  const departmentParsed = parseTaskDepartmentInput(formData.get('department'));
+  if (!departmentParsed.ok) return actionError(departmentParsed.error);
+  const departmentResolved = resolveUpdatedTaskDepartment(
+    ctx,
+    departmentParsed.value,
+    (curTask?.department as TaskDepartment | null) ?? null,
+  );
+  if (!departmentResolved.ok) return actionError(departmentResolved.error);
+
+  const assigneeScope = await assertAssigneesInSupervisionScope(
+    readSb,
+    ctx,
+    assigneeIds,
+    departmentResolved.value,
+  );
+  if (assigneeScope) return assigneeScope;
 
   for (const aid of assigneeIds) {
     const assignCheck = await requireAssignableEmployee(readSb, aid);
@@ -191,7 +218,6 @@ export async function updateTaskAction(id: string, formData: FormData): Promise<
 
   const prevMap = await fetchAssignmentsForTasks(readSb, [id]);
   const prevSet = new Set((prevMap.get(id) ?? []).map((a) => a.id));
-  const { data: curTask } = await readSb.from('tasks').select('assignee_id, status').eq('id', id).maybeSingle();
   if (curTask?.assignee_id) prevSet.add(curTask.assignee_id as string);
 
   const primary = legacyPrimaryAssignee(assigneeIds);
@@ -200,9 +226,6 @@ export async function updateTaskAction(id: string, formData: FormData): Promise<
   if (!isTaskStatusAllowedInWorkflow(status)) {
     return actionError('Statut non disponible dans le workflow.');
   }
-
-  const departmentParsed = parseTaskDepartmentInput(formData.get('department'));
-  if (!departmentParsed.ok) return actionError(departmentParsed.error);
 
   const { error } = await writeSb
     .from('tasks')
@@ -213,7 +236,7 @@ export async function updateTaskAction(id: string, formData: FormData): Promise<
       assignee_id: primary.assignee_id,
       status,
       priority: String(formData.get('priority') ?? 'normal') as TaskPriority,
-      department: departmentParsed.value,
+      department: departmentResolved.value,
       deadline: deadlineRaw ? new Date(deadlineRaw).toISOString() : null,
       updated_at: new Date().toISOString(),
     })
