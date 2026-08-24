@@ -4,8 +4,9 @@
  * re-checks on every render as well.
  *
  * Ordre volontaire :
- *   1. session valide → app (un utilisateur connecté n'est jamais bloqué par
- *      l'onboarding, y compris après mise à jour de l'app) ;
+ *   1. session valide → espace correspondant au type de compte
+ *      (staff → /(tabs), client → /(client)). Un utilisateur connecté n'est
+ *      jamais bloqué par l'onboarding, y compris après mise à jour ;
  *   2. onboarding jamais vu → onboarding ;
  *   3. sinon → login.
  * La déconnexion renvoie directement vers /(auth)/login (voir profile.tsx),
@@ -19,7 +20,7 @@ import { useOnboardingStatus } from '@/lib/onboarding-storage';
 import { colors } from '@/constants/theme';
 
 export default function Index() {
-  const { initializing, session, employee } = useAuth();
+  const { initializing, session, employee, accountType } = useAuth();
   const { loading: onboardingLoading, completed } = useOnboardingStatus();
 
   if (initializing || onboardingLoading) {
@@ -30,8 +31,11 @@ export default function Index() {
     );
   }
 
-  if (session && employee) {
+  if (session && accountType === 'staff' && employee) {
     return <Redirect href="/(tabs)" />;
+  }
+  if (session && accountType === 'client') {
+    return <Redirect href="/(client)" />;
   }
   if (!completed) {
     return <Redirect href="/onboarding" />;

@@ -4,11 +4,14 @@ import { useAuth } from '@/hooks/useAuth';
 import { colors } from '@/constants/theme';
 
 export default function AuthLayout() {
-  const { initializing, session, employee } = useAuth();
+  const { initializing, session, employee, accountType } = useAuth();
 
-  // Already signed in with a valid profile → straight to the app.
-  if (!initializing && session && employee) {
+  // Déjà connecté → espace correspondant au type de compte.
+  if (!initializing && session && accountType === 'staff' && employee) {
     return <Redirect href="/(tabs)" />;
+  }
+  if (!initializing && session && accountType === 'client') {
+    return <Redirect href="/(client)" />;
   }
 
   return (
