@@ -132,6 +132,11 @@ export function canManageClientPortal(role: UserRole | null): boolean {
   return role === 'admin' || role === PM;
 }
 
+/** Comptes Auth client (`client_users`) — même périmètre que le portail jeton. */
+export function canManageClientUserAccess(role: UserRole | null): boolean {
+  return canManageClientPortal(role);
+}
+
 export function canManageProjects(role: UserRole | null): boolean {
   return role === 'admin' || role === PM || role === 'commercial';
 }

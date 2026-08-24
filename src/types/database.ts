@@ -258,6 +258,21 @@ export interface ClientPortal {
   created_by: string | null;
 }
 
+/** Compte Auth client — jamais dans `employees`. */
+export interface ClientUser {
+  id: string;
+  user_id: string;
+  client_id: string;
+  full_name: string | null;
+  email: string;
+  is_active: boolean;
+  must_change_password: boolean;
+  last_login_at: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+}
+
 export interface Project {
   id: string;
   client_id: string;
@@ -765,6 +780,12 @@ export type Database = {
         Row: ClientPortal;
         Insert: Partial<ClientPortal>;
         Update: Partial<ClientPortal>;
+        Relationships: [];
+      };
+      client_users: {
+        Row: ClientUser;
+        Insert: Partial<ClientUser> & { user_id: string; client_id: string; email: string };
+        Update: Partial<ClientUser>;
         Relationships: [];
       };
       projects: { Row: Project; Insert: Partial<Project>; Update: Partial<Project>; Relationships: [] };

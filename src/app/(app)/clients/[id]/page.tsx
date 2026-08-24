@@ -22,6 +22,11 @@ import { Badge } from '@/components/ui/badge';
 import { SectionCard } from '@/components/shared/section-card';
 import { ClientDetailActions } from '../client-detail-actions';
 import { PortalManagementSection } from '../portal-management';
+import { ClientAccessSection } from '../client-access-section';
+import {
+  ClientUsersTableMissingError,
+  listClientUsersForClient,
+} from '@/lib/clients/auth-provision';
 import { ProgressBar } from '@/components/shared/progress-bar';
 import { listActivityForEntity } from '@/lib/data/activity-logs';
 import { EntityActivityFeed } from '@/components/activity/entity-activity-feed';
@@ -66,6 +71,21 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
   const canEdit = canModifyClients(ctx?.role ?? null);
   const canDelete = canDeleteClient(ctx?.role ?? null);
   const canPortal = canManageClientPortal(ctx?.role ?? null);
+
+  let clientUsers: Awaited<ReturnType<typeof listClientUsersForClient>> = [];
+  let clientUsersLoadError: string | null = null;
+  if (canPortal) {
+    try {
+      clientUsers = await listClientUsersForClient(id);
+    } catch (e) {
+      clientUsersLoadError =
+        e instanceof ClientUsersTableMissingError
+          ? e.message
+          : e instanceof Error
+            ? e.message
+            : 'Impossible de charger les accès client.';
+    }
+  }
   const showContractFinancials = canViewClientContractFinancials(ctx?.role ?? null);
   const showInvoices = canViewInvoices(ctx?.role ?? null);
   const st = CLIENT_STATUS_MAP[client.status];
@@ -190,6 +210,25 @@ export default async function ClientDetailPage({ params }: { params: Promise<{ i
           )}
         </SectionCard>
       </div>
+
+      <SectionCard
+        title="Accès client"
+        description="Comptes de connexion pour ce client — distincts de l’équipe interne."
+      >
+        {canPortal ? (
+          <ClientAccessSection
+            clientId={id}
+            users={clientUsers}
+            loadError={clientUsersLoadError}
+            defaultFullName={client.primary_contact ?? client.name}
+            defaultEmail={client.email ?? ''}
+          />
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Seuls l’administrateur et le chef de projet peuvent gérer les accès client.
+          </p>
+        )}
+      </SectionCard>
 
       <SectionCard title="Notes internes" description="Visible uniquement côté équipe.">
         <p className="whitespace-pre-wrap text-sm text-foreground">{client.notes_internal ?? '—'}</p>

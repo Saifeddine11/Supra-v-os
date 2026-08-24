@@ -151,7 +151,8 @@ export function SetPasswordForm() {
       }
 
       toast.success('Mot de passe créé avec succès. Redirection vers votre espace.');
-      router.replace('/dashboard');
+      const dest = finalized.ok ? finalized.redirectTo : '/dashboard';
+      router.replace(dest);
       router.refresh();
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Impossible d’enregistrer le mot de passe.');
@@ -189,7 +190,10 @@ export function SetPasswordForm() {
                 {EXPIRED_MESSAGE}
               </p>
               <Button asChild variant="primary" className="w-full rounded-full">
-                <Link href="/login">Retour à la connexion</Link>
+                <Link href="/login">Retour à la connexion équipe</Link>
+              </Button>
+              <Button asChild variant="outline" className="w-full rounded-full">
+                <Link href="/client/login">Espace client</Link>
               </Button>
             </div>
           ) : null}

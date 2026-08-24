@@ -2,6 +2,9 @@ import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
 import { requireAuth } from '@/lib/auth/permissions';
 import { enforceRouteAccessForPathname } from '@/lib/auth/nav-access';
+import { AUTH_SET_PASSWORD_PATH } from '@/lib/auth/password-setup';
+import { getClientAuthState } from '@/lib/clients/session';
+import { CLIENT_HOME_PATH } from '@/lib/clients/auth-errors';
 import { notificationSoundPrefsFromRow } from '@/lib/notifications/notification-sound-prefs';
 import { AppShell } from '@/components/app/app-shell';
 import { StaffPasswordChangeGate } from '@/components/app/staff-password-change-gate';
@@ -16,6 +19,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   await enforceRouteAccessForPathname(pathname, ctx);
 
   if (!ctx.employee) {
+    const clientState = await getClientAuthState();
+    if (clientState.kind === 'ok') {
+      redirect(clientState.ctx.mustChangePassword ? AUTH_SET_PASSWORD_PATH : CLIENT_HOME_PATH);
+    }
+    if (clientState.kind === 'inactive') {
+      redirect('/api/auth/client-logout?error=disabled');
+    }
     redirect('/login?next=/dashboard');
   }
 

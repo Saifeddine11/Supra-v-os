@@ -15,6 +15,7 @@ import {
   canDeleteVideo,
   canManageAllTasks,
   canManageClientPortal,
+  canManageClientUserAccess,
   canManagePayments,
   canManageProjects,
   canManageTasks,
@@ -54,6 +55,7 @@ function main() {
   assertPm(PM, canDeleteProject, true, 'canDeleteProject');
   assertPm(PM, canDeleteInternalProject, true, 'canDeleteInternalProject');
   assertPm(PM, canManageClientPortal, true, 'canManageClientPortal');
+  assertPm(PM, canManageClientUserAccess, true, 'canManageClientUserAccess');
   assertPm(PM, canViewOperationalReports, true, 'canViewOperationalReports');
 
   // Finance globale : false pour PM
@@ -79,6 +81,7 @@ function main() {
 
   // Editor non impacté
   assertPm('editor', canManageAllTasks, false, 'editor canManageAllTasks');
+  assertPm('editor', canManageClientUserAccess, false, 'editor canManageClientUserAccess');
   assertPm('editor', canViewGlobalFinanceStats, false, 'editor canViewGlobalFinanceStats');
 
   console.log('OK — capabilities project_manager');

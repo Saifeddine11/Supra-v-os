@@ -15,6 +15,7 @@ import {
   AUTH_SET_PASSWORD_PATH,
   hasPasswordSetupSearchParams,
 } from '@/lib/auth/password-setup';
+import { CLIENT_LOGIN_PATH, isClientProtectedPath } from '@/lib/clients/auth-errors';
 
 const PUBLIC_PATHS = [
   '/login',
@@ -23,7 +24,11 @@ const PUBLIC_PATHS = [
   '/api/cron/',        // protected by CRON_SECRET, not by Supabase auth
   '/api/dev/',         // dev-only helpers (handlers still gate by NODE_ENV)
   '/api/portal/',      // portal API uses token validation, not auth
+  '/api/client/',      // client invoice PDF etc. — handlers enforce session; never HTML-redirect to staff /login
   '/api/auth/login',   // server-side sign-in (session cookies) — must stay public
+  '/api/auth/client-login',
+  '/api/auth/client-logout',
+  CLIENT_LOGIN_PATH,   // dedicated client login — staff /login stays staff-only
 ];
 
 const isPublic = (pathname: string) =>
@@ -140,6 +145,14 @@ export async function middleware(request: NextRequest) {
     return redirect;
   }
 
+  // Unauthenticated client-area routes go to /client/login, never staff /login.
+  if (!user && isClientProtectedPath(pathname)) {
+    const url = request.nextUrl.clone();
+    url.pathname = CLIENT_LOGIN_PATH;
+    url.searchParams.set('next', pathname);
+    return NextResponse.redirect(url);
+  }
+
   // Redirect to /login for protected routes if not authenticated
   if (!user && !isPublic(pathname) && pathname !== '/') {
     const url = request.nextUrl.clone();
@@ -165,6 +178,6 @@ export const config = {
      * Some stacks have had issues with POST bodies / fetch when the edge
      * middleware pipeline touches the same request before the Route Handler.
      */
-    '/((?!_next/static|_next/image|favicon.ico|api/auth/login|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|favicon.ico|api/auth/login|api/auth/client-login|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 };
