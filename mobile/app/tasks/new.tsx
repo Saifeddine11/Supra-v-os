@@ -16,6 +16,8 @@ import {
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Redirect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { hapticError, hapticSuccess } from '@/lib/haptics';
 import { useAuth } from '@/hooks/useAuth';
 import {
   createTask,
@@ -92,9 +94,11 @@ export default function NewTaskScreen() {
     );
     setSubmitting(false);
     if (error) {
+      hapticError();
       setFormError(error);
       return;
     }
+    hapticSuccess();
     setSuccess(true);
     setTimeout(() => {
       if (router.canGoBack()) router.back();
@@ -110,10 +114,13 @@ export default function NewTaskScreen() {
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
         <Pressable
           onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/tasks'))}
+          accessibilityRole="button"
+          accessibilityLabel="Annuler"
           style={styles.backButton}
           hitSlop={8}
         >
-          <Text style={styles.backText}>‹ Annuler</Text>
+          <Ionicons name="chevron-back" size={20} color={colors.orange} />
+          <Text style={styles.backText}>Annuler</Text>
         </Pressable>
       </View>
 
@@ -284,7 +291,13 @@ export default function NewTaskScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: colors.offWhite },
   header: { paddingHorizontal: spacing.md, paddingBottom: spacing.xs },
-  backButton: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
+  backButton: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    alignSelf: 'flex-start',
+  },
   backText: { fontSize: 16, fontWeight: '600', color: colors.orange },
   container: { paddingHorizontal: spacing.md, gap: spacing.md },
   title: { fontSize: 26, fontWeight: '700', color: colors.black },
@@ -320,9 +333,7 @@ const styles = StyleSheet.create({
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: {
     borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
     paddingHorizontal: spacing.md,
     minHeight: 40,
     justifyContent: 'center',

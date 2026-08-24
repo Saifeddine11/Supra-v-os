@@ -7,6 +7,8 @@ import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { hapticError, hapticSuccess } from '@/lib/haptics';
 import { useAuth } from '@/hooks/useAuth';
 import { SAFE_STATUSES, updateTaskStatus, useTaskDetail } from '@/hooks/useTasks';
 import { hasTaskAccess, hasVideoAccess } from '@/lib/roles';
@@ -47,9 +49,11 @@ export default function TaskDetailScreen() {
     const { error: err } = await updateTaskStatus(taskId, status);
     setSaving(null);
     if (err) {
+      hapticError();
       setActionError(err);
       return;
     }
+    hapticSuccess();
     if (status === 'done') setDone(true);
     await reload();
   };
@@ -63,10 +67,13 @@ export default function TaskDetailScreen() {
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
         <Pressable
           onPress={() => (router.canGoBack() ? router.back() : router.replace('/(tabs)/tasks'))}
+          accessibilityRole="button"
+          accessibilityLabel="Retour aux tâches"
           style={styles.backButton}
           hitSlop={8}
         >
-          <Text style={styles.backText}>‹ Tâches</Text>
+          <Ionicons name="chevron-back" size={20} color={colors.orange} />
+          <Text style={styles.backText}>Tâches</Text>
         </Pressable>
       </View>
 
@@ -216,7 +223,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingBottom: spacing.sm,
   },
-  backButton: { minHeight: 44, justifyContent: 'center', alignSelf: 'flex-start' },
+  backButton: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    alignSelf: 'flex-start',
+  },
   backText: { fontSize: 16, fontWeight: '600', color: colors.orange },
   container: { paddingHorizontal: spacing.md, gap: spacing.md },
   title: { fontSize: 24, fontWeight: '700', color: colors.black, lineHeight: 30 },

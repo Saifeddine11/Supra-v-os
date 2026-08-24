@@ -143,21 +143,101 @@ valider séparément) : notifications in-app uniquement.
   pattern que `hrefTasksOpenDetail` web ; repli `https://app.suprav3.com`
   si la variable est absente) et navigation mobile via related_entity
 
+## Phase 9 — Redesign Apple/iOS
+
+- Design system étendu (`constants/theme.ts`) : échelle typographique
+  Apple-like (`type.largeTitle/headline/body/subhead/sectionHeader`), tokens
+  sémantiques doux (danger/success/warning/info + variantes `…Soft`),
+  séparateurs hairline, rayons iOS, ombres flottantes douces
+  (`cardShadow`/`chipShadow`), `layout.tabBarSpace` pour la tab bar flottante
+- Composants partagés (`components/ui.tsx`) : cartes sans bordure à ombre
+  douce, `FilterChips` capsule mutualisé (Tâches/Calendrier/Vidéos),
+  `ListRow` iOS grouped-list, `SectionLabel`, boutons ghost/danger
+- Tab bar translucide floutée sur iOS (`expo-blur`), icônes Ionicons,
+  bordure hairline ; solide sur Android
+- Accueil façon dashboard Apple : grand titre + badge rôle capsule, cloche,
+  alertes en lignes teintées douces, cartes stats avec icône, actions
+  rapides capsule, section « À venir » (3 prochaines échéances, requête
+  bornée)
+- Tâches : recherche iOS (fond gris, icône), bouton « + » rond, cartes
+  compactes (statut = point coloré + libellé, retard = petite pastille +
+  date rouge, priorité affichée seulement si haute/urgente)
+- Calendrier : lignes type Apple Calendar (heure à gauche, barre colorée
+  par type Tâche/Tournage/Livraison), sections par jour
+- Vidéos : mini-grille deux colonnes Tournage / Livraison, statut en point
+  coloré, badge retard doux
+- Notifications : regroupées par jour, icône par type, pastille non-lu
+- Profil : sections groupées iOS (Compte / Application), déconnexion douce
+- Micro-interactions : `expo-haptics` (succès création/statut, sélection
+  filtres, lecture notification) ; retours visuels pressed subtils
+- Accessibilité : cibles ≥ 44 pt, `accessibilityLabel/Role` sur les boutons
+  à icône, contraste texte secondaire renforcé (`textSecondary`)
+- Dépendances ajoutées (via `expo install`, compatibles Expo Go) :
+  `expo-blur`, `expo-haptics`, `@expo/vector-icons`
+
+## Phase 10 — Calendrier premium (vraies vues calendaires)
+
+- Trois vues via un contrôle segmenté iOS « Mois | Semaine | Jour »
+  (`components/calendar-view-switcher.tsx`) ; navigation ‹ › par période,
+  bouton « Aujourd'hui »
+- Vue Mois : grille réelle 6 semaines lundi-first (`calendar-month-grid.tsx`),
+  entêtes Lun→Dim, cercle « aujourd'hui », capsule jour sélectionné, jours
+  hors-mois estompés, jusqu'à 3 points colorés par client puis « + »
+- Vue Semaine : bande hebdomadaire 7 jours avec les mêmes cellules
+- Agenda du jour sous le calendrier : cartes événement (heure ou « Journée »,
+  icône + libellé type, titre, client, statut, assignés, chevron), état vide
+  « Aucun élément prévu ce jour. »
+- Couleurs clients déterministes (`lib/client-colors.ts`) : hash djb2 sur
+  `client_id` (repli nom) vers une palette de 10 tons doux (orange, bleu,
+  violet, vert, ambre, rose, teal, indigo, graphite, brun) — accent (barre/
+  point), fond teinté ~7 %, texte assombri lisible ; même client = même
+  couleur partout. Langage visuel : couleur client = « qui », icône/couleur
+  type = « quoi » (Tâche/Tournage/Livraison), rouge réservé à l'urgence
+- « En retard » : section compacte (lignes point rouge doux + date rouge,
+  triées de la plus ancienne), jamais de carte rouge pleine
+- Données (`hooks/useCalendarEvents.ts`) : fetch par plage visible — mois
+  affiché (42 jours, ≤100 tâches + ≤100 vidéos), semaine (7 j) ou jour (1 j) ;
+  sélectionner un jour dans une plage chargée ne refetch pas (regroupement
+  mémoire par `dayKey`) ; retards bornés (≤25 + ≤25). Mêmes requêtes RLS
+  qu'avant (anciens `useCalendarWork`/`calendar-work-card` supprimés)
+- Haptics : sélection de jour, changement de vue, « Aujourd'hui », ouverture
+  d'événement ; a11y : libellés de cellules (« 23 août, 4 événements »),
+  états selected/today, cibles ≥ 44 pt
+
 Phases suivantes (non implémentées) : création/édition/statuts vidéo,
 édition complète de tâche, suppression/archivage, SupAI, finance,
 notifications push, soumission stores.
 
-## Builds EAS (plus tard — ne pas lancer sans accord)
+## Builds EAS
+
+⚠️ **Toujours lancer les commandes EAS depuis `mobile/`, jamais depuis la
+racine du repo.** Lancer `eas init`/`eas build` à la racine crée des
+`app.json`/`eas.json` parasites à la racine et fait builder le package
+Next.js (erreur « the module expo is not installed »).
+
+Première fois (lie le projet à votre compte Expo — écrit
+`extra.eas.projectId` dans `app.json`) :
 
 ```bash
 cd mobile
-npx eas build --profile preview --platform ios
-npx eas build --profile preview --platform android
+npx eas login
+npx eas init
 ```
 
-Prérequis le moment venu : compte Expo/EAS (`npx eas login`), identifiants
-Apple/Google, et les deux variables `EXPO_PUBLIC_*` déclarées comme variables
-d'environnement EAS (elles ne sont pas lues depuis `.env` en build cloud).
+Puis :
+
+```bash
+cd mobile
+npx eas build --profile preview --platform android
+npx eas build --profile preview --platform ios
+```
+
+Les profils de build épinglent Node `20.19.4` (requis par Expo SDK 54 /
+RN 0.81 — l'image par défaut EAS peut être en Node 18). Prérequis :
+identifiants Apple/Google le moment venu, et les trois variables
+`EXPO_PUBLIC_*` (URL/clé Supabase, URL web) déclarées comme variables
+d'environnement EAS (`npx eas env:create`) — elles ne sont pas lues depuis
+`.env` en build cloud.
 
 ## Checklist QA manuelle
 

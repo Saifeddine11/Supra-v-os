@@ -1,18 +1,24 @@
 /**
  * Protected tabs: Accueil, Tâches, Calendrier, Vidéos, Profil.
+ * Barre de navigation « liquid glass » flottante (components/liquid-tab-bar).
  * Tabs are hidden (href: null) per role, mirroring the web nav-policy:
  * Tâches/Calendrier hidden for finance & commercial, Vidéos visible only to
  * admin/PM/editor/cameraman/community_manager — RLS remains the enforcement.
  */
 import React from 'react';
-import { Text } from 'react-native';
 import { Redirect, Tabs } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/hooks/useAuth';
 import { hasTaskAccess, hasVideoAccess } from '@/lib/roles';
+import { LiquidTabBar } from '@/components/liquid-tab-bar';
 import { colors } from '@/constants/theme';
 
-function TabGlyph({ glyph, color }: { glyph: string; color: string }) {
-  return <Text style={{ fontSize: 22, color }}>{glyph}</Text>;
+type IconName = React.ComponentProps<typeof Ionicons>['name'];
+
+function icon(active: IconName, inactive: IconName) {
+  return ({ color, focused, size }: { color: string; focused: boolean; size: number }) => (
+    <Ionicons name={focused ? active : inactive} size={size} color={color} />
+  );
 }
 
 export default function TabsLayout() {
@@ -22,17 +28,13 @@ export default function TabsLayout() {
     return <Redirect href="/(auth)/login" />;
   }
 
+  const role = employee?.role ?? null;
+
   return (
     <Tabs
+      tabBar={(props) => <LiquidTabBar {...props} />}
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.orange,
-        tabBarInactiveTintColor: colors.muted,
-        tabBarStyle: {
-          backgroundColor: colors.white,
-          borderTopColor: colors.border,
-        },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
         sceneStyle: { backgroundColor: colors.offWhite },
       }}
     >
@@ -40,38 +42,38 @@ export default function TabsLayout() {
         name="index"
         options={{
           title: 'Accueil',
-          tabBarIcon: ({ color }) => <TabGlyph glyph="⌂" color={color} />,
+          tabBarIcon: icon('home', 'home-outline'),
         }}
       />
       <Tabs.Screen
         name="tasks"
         options={{
           title: 'Tâches',
-          href: hasTaskAccess(employee?.role ?? null) ? '/(tabs)/tasks' : null,
-          tabBarIcon: ({ color }) => <TabGlyph glyph="☑" color={color} />,
+          href: hasTaskAccess(role) ? '/(tabs)/tasks' : null,
+          tabBarIcon: icon('checkmark-circle', 'checkmark-circle-outline'),
         }}
       />
       <Tabs.Screen
         name="calendar"
         options={{
           title: 'Calendrier',
-          href: hasTaskAccess(employee?.role ?? null) ? '/(tabs)/calendar' : null,
-          tabBarIcon: ({ color }) => <TabGlyph glyph="▦" color={color} />,
+          href: hasTaskAccess(role) ? '/(tabs)/calendar' : null,
+          tabBarIcon: icon('calendar', 'calendar-outline'),
         }}
       />
       <Tabs.Screen
         name="videos"
         options={{
           title: 'Vidéos',
-          href: hasVideoAccess(employee?.role ?? null) ? '/(tabs)/videos' : null,
-          tabBarIcon: ({ color }) => <TabGlyph glyph="▶" color={color} />,
+          href: hasVideoAccess(role) ? '/(tabs)/videos' : null,
+          tabBarIcon: icon('videocam', 'videocam-outline'),
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
           title: 'Profil',
-          tabBarIcon: ({ color }) => <TabGlyph glyph="◉" color={color} />,
+          tabBarIcon: icon('person-circle', 'person-circle-outline'),
         }}
       />
     </Tabs>

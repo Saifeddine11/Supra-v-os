@@ -1,5 +1,5 @@
 /**
- * Tâches — RLS-scoped task list with filter chips.
+ * Tâches — RLS-scoped task list, Apple Reminders / Linear feel.
  * Roles without task access (finance/commercial) never reach this screen:
  * the tab is hidden in (tabs)/_layout.tsx and a guard renders a notice here.
  */
@@ -8,7 +8,6 @@ import {
   FlatList,
   Pressable,
   RefreshControl,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -16,12 +15,14 @@ import {
 } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/hooks/useAuth';
 import { TASK_FILTERS, useTasks, type TaskFilter } from '@/hooks/useTasks';
 import { hasTaskAccess, isAdminOrPM } from '@/lib/roles';
+import { hapticLight } from '@/lib/haptics';
 import { TaskCard } from '@/components/task-card';
-import { Card, ErrorBanner, Skeleton } from '@/components/ui';
-import { colors, radius, spacing } from '@/constants/theme';
+import { Card, ErrorBanner, FilterChips, Skeleton } from '@/components/ui';
+import { cardShadow, colors, layout, radius, spacing, type } from '@/constants/theme';
 
 const EMPTY_LABELS: Record<TaskFilter, string> = {
   all: 'Aucune tâche visible pour le moment.',
@@ -48,7 +49,6 @@ export default function TasksScreen() {
     return () => clearTimeout(t);
   }, [search]);
 
-  // Silent re-sync when returning (e.g. after creating a task).
   useFocusEffect(
     useCallback(() => {
       void reload();
@@ -61,7 +61,7 @@ export default function TasksScreen() {
     return (
       <View style={[styles.flex, styles.guard, { paddingTop: insets.top + spacing.xl }]}>
         <Card>
-          <Text style={styles.guardTitle}>Accès restreint</Text>
+          <Text style={type.headline}>Accès restreint</Text>
           <Text style={styles.guardText}>
             Votre rôle n’a pas accès aux tâches. Contactez un administrateur si
             besoin.
@@ -72,21 +72,27 @@ export default function TasksScreen() {
   }
 
   return (
-    <View style={[styles.flex, { paddingTop: insets.top + spacing.md }]}>
+    <View style={[styles.flex, { paddingTop: insets.top + layout.screenTop }]}>
       <View style={styles.titleRow}>
-        <Text style={styles.title}>Tâches</Text>
+        <Text style={type.largeTitle}>Tâches</Text>
         {isAdminOrPM(role) ? (
           <Pressable
-            onPress={() => router.push('/tasks/new')}
+            onPress={() => {
+              hapticLight();
+              router.push('/tasks/new');
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Nouvelle tâche"
             style={({ pressed }) => [styles.newButton, pressed && { opacity: 0.85 }]}
             hitSlop={6}
           >
-            <Text style={styles.newButtonText}>+ Nouvelle tâche</Text>
+            <Ionicons name="add" size={22} color={colors.white} />
           </Pressable>
         ) : null}
       </View>
 
       <View style={styles.searchWrap}>
+        <Ionicons name="search" size={16} color={colors.muted} style={styles.searchIcon} />
         <TextInput
           style={styles.searchInput}
           value={search}
@@ -96,40 +102,23 @@ export default function TasksScreen() {
           autoCapitalize="none"
           autoCorrect={false}
           returnKeyType="search"
-          clearButtonMode="while-editing"
+          accessibilityLabel="Rechercher une tâche"
         />
         {search.length > 0 ? (
           <Pressable
             onPress={() => setSearch('')}
             hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Effacer la recherche"
             style={styles.searchClear}
           >
-            <Text style={styles.searchClearText}>✕</Text>
+            <Ionicons name="close-circle" size={18} color={colors.muted} />
           </Pressable>
         ) : null}
       </View>
 
       <View style={styles.filterWrap}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterRow}
-        >
-          {TASK_FILTERS.map((f) => {
-            const active = f.key === filter;
-            return (
-              <Pressable
-                key={f.key}
-                onPress={() => setFilter(f.key)}
-                style={[styles.filterChip, active && styles.filterChipActive]}
-              >
-                <Text style={[styles.filterText, active && styles.filterTextActive]}>
-                  {f.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+        <FilterChips options={TASK_FILTERS} active={filter} onSelect={setFilter} />
       </View>
 
       {error ? (
@@ -140,16 +129,19 @@ export default function TasksScreen() {
 
       {loading ? (
         <View style={[styles.pad, { gap: spacing.sm + 4 }]}>
-          <Card><Skeleton height={64} /></Card>
-          <Card><Skeleton height={64} /></Card>
-          <Card><Skeleton height={64} /></Card>
-          <Card><Skeleton height={64} /></Card>
+          <Card><Skeleton height={56} /></Card>
+          <Card><Skeleton height={56} /></Card>
+          <Card><Skeleton height={56} /></Card>
+          <Card><Skeleton height={56} /></Card>
         </View>
       ) : (
         <FlatList
           data={tasks}
           keyExtractor={(t) => t.id}
-          contentContainerStyle={[styles.pad, { paddingBottom: spacing.xl, gap: spacing.sm + 4 }]}
+          contentContainerStyle={[
+            styles.pad,
+            { paddingBottom: layout.tabBarSpace, gap: spacing.sm + 2 },
+          ]}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.orange} />
           }
@@ -158,6 +150,7 @@ export default function TasksScreen() {
           )}
           ListEmptyComponent={
             <Card style={styles.emptyCard}>
+              <Ionicons name="checkmark-done-circle-outline" size={28} color={colors.muted} />
               <Text style={styles.emptyText}>
                 {searching ? 'Aucune tâche trouvée.' : EMPTY_LABELS[filter]}
               </Text>
@@ -176,66 +169,41 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing.md,
-    marginBottom: spacing.sm,
+    marginBottom: spacing.sm + 2,
     gap: spacing.sm,
   },
-  title: {
-    fontSize: 26,
-    fontWeight: '700',
-    color: colors.black,
-  },
   newButton: {
+    width: layout.touch - 4,
+    height: layout.touch - 4,
+    borderRadius: (layout.touch - 4) / 2,
     backgroundColor: colors.orange,
-    borderRadius: 999,
-    paddingHorizontal: spacing.md,
-    minHeight: 40,
-    justifyContent: 'center',
-  },
-  newButtonText: { color: colors.white, fontSize: 13, fontWeight: '700' },
-  searchWrap: {
-    marginHorizontal: spacing.md,
-    marginBottom: spacing.sm + 4,
-    justifyContent: 'center',
-  },
-  searchInput: {
-    minHeight: 46,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    backgroundColor: colors.white,
-    paddingHorizontal: spacing.md,
-    paddingRight: spacing.xl + spacing.sm,
-    fontSize: 15,
-    color: colors.black,
-  },
-  searchClear: {
-    position: 'absolute',
-    right: spacing.sm,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
+    ...cardShadow,
   },
-  searchClearText: { fontSize: 15, color: colors.muted, fontWeight: '600' },
+  searchWrap: {
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.sm + 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.fill,
+    borderRadius: radius.sm,
+    minHeight: 40,
+    paddingHorizontal: spacing.sm + 2,
+  },
+  searchIcon: { marginRight: spacing.xs + 2 },
+  searchInput: {
+    flex: 1,
+    fontSize: 15,
+    color: colors.textPrimary,
+    paddingVertical: 0,
+    minHeight: 40,
+  },
+  searchClear: { padding: spacing.xs },
   filterWrap: { marginBottom: spacing.sm + 4 },
-  filterRow: { paddingHorizontal: spacing.md, gap: spacing.sm },
-  filterChip: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.white,
-    paddingHorizontal: spacing.md,
-    minHeight: 38,
-    justifyContent: 'center',
-  },
-  filterChipActive: { backgroundColor: colors.black, borderColor: colors.black },
-  filterText: { fontSize: 13, fontWeight: '600', color: colors.black },
-  filterTextActive: { color: colors.white },
   pad: { paddingHorizontal: spacing.md },
-  emptyCard: { alignItems: 'center', paddingVertical: spacing.xl },
-  emptyText: { fontSize: 14, color: colors.muted, textAlign: 'center' },
+  emptyCard: { alignItems: 'center', paddingVertical: spacing.xl, gap: spacing.sm },
+  emptyText: { fontSize: 14, color: colors.textSecondary, textAlign: 'center' },
   guard: { padding: spacing.md },
-  guardTitle: { fontSize: 16, fontWeight: '700', color: colors.black },
-  guardText: { fontSize: 14, color: colors.muted, marginTop: spacing.xs, lineHeight: 20 },
+  guardText: { ...type.body, color: colors.textSecondary, marginTop: spacing.xs },
 });

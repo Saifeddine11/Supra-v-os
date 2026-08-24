@@ -1,18 +1,28 @@
 /**
- * Entry gate: waits for the persisted session to resolve, then routes to the
- * app tabs or the login screen. This is the mobile "protected route" root —
- * (tabs)/_layout.tsx re-checks on every render as well.
+ * Entry gate: waits for the persisted session and the local onboarding flag,
+ * then routes. This is the mobile "protected route" root — (tabs)/_layout.tsx
+ * re-checks on every render as well.
+ *
+ * Ordre volontaire :
+ *   1. session valide → app (un utilisateur connecté n'est jamais bloqué par
+ *      l'onboarding, y compris après mise à jour de l'app) ;
+ *   2. onboarding jamais vu → onboarding ;
+ *   3. sinon → login.
+ * La déconnexion renvoie directement vers /(auth)/login (voir profile.tsx),
+ * donc elle ne réaffiche jamais l'onboarding.
  */
 import React from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { Redirect } from 'expo-router';
 import { useAuth } from '@/hooks/useAuth';
+import { useOnboardingStatus } from '@/lib/onboarding-storage';
 import { colors } from '@/constants/theme';
 
 export default function Index() {
   const { initializing, session, employee } = useAuth();
+  const { loading: onboardingLoading, completed } = useOnboardingStatus();
 
-  if (initializing) {
+  if (initializing || onboardingLoading) {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color={colors.orange} />
@@ -22,6 +32,9 @@ export default function Index() {
 
   if (session && employee) {
     return <Redirect href="/(tabs)" />;
+  }
+  if (!completed) {
+    return <Redirect href="/onboarding" />;
   }
   return <Redirect href="/(auth)/login" />;
 }

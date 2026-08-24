@@ -1,16 +1,28 @@
 /**
- * Compact task card + badges shared by the list and detail screens.
+ * Compact task row + shared badges — Reminders/Linear feel:
+ * status as a colored dot + quiet label, overdue as a small red date,
+ * assignee initials as overlapping chips.
  */
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors, radius, spacing } from '@/constants/theme';
+import { cardShadow, colors, radius, spacing } from '@/constants/theme';
 import { PRIORITY_MAP, TASK_STATUS_MAP, formatDeadline, isTaskOverdue } from '@/lib/task-meta';
 import type { TaskAssigneeInfo, TaskListItem } from '@/hooks/useTasks';
 
 export function Badge({ label, color }: { label: string; color: string }) {
   return (
-    <View style={[styles.badge, { backgroundColor: `${color}1A`, borderColor: `${color}55` }]}>
+    <View style={[styles.badge, { backgroundColor: `${color}14` }]}>
       <Text style={[styles.badgeText, { color }]}>{label}</Text>
+    </View>
+  );
+}
+
+/** Colored status dot + quiet label (lighter than a full badge). */
+export function StatusDot({ label, color }: { label: string; color: string }) {
+  return (
+    <View style={styles.statusDotWrap}>
+      <View style={[styles.statusDot, { backgroundColor: color }]} />
+      <Text style={styles.statusDotText}>{label}</Text>
     </View>
   );
 }
@@ -46,35 +58,39 @@ export function TaskCard({ task, onPress }: { task: TaskListItem; onPress: () =>
   const priority = PRIORITY_MAP[task.priority];
   const overdue = isTaskOverdue(task.deadline, task.status);
   const deadlineLabel = formatDeadline(task.deadline);
+  const done = task.status === 'done';
 
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+      accessibilityRole="button"
+      accessibilityLabel={`${task.title}${overdue ? ', en retard' : ''}`}
+      style={({ pressed }) => [styles.card, done && { opacity: 0.65 }, pressed && styles.cardPressed]}
     >
       <View style={styles.topRow}>
-        <Text style={styles.title} numberOfLines={2}>
+        <Text style={[styles.title, done && styles.titleDone]} numberOfLines={2}>
           {task.title}
         </Text>
         <AssigneeChips assignees={task.assignees} />
       </View>
 
-      {task.client_name ? (
-        <Text style={styles.client} numberOfLines={1}>
-          {task.client_name}
-        </Text>
-      ) : null}
-
-      <View style={styles.badgeRow}>
-        <Badge label={status.label} color={status.color} />
-        {task.priority !== 'normal' ? (
+      <View style={styles.metaRow}>
+        <StatusDot label={status.label} color={status.color} />
+        {task.priority === 'urgent' || task.priority === 'high' ? (
           <Badge label={priority.label} color={priority.color} />
         ) : null}
-        {overdue ? <Badge label="En retard" color={colors.danger} /> : null}
-        {deadlineLabel ? (
-          <Text style={[styles.deadline, overdue && { color: colors.danger, fontWeight: '600' }]}>
-            {deadlineLabel}
+        {task.client_name ? (
+          <Text style={styles.client} numberOfLines={1}>
+            {task.client_name}
           </Text>
+        ) : null}
+        {deadlineLabel ? (
+          <View style={styles.deadlineWrap}>
+            {overdue ? <View style={styles.overdueDot} /> : null}
+            <Text style={[styles.deadline, overdue && styles.deadlineOverdue]}>
+              {deadlineLabel}
+            </Text>
+          </View>
         ) : null}
       </View>
     </Pressable>
@@ -83,37 +99,52 @@ export function TaskCard({ task, onPress }: { task: TaskListItem; onPress: () =>
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
     borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
     padding: spacing.md,
-    gap: spacing.xs + 2,
+    gap: spacing.sm,
+    ...cardShadow,
   },
-  cardPressed: { opacity: 0.8 },
+  cardPressed: { opacity: 0.75 },
   topRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     gap: spacing.sm,
   },
-  title: { flex: 1, fontSize: 15, fontWeight: '600', color: colors.black, lineHeight: 20 },
-  client: { fontSize: 13, color: colors.muted, fontWeight: '500' },
-  badgeRow: {
+  title: {
+    flex: 1,
+    fontSize: 15.5,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    lineHeight: 20,
+  },
+  titleDone: { textDecorationLine: 'line-through', color: colors.textSecondary },
+  metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'wrap',
-    gap: spacing.xs + 2,
-    marginTop: spacing.xs,
+    gap: spacing.sm,
   },
+  client: { fontSize: 12.5, color: colors.textSecondary, fontWeight: '500', flexShrink: 1 },
   badge: {
-    borderRadius: 999,
-    borderWidth: 1,
+    borderRadius: radius.full,
     paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
+    paddingVertical: 2.5,
   },
   badgeText: { fontSize: 11, fontWeight: '700' },
-  deadline: { fontSize: 12, color: colors.muted, marginLeft: 'auto' },
+  statusDotWrap: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  statusDot: { width: 8, height: 8, borderRadius: 4 },
+  statusDotText: { fontSize: 12.5, fontWeight: '600', color: colors.textSecondary },
+  deadlineWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginLeft: 'auto',
+  },
+  overdueDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.danger },
+  deadline: { fontSize: 12, color: colors.textSecondary, fontWeight: '500' },
+  deadlineOverdue: { color: colors.danger, fontWeight: '700' },
   chipRow: { flexDirection: 'row', alignItems: 'center' },
   chip: {
     width: 26,
@@ -126,5 +157,5 @@ const styles = StyleSheet.create({
     borderColor: colors.white,
   },
   chipText: { color: colors.white, fontSize: 10, fontWeight: '700' },
-  chipExtra: { fontSize: 11, color: colors.muted, marginLeft: spacing.xs },
+  chipExtra: { fontSize: 11, color: colors.textSecondary, marginLeft: spacing.xs },
 });

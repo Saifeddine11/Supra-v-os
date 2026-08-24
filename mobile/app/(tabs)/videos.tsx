@@ -1,26 +1,19 @@
 /**
- * Vidéos — RLS-scoped video list with kanban-aligned filter chips.
+ * Vidéos — RLS-scoped production tracker with kanban-aligned filter chips.
  * Tab hidden for roles without video access (web nav-policy mirror);
  * an in-screen guard covers direct navigation.
  */
 import React, { useState } from 'react';
-import {
-  FlatList,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/hooks/useAuth';
 import { VIDEO_FILTERS, useVideos, type VideoFilter } from '@/hooks/useVideos';
 import { hasVideoAccess } from '@/lib/roles';
 import { VideoCard } from '@/components/video-card';
-import { Card, ErrorBanner, Skeleton } from '@/components/ui';
-import { colors, spacing } from '@/constants/theme';
+import { Card, ErrorBanner, FilterChips, Skeleton } from '@/components/ui';
+import { colors, layout, spacing, type } from '@/constants/theme';
 
 const EMPTY_LABELS: Record<VideoFilter, string> = {
   all: 'Aucune vidéo visible pour le moment.',
@@ -44,7 +37,7 @@ export default function VideosScreen() {
     return (
       <View style={[styles.flex, styles.guard, { paddingTop: insets.top + spacing.xl }]}>
         <Card>
-          <Text style={styles.guardTitle}>Accès restreint</Text>
+          <Text style={type.headline}>Accès restreint</Text>
           <Text style={styles.guardText}>
             Votre rôle n’a pas accès au module vidéos.
           </Text>
@@ -54,30 +47,11 @@ export default function VideosScreen() {
   }
 
   return (
-    <View style={[styles.flex, { paddingTop: insets.top + spacing.md }]}>
-      <Text style={styles.title}>Vidéos</Text>
+    <View style={[styles.flex, { paddingTop: insets.top + layout.screenTop }]}>
+      <Text style={[type.largeTitle, styles.title]}>Vidéos</Text>
 
       <View style={styles.filterWrap}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterRow}
-        >
-          {VIDEO_FILTERS.map((f) => {
-            const active = f.key === filter;
-            return (
-              <Pressable
-                key={f.key}
-                onPress={() => setFilter(f.key)}
-                style={[styles.filterChip, active && styles.filterChipActive]}
-              >
-                <Text style={[styles.filterText, active && styles.filterTextActive]}>
-                  {f.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+        <FilterChips options={VIDEO_FILTERS} active={filter} onSelect={setFilter} />
       </View>
 
       {error ? (
@@ -96,7 +70,10 @@ export default function VideosScreen() {
         <FlatList
           data={videos}
           keyExtractor={(v) => v.id}
-          contentContainerStyle={[styles.pad, { paddingBottom: spacing.xl, gap: spacing.sm + 4 }]}
+          contentContainerStyle={[
+            styles.pad,
+            { paddingBottom: layout.tabBarSpace, gap: spacing.sm + 2 },
+          ]}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.orange} />
           }
@@ -105,6 +82,7 @@ export default function VideosScreen() {
           )}
           ListEmptyComponent={
             <Card style={styles.emptyCard}>
+              <Ionicons name="film-outline" size={28} color={colors.muted} />
               <Text style={styles.emptyText}>{EMPTY_LABELS[filter]}</Text>
             </Card>
           }
@@ -116,31 +94,11 @@ export default function VideosScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: colors.offWhite },
-  title: {
-    fontSize: 26,
-    fontWeight: '700',
-    color: colors.black,
-    paddingHorizontal: spacing.md,
-    marginBottom: spacing.sm,
-  },
+  title: { paddingHorizontal: spacing.md, marginBottom: spacing.sm + 2 },
   filterWrap: { marginBottom: spacing.sm + 4 },
-  filterRow: { paddingHorizontal: spacing.md, gap: spacing.sm },
-  filterChip: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.white,
-    paddingHorizontal: spacing.md,
-    minHeight: 38,
-    justifyContent: 'center',
-  },
-  filterChipActive: { backgroundColor: colors.black, borderColor: colors.black },
-  filterText: { fontSize: 13, fontWeight: '600', color: colors.black },
-  filterTextActive: { color: colors.white },
   pad: { paddingHorizontal: spacing.md },
-  emptyCard: { alignItems: 'center', paddingVertical: spacing.xl },
-  emptyText: { fontSize: 14, color: colors.muted, textAlign: 'center' },
+  emptyCard: { alignItems: 'center', paddingVertical: spacing.xl, gap: spacing.sm },
+  emptyText: { fontSize: 14, color: colors.textSecondary, textAlign: 'center' },
   guard: { padding: spacing.md },
-  guardTitle: { fontSize: 16, fontWeight: '700', color: colors.black },
-  guardText: { fontSize: 14, color: colors.muted, marginTop: spacing.xs, lineHeight: 20 },
+  guardText: { ...type.body, color: colors.textSecondary, marginTop: spacing.xs },
 });

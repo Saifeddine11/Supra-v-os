@@ -1,45 +1,56 @@
 /**
- * Accueil — role-aware summary. Counts come from RLS-scoped queries:
- * each role only ever sees what the server allows.
+ * Accueil — Apple-dashboard style: greeting + bell, Health-style stat cards,
+ * soft critical alerts, quick actions, upcoming deadlines.
+ * All numbers come from RLS-scoped queries (role decides server-side).
  */
 import React, { useCallback } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/hooks/useAuth';
 import { useHomeSummary } from '@/hooks/useHomeSummary';
 import { ROLE_LABELS, hasTaskAccess, hasVideoAccess, isAdminOrPM } from '@/lib/roles';
-import { Card, ErrorBanner, Skeleton } from '@/components/ui';
-import { colors, spacing } from '@/constants/theme';
+import { formatDateTime } from '@/lib/task-meta';
+import { hapticLight } from '@/lib/haptics';
+import { Card, ErrorBanner, SectionLabel, Skeleton } from '@/components/ui';
+import { cardShadow, colors, layout, radius, spacing, type } from '@/constants/theme';
+
+type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
 function StatCard({
   label,
   value,
-  accent = false,
+  icon,
+  tint = colors.textSecondary,
   onPress,
 }: {
   label: string;
   value: number | null;
-  accent?: boolean;
+  icon: IoniconName;
+  tint?: string;
   onPress?: () => void;
 }) {
   return (
     <Pressable
-      onPress={onPress}
+      onPress={onPress ? () => { hapticLight(); onPress(); } : undefined}
       disabled={!onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`${label} : ${value ?? '—'}`}
       style={({ pressed }) => [styles.statPressable, pressed && !!onPress && { opacity: 0.75 }]}
     >
       <Card style={styles.statCard}>
-        <Text style={[styles.statValue, accent && { color: colors.orange }]}>
-          {value ?? '—'}
-        </Text>
+        <View style={[styles.statIcon, { backgroundColor: `${tint}14` }]}>
+          <Ionicons name={icon} size={16} color={tint} />
+        </View>
+        <Text style={styles.statValue}>{value ?? '—'}</Text>
         <Text style={styles.statLabel}>{label}</Text>
       </Card>
     </Pressable>
   );
 }
 
-function AlertCard({
+function AlertRow({
   text,
   tone,
   onPress,
@@ -48,22 +59,48 @@ function AlertCard({
   tone: 'danger' | 'info';
   onPress: () => void;
 }) {
-  const danger = tone === 'danger';
+  const tint = tone === 'danger' ? colors.danger : colors.orange;
+  const bg = tone === 'danger' ? colors.dangerSoft : colors.orangeSoft;
   return (
     <Pressable
-      onPress={onPress}
+      onPress={() => { hapticLight(); onPress(); }}
+      accessibilityRole="button"
+      accessibilityLabel={text}
+      style={({ pressed }) => [styles.alertRow, { backgroundColor: bg }, pressed && { opacity: 0.8 }]}
+    >
+      <View style={[styles.alertDot, { backgroundColor: tint }]} />
+      <Text style={[styles.alertText, { color: tint }]} numberOfLines={1}>
+        {text}
+      </Text>
+      <Ionicons name="chevron-forward" size={16} color={tint} />
+    </Pressable>
+  );
+}
+
+function QuickAction({
+  label,
+  icon,
+  onPress,
+  accent = false,
+}: {
+  label: string;
+  icon: IoniconName;
+  onPress: () => void;
+  accent?: boolean;
+}) {
+  return (
+    <Pressable
+      onPress={() => { hapticLight(); onPress(); }}
+      accessibilityRole="button"
+      accessibilityLabel={label}
       style={({ pressed }) => [
-        styles.alertCard,
-        danger ? styles.alertDanger : styles.alertInfo,
+        styles.quickAction,
+        accent && styles.quickActionAccent,
         pressed && { opacity: 0.8 },
       ]}
     >
-      <Text style={[styles.alertText, { color: danger ? colors.danger : colors.orange }]}>
-        {text}
-      </Text>
-      <Text style={[styles.alertChevron, { color: danger ? colors.danger : colors.orange }]}>
-        ›
-      </Text>
+      <Ionicons name={icon} size={16} color={accent ? colors.white : colors.textPrimary} />
+      <Text style={[styles.quickActionText, accent && { color: colors.white }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -75,7 +112,6 @@ export default function HomeScreen() {
   const role = employee?.role ?? null;
   const { summary, loading, refreshing, error, refresh, reload } = useHomeSummary(role);
 
-  // Silent re-sync (badge, alerts) when returning to the tab.
   useFocusEffect(
     useCallback(() => {
       void reload();
@@ -83,64 +119,71 @@ export default function HomeScreen() {
   );
 
   const firstName = employee?.full_name?.split(' ')[0] ?? '';
-  const scopeHint = isAdminOrPM(role)
-    ? 'Vue équipe complète'
-    : 'Vos éléments assignés';
+  const unread = summary.unreadNotifications ?? 0;
 
   return (
     <ScrollView
       style={styles.flex}
       contentContainerStyle={[
         styles.container,
-        { paddingTop: insets.top + spacing.md, paddingBottom: spacing.xl },
+        { paddingTop: insets.top + layout.screenTop, paddingBottom: layout.tabBarSpace },
       ]}
       refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.orange} />
       }
     >
-      <View style={styles.headerRow}>
-        <View style={styles.header}>
-          <Text style={styles.hello}>Bonjour {firstName}</Text>
-          <Text style={styles.role}>
-            {role ? ROLE_LABELS[role] : ''} · {scopeHint}
+      <View style={styles.headerBlock}>
+        <View style={styles.headerRow}>
+          <Text style={[type.largeTitle, styles.headerTitle]} numberOfLines={2}>
+            Bonjour {firstName}
           </Text>
+          <Pressable
+            onPress={() => router.push('/notifications')}
+            accessibilityRole="button"
+            accessibilityLabel={
+              unread > 0 ? `Notifications, ${unread} non lues` : 'Notifications'
+            }
+            style={({ pressed }) => [styles.bellButton, pressed && { opacity: 0.7 }]}
+            hitSlop={6}
+          >
+            <Ionicons name="notifications-outline" size={22} color={colors.textPrimary} />
+            {unread > 0 ? (
+              <View style={styles.bellBadge}>
+                <Text style={styles.bellBadgeText}>{unread > 99 ? '99+' : unread}</Text>
+              </View>
+            ) : null}
+          </Pressable>
         </View>
-        <Pressable
-          onPress={() => router.push('/notifications')}
-          style={({ pressed }) => [styles.bellButton, pressed && { opacity: 0.7 }]}
-          hitSlop={6}
-        >
-          <Text style={styles.bellGlyph}>🔔</Text>
-          {(summary.unreadNotifications ?? 0) > 0 ? (
-            <View style={styles.bellBadge}>
-              <Text style={styles.bellBadgeText}>
-                {(summary.unreadNotifications ?? 0) > 99 ? '99+' : summary.unreadNotifications}
-              </Text>
-            </View>
-          ) : null}
-        </Pressable>
+        {role ? (
+          <View style={styles.roleBadge}>
+            <Text style={styles.roleBadgeText}>{ROLE_LABELS[role]}</Text>
+          </View>
+        ) : null}
       </View>
 
       {error ? <ErrorBanner message={error} /> : null}
 
-      {!loading ? (
+      {!loading &&
+      ((summary.overdue ?? 0) > 0 ||
+        (summary.overdueDeliveries ?? 0) > 0 ||
+        (summary.shootingsToday ?? 0) > 0) ? (
         <View style={styles.alerts}>
           {(summary.overdue ?? 0) > 0 ? (
-            <AlertCard
+            <AlertRow
               tone="danger"
               text={`${summary.overdue} tâche${(summary.overdue ?? 0) > 1 ? 's' : ''} en retard`}
               onPress={() => router.push('/(tabs)/tasks')}
             />
           ) : null}
           {(summary.overdueDeliveries ?? 0) > 0 ? (
-            <AlertCard
+            <AlertRow
               tone="danger"
               text={`${summary.overdueDeliveries} livraison${(summary.overdueDeliveries ?? 0) > 1 ? 's' : ''} vidéo en retard`}
               onPress={() => router.push('/(tabs)/videos')}
             />
           ) : null}
           {(summary.shootingsToday ?? 0) > 0 ? (
-            <AlertCard
+            <AlertRow
               tone="info"
               text={`${summary.shootingsToday} tournage${(summary.shootingsToday ?? 0) > 1 ? 's' : ''} aujourd’hui`}
               onPress={() => router.push('/(tabs)/calendar')}
@@ -151,10 +194,10 @@ export default function HomeScreen() {
 
       {loading ? (
         <View style={styles.grid}>
-          <Card style={[styles.statPressable, styles.statCard]}><Skeleton height={56} /></Card>
-          <Card style={[styles.statPressable, styles.statCard]}><Skeleton height={56} /></Card>
-          <Card style={[styles.statPressable, styles.statCard]}><Skeleton height={56} /></Card>
-          <Card style={[styles.statPressable, styles.statCard]}><Skeleton height={56} /></Card>
+          <Card style={[styles.statPressable, styles.statCard]}><Skeleton height={64} /></Card>
+          <Card style={[styles.statPressable, styles.statCard]}><Skeleton height={64} /></Card>
+          <Card style={[styles.statPressable, styles.statCard]}><Skeleton height={64} /></Card>
+          <Card style={[styles.statPressable, styles.statCard]}><Skeleton height={64} /></Card>
         </View>
       ) : (
         <View style={styles.grid}>
@@ -163,18 +206,21 @@ export default function HomeScreen() {
               <StatCard
                 label="Tâches ouvertes"
                 value={summary.openTasks}
+                icon="list"
                 onPress={() => router.push('/(tabs)/tasks')}
               />
               <StatCard
                 label="À rendre aujourd’hui"
                 value={summary.dueToday}
-                accent
+                icon="today"
+                tint={colors.orange}
                 onPress={() => router.push('/(tabs)/calendar')}
               />
               <StatCard
                 label="En retard"
                 value={summary.overdue}
-                accent={(summary.overdue ?? 0) > 0}
+                icon="alert-circle"
+                tint={(summary.overdue ?? 0) > 0 ? colors.danger : colors.textSecondary}
                 onPress={() => router.push('/(tabs)/tasks')}
               />
             </>
@@ -183,29 +229,74 @@ export default function HomeScreen() {
             <StatCard
               label="Vidéos en cours"
               value={summary.activeVideos}
+              icon="videocam"
+              tint={colors.info}
               onPress={() => router.push('/(tabs)/videos')}
             />
           )}
           {!hasTaskAccess(role) && !hasVideoAccess(role) && (
             <Card style={styles.fullCard}>
-              <Text style={styles.emptyTitle}>Bienvenue sur Supra OS Mobile</Text>
+              <Text style={type.headline}>Bienvenue sur Supra OS Mobile</Text>
               <Text style={styles.emptyText}>
-                Votre rôle n’a pas encore de module mobile dédié. Les tâches et
-                vidéos arrivent pour les rôles opérationnels ; utilisez
-                l’application web pour le reste.
+                Votre rôle n’a pas encore de module mobile dédié. Utilisez
+                l’application web pour vos outils.
               </Text>
             </Card>
           )}
         </View>
       )}
 
-      <Card style={styles.fullCard}>
-        <Text style={styles.noticeTitle}>Supra v OS — version mobile (bêta)</Text>
-        <Text style={styles.noticeText}>
-          Tâches, calendrier et vidéos en consultation et suivi. La gestion
-          complète (création, finance, SupAI) reste sur l’application web.
-        </Text>
-      </Card>
+      <View style={styles.quickRow}>
+        {isAdminOrPM(role) ? (
+          <QuickAction
+            label="Nouvelle tâche"
+            icon="add"
+            accent
+            onPress={() => router.push('/tasks/new')}
+          />
+        ) : null}
+        {hasTaskAccess(role) ? (
+          <QuickAction
+            label="Calendrier"
+            icon="calendar-outline"
+            onPress={() => router.push('/(tabs)/calendar')}
+          />
+        ) : null}
+        <QuickAction
+          label="Notifications"
+          icon="notifications-outline"
+          onPress={() => router.push('/notifications')}
+        />
+      </View>
+
+      {!loading && summary.upcoming.length > 0 ? (
+        <View>
+          <SectionLabel>À venir</SectionLabel>
+          <Card style={styles.upcomingCard}>
+            {summary.upcoming.map((t, i) => (
+              <Pressable
+                key={t.id}
+                onPress={() => router.push(`/tasks/${t.id}`)}
+                accessibilityRole="button"
+                accessibilityLabel={t.title}
+                style={({ pressed }) => [
+                  styles.upcomingRow,
+                  i < summary.upcoming.length - 1 && styles.upcomingRowBorder,
+                  pressed && { opacity: 0.6 },
+                ]}
+              >
+                <View style={styles.upcomingTexts}>
+                  <Text style={styles.upcomingTitle} numberOfLines={1}>
+                    {t.title}
+                  </Text>
+                  <Text style={type.caption}>{formatDateTime(t.deadline)}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={colors.muted} />
+              </Pressable>
+            ))}
+          </Card>
+        </View>
+      ) : null}
     </ScrollView>
   );
 }
@@ -213,30 +304,38 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1, backgroundColor: colors.offWhite },
   container: { paddingHorizontal: spacing.md, gap: spacing.md },
+  headerBlock: { gap: spacing.sm },
   headerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    // Centré : la cloche s'aligne optiquement sur la ligne du grand titre.
+    alignItems: 'center',
     gap: spacing.sm,
   },
-  header: { gap: spacing.xs, marginBottom: spacing.xs, flex: 1 },
+  headerTitle: { flex: 1 },
+  roleBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: colors.orangeSoft,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 3,
+  },
+  roleBadgeText: { fontSize: 12, fontWeight: '700', color: colors.orange },
   bellButton: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.border,
+    width: layout.touch,
+    height: layout.touch,
+    borderRadius: layout.touch / 2,
+    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
+    ...cardShadow,
   },
-  bellGlyph: { fontSize: 20 },
   bellBadge: {
     position: 'absolute',
-    top: -4,
-    right: -4,
-    minWidth: 20,
-    height: 20,
+    top: -3,
+    right: -3,
+    minWidth: 19,
+    height: 19,
     borderRadius: 10,
     backgroundColor: colors.orange,
     alignItems: 'center',
@@ -245,40 +344,60 @@ const styles = StyleSheet.create({
   },
   bellBadgeText: { color: colors.white, fontSize: 11, fontWeight: '800' },
   alerts: { gap: spacing.sm },
-  alertCard: {
+  alertRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    borderRadius: 12,
-    borderWidth: 1,
-    paddingHorizontal: spacing.md,
-    minHeight: 50,
     gap: spacing.sm,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    minHeight: layout.touch + 4,
   },
-  alertDanger: { backgroundColor: '#FBEAEA', borderColor: '#EFB9B9' },
-  alertInfo: { backgroundColor: '#FFF1EA', borderColor: '#F6C9B4' },
-  alertText: { fontSize: 14, fontWeight: '700', flex: 1 },
-  alertChevron: { fontSize: 20, fontWeight: '700' },
-  hello: { fontSize: 26, fontWeight: '700', color: colors.black },
-  role: { fontSize: 14, color: colors.muted, fontWeight: '500' },
+  alertDot: { width: 7, height: 7, borderRadius: 4 },
+  alertText: { flex: 1, fontSize: 14, fontWeight: '600' },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm + 4,
   },
-  statPressable: {
-    flexBasis: '47%',
-    flexGrow: 1,
-  },
-  statCard: {
-    minHeight: 96,
+  statPressable: { flexBasis: '47%', flexGrow: 1 },
+  statCard: { minHeight: 108, justifyContent: 'center', gap: 2 },
+  statIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: spacing.xs,
   },
-  statValue: { fontSize: 32, fontWeight: '800', color: colors.black },
-  statLabel: { fontSize: 13, color: colors.muted, marginTop: spacing.xs, fontWeight: '500' },
-  fullCard: { width: '100%' },
-  emptyTitle: { fontSize: 16, fontWeight: '700', color: colors.black },
-  emptyText: { fontSize: 14, color: colors.muted, marginTop: spacing.xs, lineHeight: 20 },
-  noticeTitle: { fontSize: 14, fontWeight: '700', color: colors.orange },
-  noticeText: { fontSize: 13, color: colors.muted, marginTop: spacing.xs, lineHeight: 19 },
+  statValue: { fontSize: 28, fontWeight: '800', color: colors.textPrimary },
+  statLabel: { fontSize: 12.5, color: colors.textSecondary, fontWeight: '500' },
+  fullCard: { width: '100%', gap: spacing.xs },
+  emptyText: { ...type.body, color: colors.textSecondary },
+  quickRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  quickAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs + 2,
+    backgroundColor: colors.surface,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing.md,
+    minHeight: layout.touch,
+    ...cardShadow,
+  },
+  quickActionAccent: { backgroundColor: colors.orange },
+  quickActionText: { fontSize: 14, fontWeight: '600', color: colors.textPrimary },
+  upcomingCard: { paddingVertical: spacing.xs },
+  upcomingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    minHeight: layout.touch + 6,
+    paddingVertical: spacing.xs,
+  },
+  upcomingRowBorder: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.separator,
+  },
+  upcomingTexts: { flex: 1, gap: 1 },
+  upcomingTitle: { fontSize: 15, fontWeight: '600', color: colors.textPrimary },
 });

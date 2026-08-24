@@ -11,6 +11,12 @@ import { hasTaskAccess, hasVideoAccess } from '@/lib/roles';
 import { logDevError, toUserMessage } from '@/lib/errors';
 import type { UserRole } from '@/types/db';
 
+export interface UpcomingTask {
+  id: string;
+  title: string;
+  deadline: string;
+}
+
 export interface HomeSummary {
   openTasks: number | null;
   dueToday: number | null;
@@ -20,6 +26,8 @@ export interface HomeSummary {
   overdueDeliveries: number | null;
   shootingsToday: number | null;
   unreadNotifications: number | null;
+  /** Next 3 open task deadlines (task roles only). */
+  upcoming: UpcomingTask[];
 }
 
 const EMPTY: HomeSummary = {
@@ -30,6 +38,7 @@ const EMPTY: HomeSummary = {
   overdueDeliveries: null,
   shootingsToday: null,
   unreadNotifications: null,
+  upcoming: [],
 };
 
 const OPEN_TASK_STATUSES = '("todo","in_progress","waiting_client","waiting_team","review","blocked")';
@@ -127,6 +136,18 @@ export function useHomeSummary(role: UserRole | null) {
               next.overdue = n;
             },
           ),
+          // Next deadlines — tiny bounded query for the « À venir » section.
+          supabase
+            .from('tasks')
+            .select('id, title, deadline')
+            .filter('status', 'in', OPEN_TASK_STATUSES)
+            .gte('deadline', new Date().toISOString())
+            .order('deadline', { ascending: true })
+            .limit(3)
+            .then(({ data, error: uErr }) => {
+              if (uErr) throw new Error(uErr.message);
+              next.upcoming = (data ?? []) as UpcomingTask[];
+            }),
         );
       }
 

@@ -1,9 +1,10 @@
 /**
- * Compact video card — status, dates, team, overdue delivery.
+ * Video card — production-tracker feel: status dot, two-column
+ * Tournage / Livraison dates, team chips, soft overdue marker.
  */
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { colors, radius, spacing } from '@/constants/theme';
+import { cardShadow, colors, radius, spacing } from '@/constants/theme';
 import { formatDateTime } from '@/lib/task-meta';
 import {
   VIDEO_FORMAT_LABELS,
@@ -11,7 +12,7 @@ import {
   effectiveClientDeliveryIso,
   isVideoDeliveryOverdue,
 } from '@/lib/video-meta';
-import { AssigneeChips, Badge } from '@/components/task-card';
+import { AssigneeChips, Badge, StatusDot } from '@/components/task-card';
 import type { VideoListItem } from '@/hooks/useVideos';
 
 export function VideoCard({ video, onPress }: { video: VideoListItem; onPress: () => void }) {
@@ -23,7 +24,9 @@ export function VideoCard({ video, onPress }: { video: VideoListItem; onPress: (
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+      accessibilityRole="button"
+      accessibilityLabel={`${video.title}${overdue ? ', livraison en retard' : ''}`}
+      style={({ pressed }) => [styles.card, pressed && { opacity: 0.75 }]}
     >
       <View style={styles.topRow}>
         <Text style={styles.title} numberOfLines={2}>
@@ -32,34 +35,32 @@ export function VideoCard({ video, onPress }: { video: VideoListItem; onPress: (
         <AssigneeChips assignees={video.team} />
       </View>
 
-      {video.client_name ? (
-        <Text style={styles.client} numberOfLines={1}>
-          {video.client_name}
-        </Text>
-      ) : null}
-
-      <View style={styles.badgeRow}>
-        <Badge label={status.label} color={status.color} />
+      <View style={styles.metaRow}>
+        <StatusDot label={status.label} color={status.color} />
         {video.format ? (
-          <Badge label={VIDEO_FORMAT_LABELS[video.format]} color={colors.muted} />
+          <Badge label={VIDEO_FORMAT_LABELS[video.format]} color={colors.textSecondary} />
         ) : null}
         {overdue ? <Badge label="Livraison en retard" color={colors.danger} /> : null}
+        {video.client_name ? (
+          <Text style={styles.client} numberOfLines={1}>
+            {video.client_name}
+          </Text>
+        ) : null}
       </View>
 
       {shooting || delivery ? (
-        <View style={styles.dateRow}>
-          {shooting ? (
-            <Text style={styles.dateText}>
-              <Text style={styles.dateLabel}>Tournage </Text>
-              {shooting}
+        <View style={styles.dateGrid}>
+          <View style={styles.dateCol}>
+            <Text style={styles.dateLabel}>Tournage</Text>
+            <Text style={styles.dateValue}>{shooting ?? '—'}</Text>
+          </View>
+          <View style={styles.dateSeparator} />
+          <View style={styles.dateCol}>
+            <Text style={styles.dateLabel}>Livraison</Text>
+            <Text style={[styles.dateValue, overdue && { color: colors.danger }]}>
+              {delivery ?? '—'}
             </Text>
-          ) : null}
-          {delivery ? (
-            <Text style={[styles.dateText, overdue && { color: colors.danger }]}>
-              <Text style={styles.dateLabel}>Livraison </Text>
-              {delivery}
-            </Text>
-          ) : null}
+          </View>
         </View>
       ) : null}
     </Pressable>
@@ -68,30 +69,53 @@ export function VideoCard({ video, onPress }: { video: VideoListItem; onPress: (
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.surface,
     borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
     padding: spacing.md,
-    gap: spacing.xs + 2,
+    gap: spacing.sm,
+    ...cardShadow,
   },
-  cardPressed: { opacity: 0.8 },
   topRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     gap: spacing.sm,
   },
-  title: { flex: 1, fontSize: 15, fontWeight: '600', color: colors.black, lineHeight: 20 },
-  client: { fontSize: 13, color: colors.muted, fontWeight: '500' },
-  badgeRow: {
+  title: {
+    flex: 1,
+    fontSize: 15.5,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    lineHeight: 20,
+  },
+  metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'wrap',
-    gap: spacing.xs + 2,
-    marginTop: spacing.xs,
+    gap: spacing.sm,
   },
-  dateRow: { gap: 2, marginTop: spacing.xs },
-  dateText: { fontSize: 12, color: colors.black, fontWeight: '600' },
-  dateLabel: { color: colors.muted, fontWeight: '500' },
+  client: { fontSize: 12.5, color: colors.textSecondary, fontWeight: '500', flexShrink: 1 },
+  dateGrid: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.offWhite,
+    borderRadius: radius.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    gap: spacing.md,
+  },
+  dateCol: { flex: 1, gap: 1 },
+  dateSeparator: {
+    width: StyleSheet.hairlineWidth,
+    alignSelf: 'stretch',
+    backgroundColor: colors.separator,
+  },
+  dateLabel: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  dateValue: { fontSize: 13, fontWeight: '600', color: colors.textPrimary },
 });
