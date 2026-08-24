@@ -19,6 +19,7 @@ import React, {
 import type { Session } from '@supabase/supabase-js';
 import { supabase, supabaseConfigError } from '@/lib/supabase';
 import { logDevError, toUserMessage } from '@/lib/errors';
+import { deactivatePushToken, registerPushToken } from '@/lib/push-notifications';
 import type { Employee } from '@/types/db';
 
 const NO_EMPLOYEE_MSG = 'Compte connecté mais aucun profil employé trouvé.';
@@ -79,6 +80,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       setEmployee(emp);
+      // Push : best-effort, jamais bloquant (permission refusée = app normale).
+      void registerPushToken(s.user.id);
     } catch {
       // Network/profile error on restore: keep the session, retry via refreshEmployee.
       setEmployee(null);
@@ -144,6 +147,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return { error: gate };
         }
         setEmployee(emp);
+        void registerPushToken(data.user.id);
         return { error: null };
       } catch (e) {
         logDevError('signIn:employee', e);
@@ -155,6 +159,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const signOut = useCallback(async () => {
+    // Avant signOut : la RLS exige encore la session pour écrire le jeton.
+    await deactivatePushToken();
     await supabase.auth.signOut();
     setEmployee(null);
   }, []);
