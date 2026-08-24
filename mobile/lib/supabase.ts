@@ -26,10 +26,18 @@ export const supabase = createClient(url ?? 'https://placeholder.supabase.co', a
 });
 
 // Refresh the session while the app is foregrounded (official Expo pattern).
-AppState.addEventListener('change', (state) => {
-  if (state === 'active') {
-    supabase.auth.startAutoRefresh();
-  } else {
-    supabase.auth.stopAutoRefresh();
-  }
-});
+// Sous try/catch : ce code s'exécute à l'import, donc AVANT le premier rendu.
+// Une exception ici ferait échouer l'évaluation du bundle, ce qu'expo-updates
+// transforme en abort natif (SIGABRT) plutôt qu'en erreur affichable.
+try {
+  AppState.addEventListener('change', (state) => {
+    try {
+      if (state === 'active') supabase.auth.startAutoRefresh();
+      else supabase.auth.stopAutoRefresh();
+    } catch {
+      // Rafraîchissement auto indisponible : la session reste utilisable.
+    }
+  });
+} catch {
+  // Pas d'AppState (contexte non-RN) : sans effet sur le reste de l'app.
+}

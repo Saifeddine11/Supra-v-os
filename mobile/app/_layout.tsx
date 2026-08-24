@@ -3,7 +3,7 @@ import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as Notifications from 'expo-notifications';
 import { AuthProvider } from '@/hooks/useAuth';
-import { routeForPushData } from '@/lib/push-notifications';
+import { configureNotificationHandler, routeForPushData } from '@/lib/push-notifications';
 import { colors } from '@/constants/theme';
 
 /**
@@ -19,6 +19,10 @@ function usePushNavigation() {
   useEffect(() => {
     let mounted = true;
 
+    // Configuration + écoute natives APRÈS le premier rendu, jamais à
+    // l'import : une exception ici ne peut plus empêcher l'app de démarrer.
+    configureNotificationHandler();
+
     const open = (response: Notifications.NotificationResponse | null) => {
       if (!mounted || !response) return;
       const id = response.notification.request.identifier;
@@ -30,17 +34,23 @@ function usePushNavigation() {
       router.push(routeForPushData(data));
     };
 
-    // App fermée : notification ayant lancé l'app.
-    Notifications.getLastNotificationResponseAsync()
-      .then(open)
-      .catch(() => {});
+    let sub: Notifications.EventSubscription | null = null;
+    try {
+      // App fermée : notification ayant lancé l'app.
+      Notifications.getLastNotificationResponseAsync()
+        .then(open)
+        .catch(() => {});
 
-    // App ouverte / en arrière-plan.
-    const sub = Notifications.addNotificationResponseReceivedListener(open);
+      // App ouverte / en arrière-plan.
+      sub = Notifications.addNotificationResponseReceivedListener(open);
+    } catch {
+      // Module natif indisponible : la navigation par notification est
+      // simplement inactive, l'app reste utilisable.
+    }
 
     return () => {
       mounted = false;
-      sub.remove();
+      sub?.remove();
     };
   }, [router]);
 }

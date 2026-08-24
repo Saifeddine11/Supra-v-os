@@ -18,15 +18,33 @@ import Constants from 'expo-constants';
 import { supabase } from '@/lib/supabase';
 import { logDevError } from '@/lib/errors';
 
-/** Bannière + son même quand l'app est au premier plan. */
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
+/**
+ * Configuration du handler de notifications.
+ *
+ * ⚠️ Volontairement PAS au niveau module : tout appel natif exécuté à
+ * l'import s'exécute avant le premier rendu React. En build natif (TestFlight)
+ * une exception à ce moment-là tue le process au lancement, sans écran
+ * d'erreur. On l'initialise donc paresseusement, une seule fois, sous
+ * try/catch, depuis un effet React.
+ */
+let handlerConfigured = false;
+
+export function configureNotificationHandler(): void {
+  if (handlerConfigured) return;
+  handlerConfigured = true;
+  try {
+    Notifications.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowBanner: true,
+        shouldShowList: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+      }),
+    });
+  } catch (e) {
+    logDevError('push:configureHandler', e);
+  }
+}
 
 /** Canal Android obligatoire pour afficher les notifications. */
 async function ensureAndroidChannel(): Promise<void> {
@@ -70,11 +88,15 @@ export async function getExpoPushToken(): Promise<string | null> {
     }
     if (status !== 'granted') return null;
 
+    // Sans projectId, getExpoPushTokenAsync ne peut pas résoudre le jeton :
+    // on s'arrête proprement plutôt que de laisser remonter une exception.
     const id = projectId();
-    const token = await Notifications.getExpoPushTokenAsync(
-      id ? { projectId: id } : undefined,
-    );
-    return token.data ?? null;
+    if (!id) {
+      logDevError('push:getToken', new Error('projectId absent (extra.eas.projectId)'));
+      return null;
+    }
+    const token = await Notifications.getExpoPushTokenAsync({ projectId: id });
+    return token?.data ?? null;
   } catch (e) {
     logDevError('push:getToken', e);
     return null;
@@ -118,9 +140,9 @@ export async function registerPushToken(userId: string): Promise<string | null> 
 /** Désactive le jeton de CET appareil (déconnexion). */
 export async function deactivatePushToken(): Promise<void> {
   try {
-    const token = await Notifications.getExpoPushTokenAsync(
-      projectId() ? { projectId: projectId() as string } : undefined,
-    ).catch(() => null);
+    const id = projectId();
+    if (!id) return;
+    const token = await Notifications.getExpoPushTokenAsync({ projectId: id });
     if (!token?.data) return;
 
     await supabase

@@ -18,11 +18,7 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.suprav3.mobile",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false,
-        "UIBackgroundModes": [
-          "remote-notification",
-          "remote-notification"
-        ]
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -32,8 +28,6 @@
         "backgroundColor": "#080706"
       },
       "permissions": [
-        "NOTIFICATIONS",
-        "POST_NOTIFICATIONS",
         "NOTIFICATIONS",
         "POST_NOTIFICATIONS"
       ]
@@ -46,7 +40,8 @@
         "expo-notifications",
         {
           "color": "#FF3D0A",
-          "defaultChannel": "default"
+          "defaultChannel": "default",
+          "mode": "production"
         }
       ]
     ],
@@ -64,7 +59,8 @@
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/b0587761-b3e0-47cf-afa2-86a2df463b81"
+      "url": "https://u.expo.dev/b0587761-b3e0-47cf-afa2-86a2df463b81",
+      "enabled": false
     }
   }
 }
