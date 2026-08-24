@@ -39,6 +39,8 @@ export interface CreateTaskInput {
   assigneeIds: string[];
 }
 
+const LIKE_WILDCARD_RE = /[\\%_]/g;
+
 const CREATE_FAILED_MSG = 'La création de la tâche a échoué. Réessayez.';
 const CREATE_DENIED_MSG = 'Vous n’avez pas l’autorisation de créer une tâche.';
 
@@ -54,7 +56,7 @@ export function useClientOptions(search: string) {
         let q = supabase.from('clients').select('id, name').order('name').limit(30);
         const term = search.trim();
         if (term.length > 0) {
-          q = q.ilike('name', `%${term.replace(/[\\%_]/g, (m) => `\\${m}`)}%`);
+          q = q.ilike('name', `%${term.replace(LIKE_WILDCARD_RE, (m) => `\\${m}`)}%`);
         }
         const { data, error } = await q;
         if (error) throw new Error(error.message);

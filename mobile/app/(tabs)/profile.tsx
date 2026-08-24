@@ -7,9 +7,11 @@ import { ROLE_LABELS } from '@/lib/roles';
 import { Card, ListRow, PrimaryButton, SectionLabel } from '@/components/ui';
 import { colors, layout, radius, spacing, type } from '@/constants/theme';
 
+const WHITESPACE_RE = /\s+/;
+
 function initialsFor(name: string): string {
   return name
-    .split(/\s+/)
+    .split(WHITESPACE_RE)
     .filter(Boolean)
     .slice(0, 2)
     .map((p) => p[0]?.toUpperCase() ?? '')

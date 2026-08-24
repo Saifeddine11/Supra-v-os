@@ -23,6 +23,8 @@ import { Card, ErrorBanner, Skeleton } from '@/components/ui';
 import { colors, radius, spacing } from '@/constants/theme';
 import type { TaskStatus } from '@/types/db';
 
+const WHITESPACE_RE = /\s+/;
+
 const ROLE_LABEL: Record<string, string> = {
   editor: 'Monteur',
   cameraman: 'Cadreur',
@@ -116,7 +118,7 @@ export default function VideoDetailScreen() {
                         <Text style={styles.teamChipText}>
                           {m.avatar_initials ??
                             m.full_name
-                              .split(/\s+/)
+                              .split(WHITESPACE_RE)
                               .slice(0, 2)
                               .map((p) => p[0]?.toUpperCase() ?? '')
                               .join('')}

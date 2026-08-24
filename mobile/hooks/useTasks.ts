@@ -151,9 +151,11 @@ async function fetchTasks(filter: TaskFilter): Promise<TaskListItem[]> {
   return ((data ?? []) as unknown as RawTaskRow[]).map(toListItem);
 }
 
+const LIKE_WILDCARD_RE = /[\\%_]/g;
+
 /** Escapes LIKE wildcards so the user's text is matched literally. */
 function escapeLike(term: string): string {
-  return term.replace(/[\\%_]/g, (m) => `\\${m}`);
+  return term.replace(LIKE_WILDCARD_RE, (m) => `\\${m}`);
 }
 
 function deadlineMs(t: TaskListItem): number {

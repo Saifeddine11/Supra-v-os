@@ -27,10 +27,13 @@ export function StatusDot({ label, color }: { label: string; color: string }) {
   );
 }
 
+/** Hoistée : évite une construction de RegExp par élément rendu. */
+const WHITESPACE_RE = /\s+/;
+
 function initialsOf(assignee: TaskAssigneeInfo): string {
   if (assignee.avatar_initials) return assignee.avatar_initials;
   return assignee.full_name
-    .split(/\s+/)
+    .split(WHITESPACE_RE)
     .filter(Boolean)
     .slice(0, 2)
     .map((p) => p[0]?.toUpperCase() ?? '')
