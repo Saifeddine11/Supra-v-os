@@ -151,10 +151,24 @@ export async function createNotificationOnce(
   return { inserted: true };
 }
 
+/**
+ * Resolves the Auth user id of an employee for notification delivery.
+ *
+ * Returns null for inactive, archived, or Auth-less employees: a deactivated
+ * collaborator must never receive notifications. Same filters as
+ * `getUserIdsByRoles` below, so both recipient paths behave identically.
+ */
 export async function getEmployeeUserId(employeeId: string | null | undefined): Promise<string | null> {
   if (!employeeId) return null;
   const admin = createAdminClient();
-  const { data } = await admin.from('employees').select('user_id').eq('id', employeeId).maybeSingle();
+  const { data } = await admin
+    .from('employees')
+    .select('user_id')
+    .eq('id', employeeId)
+    .eq('is_active', true)
+    .is('archived_at', null)
+    .not('user_id', 'is', null)
+    .maybeSingle();
   return data?.user_id ?? null;
 }
 
