@@ -57,6 +57,10 @@ import type { UserRole } from '@/types/database';
 import { LoginPerfBeacon } from '@/components/app/login-perf-beacon';
 import { PageLoadingSkeleton } from '@/components/app/page-loading-skeleton';
 import { isMinimalDashboardEnabled, perfLog, perfMs, withDevTime } from '@/lib/perf/dev-time';
+import { parseCockpitPeriod } from '@/lib/dashboard/period';
+import { fetchAdminCockpit } from '@/lib/data/dashboard-cockpit';
+import { AdminCockpit } from '@/components/dashboard/cockpit/admin-cockpit';
+import { CockpitSkeleton } from '@/components/dashboard/cockpit/cockpit-skeleton';
 
 export const metadata: Metadata = {
   title: 'Tableau de bord',
@@ -340,7 +344,11 @@ function DashboardGreetingHeader({
   );
 }
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ period?: string }>;
+}) {
   const pageStart = performance.now();
   const ctx = await requireAuth();
   if (!ctx.employee) {
@@ -349,6 +357,8 @@ export default async function DashboardPage() {
 
   const variant = getDashboardVariant(ctx.role);
   const scope = dashboardScopeFromRole(ctx.role);
+  const sp = await searchParams;
+  const period = parseCockpitPeriod(sp?.period);
 
   if (isMinimalDashboardEnabled()) {
     perfLog(`[perf] dashboard page total: ${perfMs(pageStart)} ms`);
@@ -370,6 +380,17 @@ export default async function DashboardPage() {
 
   perfLog(`[perf] dashboard page shell: ${perfMs(pageStart)} ms`);
 
+  if (variant === 'admin') {
+    return (
+      <div>
+        <LoginPerfBeacon label="dashboard first render" />
+        <Suspense fallback={<CockpitSkeleton />}>
+          <AdminCockpitLive ctx={ctx} period={period} />
+        </Suspense>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
       <LoginPerfBeacon label="dashboard first render" />
@@ -384,6 +405,18 @@ export default async function DashboardPage() {
       </Suspense>
     </div>
   );
+}
+
+async function AdminCockpitLive({
+  ctx,
+  period,
+}: {
+  ctx: AuthContext;
+  period: ReturnType<typeof parseCockpitPeriod>;
+}) {
+  const data = await fetchAdminCockpit(ctx, period);
+  if (!data) return null;
+  return <AdminCockpit data={data} />;
 }
 
 async function DashboardLiveBody({ ctx }: { ctx: AuthContext }) {

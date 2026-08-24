@@ -1,5 +1,5 @@
-import { PageLoadingSkeleton } from '@/components/app/page-loading-skeleton';
+import { CockpitSkeleton } from '@/components/dashboard/cockpit/cockpit-skeleton';
 
 export default function DashboardLoading() {
-  return <PageLoadingSkeleton titleWidth="w-56" />;
+  return <CockpitSkeleton />;
 }

@@ -192,7 +192,7 @@ export function ClientWorkspaceShell({
             <UserAvatar name={userName} size="sm" />
           </div>
         </header>
-        <main className="cockpit-enter px-4 py-6 sm:px-6 lg:px-8">{children}</main>
+        <main className="content-enter px-4 py-6 sm:px-6 lg:px-8">{children}</main>
       </div>
     </div>
   );

@@ -254,6 +254,29 @@
       0 24px 48px -12px rgba(0, 0, 0, 0.55),
       0 18px 40px -16px color-mix(in srgb, var(--supra-orange) 22%, transparent);
   }
+
+  .content-enter,
+  .cockpit-enter {
+    animation: content-enter 420ms ease-out both;
+  }
+}
+
+@keyframes content-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .content-enter,
+  .cockpit-enter {
+    animation: none;
+  }
 }
 
 /* ─── Sonner : toast critique compact, largeur max premium (desktop) ───────── */
