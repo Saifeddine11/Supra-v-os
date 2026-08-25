@@ -19,8 +19,7 @@
       "bundleIdentifier": "com.suprav3.mobile",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
-      },
-      "jsEngine": "jsc"
+      }
     },
     "android": {
       "package": "com.suprav3.mobile",
@@ -44,7 +43,8 @@
           "defaultChannel": "default",
           "mode": "production"
         }
-      ]
+      ],
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": false
