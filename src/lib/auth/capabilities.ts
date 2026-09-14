@@ -126,6 +126,9 @@ export function canManageVideos(role: UserRole | null): boolean {
   );
 }
 
+/** Création de fiche vidéo — même périmètre que RLS `videos_insert_authorized`. */
+export const canCreateVideo = canManageVideos;
+
 export function canDeleteVideo(role: UserRole | null): boolean {
   return role === 'admin' || role === PM;
 }

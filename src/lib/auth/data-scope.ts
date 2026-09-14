@@ -12,19 +12,9 @@ import {
 } from '@/lib/data/video-assignments';
 import { employeeHasTaskAssignment } from '@/lib/data/task-assignments';
 import type { AuthContext } from '@/lib/auth/permissions';
-import { canModifyQuotes, canViewInvoices } from '@/lib/auth/capabilities';
+import { canCreateVideo, canModifyQuotes, canViewInvoices } from '@/lib/auth/capabilities';
 import { isDepartmentSupervisor } from '@/lib/auth/supervision';
 import type { Project, UserRole } from '@/types/database';
-
-/** Rôles pouvant créer une fiche vidéo (aligné RLS `videos_insert_authorized` + produit). */
-const VIDEO_CREATE_ROLES: UserRole[] = [
-  'admin',
-  'project_manager',
-  'editor',
-  'cameraman',
-  'community_manager',
-  'commercial',
-];
 
 export type ScopedSupabase = SupabaseClient;
 
@@ -69,7 +59,7 @@ export function assertCanCreateVideo(ctx: AuthContext): string | null {
   if (!ctx.employee.is_active || ctx.employee.archived_at) {
     return 'Compte employé inactif : la création de vidéo est désactivée.';
   }
-  if (!ctx.role || !VIDEO_CREATE_ROLES.includes(ctx.role)) {
+  if (!canCreateVideo(ctx.role)) {
     return 'Votre rôle ne permet pas de créer une vidéo.';
   }
   return null;

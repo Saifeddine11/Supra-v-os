@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { X } from 'lucide-react';
+import { toast } from 'sonner';
 import { format, parseISO } from 'date-fns';
 import type { Client, VideoPublicStatus, VideoStatus } from '@/types/database';
 import type { VideoWithClient } from '@/lib/data/videos';
@@ -106,16 +107,23 @@ export function VideoFormDialog({
   clients,
   employees,
   trigger,
+  open: openProp,
+  onOpenChange: onOpenChangeProp,
   onSaved,
 }: {
   video?: VideoWithClient | null;
   clients: Pick<Client, 'id' | 'name' | 'color_hex' | 'color_label'>[];
   employees: VideoAssignEmployeeRow[];
-  trigger: React.ReactNode;
+  trigger?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   onSaved?: () => void;
 }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isControlled = openProp !== undefined;
+  const open = isControlled ? openProp : internalOpen;
+  const setOpen = isControlled ? (onOpenChangeProp ?? setInternalOpen) : setInternalOpen;
   const [err, setErr] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [editorSel, setEditorSel] = useState<Set<string>>(() => new Set());
@@ -178,7 +186,7 @@ export function VideoFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>{trigger}</DialogTrigger>
+      {trigger ? <DialogTrigger asChild>{trigger}</DialogTrigger> : null}
       <DialogContent
         showCloseButton={false}
         className={cn(
@@ -216,6 +224,7 @@ export function VideoFormDialog({
             });
             if (shootErr) {
               setErr(`Date de tournage : ${shootErr}`);
+              toast.error(`Date de tournage : ${shootErr}`);
               setPending(false);
               return;
             }
@@ -226,6 +235,7 @@ export function VideoFormDialog({
             });
             if (deliveryErr) {
               setErr(`Date de livraison client : ${deliveryErr}`);
+              toast.error(`Date de livraison client : ${deliveryErr}`);
               setPending(false);
               return;
             }
@@ -237,11 +247,18 @@ export function VideoFormDialog({
               const res = isEdit ? await updateVideoAction(video!.id, fd) : await createVideoAction(fd);
               if (!res.ok) {
                 setErr(res.error);
+                toast.error(res.error);
                 return;
               }
+              toast.success(isEdit ? 'Vidéo enregistrée' : 'Vidéo créée');
               router.refresh();
               setOpen(false);
               onSaved?.();
+            } catch (e) {
+              console.error('[VideoFormDialog] submit:', e);
+              const msg = 'Impossible d’enregistrer la vidéo. Réessayez ou contactez un administrateur.';
+              setErr(msg);
+              toast.error(msg);
             } finally {
               setPending(false);
             }

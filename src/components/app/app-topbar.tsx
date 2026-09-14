@@ -11,7 +11,7 @@ import { ThemeToggle } from '@/components/app/theme-toggle';
 import type { Employee, Notification } from '@/types/database';
 import type { NotificationSoundPrefs } from '@/lib/notifications/notification-sound-prefs';
 import { navItemVisible } from '@/lib/auth/nav-policy';
-import { canModifyInvoices } from '@/lib/auth/capabilities';
+import { canCreateVideo, canModifyInvoices } from '@/lib/auth/capabilities';
 
 export interface AppTopbarProps {
   employee: Employee;
@@ -55,6 +55,11 @@ export function AppTopbar({
             const showClients = navItemVisible('/clients', employee.role);
             const showTasks = navItemVisible('/tasks', employee.role);
             const showInvoices = canModifyInvoices(employee.role);
+            const showVideoCreate =
+              pathname.startsWith('/videos') &&
+              canCreateVideo(employee.role) &&
+              employee.is_active &&
+              !employee.archived_at;
             let primaryUsed = false;
             const nextVariant = (): 'primary' | 'quickSecondary' => {
               if (!primaryUsed) {
@@ -65,6 +70,14 @@ export function AppTopbar({
             };
             return (
               <>
+                {showVideoCreate ? (
+                  <Button variant={nextVariant()} size="sm" className="rounded-full" asChild>
+                    <Link href="/videos?new=video" aria-label="Ajouter une vidéo">
+                      <Plus className="h-4 w-4" />
+                      Vidéo
+                    </Link>
+                  </Button>
+                ) : null}
                 {showClients ? (
                   <Button variant={nextVariant()} size="sm" className="rounded-full" asChild>
                     <Link href="/clients">

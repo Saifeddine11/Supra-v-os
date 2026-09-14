@@ -7,12 +7,13 @@ import { listVideosWithClients } from '@/lib/data/videos';
 import { listClients } from '@/lib/data/clients';
 import { listEmployeesForVideoAssign } from '@/lib/data/employees';
 import { getAuthContext } from '@/lib/auth/permissions';
-import { canDeleteVideo } from '@/lib/auth/capabilities';
+import { canCreateVideo, canDeleteVideo } from '@/lib/auth/capabilities';
 import { videoMutationDenied } from '@/lib/auth/data-scope';
 import { Button } from '@/components/ui/button';
 import { SectionCard } from '@/components/shared/section-card';
 import { EmptyState } from '@/components/shared/empty-state';
 import { VideoFormDialog } from './video-form-dialog';
+import { VideosNewVideoOpener } from './videos-new-video-opener';
 import { VideosWorkspace } from './videos-workspace';
 import { effectiveClientDeliveryIso, isVideoDeliveryOverdue } from '@/lib/videos/video-schedule';
 
@@ -49,6 +50,8 @@ export default async function VideosPage({
   }));
   const canDelete = canDeleteVideo(ctx?.role ?? null);
   const canMutateVideo = Boolean(ctx && !videoMutationDenied(ctx));
+  const canCreate =
+    Boolean(ctx?.employee?.is_active && !ctx.employee.archived_at && canCreateVideo(ctx.role));
 
   const scheduleNow = new Date();
   const scheduleNowIso = scheduleNow.toISOString();
@@ -78,6 +81,11 @@ export default async function VideosPage({
 
   return (
     <div className="space-y-6">
+      {canCreate ? (
+        <Suspense fallback={null}>
+          <VideosNewVideoOpener clients={clientOpts} employees={employees} />
+        </Suspense>
+      ) : null}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="font-sans text-2xl font-semibold tracking-tight text-foreground">Vidéos</h1>
@@ -85,7 +93,19 @@ export default async function VideosPage({
             Pipeline production — tournage, livraison client, statuts internes et portail.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {canCreate ? (
+            <VideoFormDialog
+              clients={clientOpts}
+              employees={employees}
+              trigger={
+                <Button type="button" variant="primary" className="rounded-full" aria-label="Ajouter une vidéo">
+                  <Plus className="h-4 w-4" />
+                  Vidéo
+                </Button>
+              }
+            />
+          ) : null}
           <div className="flex rounded-full border border-border p-0.5">
             <Button variant={view === 'table' ? 'primary' : 'ghost'} size="sm" className="rounded-full px-3" asChild>
               <Link
@@ -110,16 +130,6 @@ export default async function VideosPage({
               </Link>
             </Button>
           </div>
-          <VideoFormDialog
-            clients={clientOpts}
-            employees={employees}
-            trigger={
-              <Button variant="primary" className="rounded-full">
-                <Plus className="h-4 w-4" />
-                Nouvelle vidéo
-              </Button>
-            }
-          />
         </div>
       </div>
 
