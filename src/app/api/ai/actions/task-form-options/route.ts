@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireStaffAiContext } from '@/lib/ai/require-staff-ai';
 import { assertSupaiCapability } from '@/lib/ai/supai-permissions';
 import { SUPAI_ERROR_PERMISSION } from '@/lib/ai/supai-copy';
-import { listClients } from '@/lib/data/clients';
+import { listActiveOperationalClientOptions } from '@/lib/data/clients';
 import { listEmployeesForSelect } from '@/lib/data/employees';
 
 export const dynamic = 'force-dynamic';
@@ -21,7 +21,7 @@ export async function GET() {
   }
 
   const [clients, employees] = await Promise.all([
-    listClients({}, ctx),
+    listActiveOperationalClientOptions(ctx),
     listEmployeesForSelect(ctx),
   ]);
 

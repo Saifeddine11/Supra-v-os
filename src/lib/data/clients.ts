@@ -25,6 +25,8 @@ export interface ClientFilters {
   status?: ClientStatus | 'all';
 }
 
+export type OperationalClientOption = Pick<Client, 'id' | 'name' | 'color_hex' | 'color_label'>;
+
 export async function listClients(
   filters: ClientFilters = {},
   ctx: AuthContext | null = null
@@ -61,6 +63,39 @@ export async function listClients(
     );
   }
   return rows;
+}
+
+/**
+ * Client choices for operational creation/edit forms.
+ * Keep this narrower than `listClients`: no financial fields, active clients only.
+ */
+export async function listActiveOperationalClientOptions(
+  ctx: AuthContext | null = null,
+  search?: string,
+): Promise<OperationalClientOption[]> {
+  const auth = ctx ?? (await getAuthContext());
+  const supabase = await createClient();
+  if (!auth?.role) return [];
+
+  const scope = await resolveVisibleClientIds(supabase, auth);
+  if (scope !== 'all' && scope.length === 0) return [];
+
+  let q = supabase
+    .from('clients')
+    .select('id, name, color_hex, color_label')
+    .eq('status', 'active')
+    .order('name');
+
+  if (scope !== 'all') q = q.in('id', scope);
+
+  const s = clampSearchInput(search, 200);
+  if (s) {
+    q = q.ilike('name', `%${s.replace(/[\\%_]/g, (m) => `\\${m}`)}%`);
+  }
+
+  const { data, error } = await q;
+  if (error) throw new Error(error.message);
+  return (data ?? []) as OperationalClientOption[];
 }
 
 export async function getClientById(

@@ -44,7 +44,7 @@ const LIKE_WILDCARD_RE = /[\\%_]/g;
 const CREATE_FAILED_MSG = 'La création de la tâche a échoué. Réessayez.';
 const CREATE_DENIED_MSG = 'Vous n’avez pas l’autorisation de créer une tâche.';
 
-/** RLS-scoped client options (≤ 30, optional name search). */
+/** RLS-scoped active client options, optional name search. */
 export function useClientOptions(search: string) {
   const [clients, setClients] = useState<ClientOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,7 +53,7 @@ export function useClientOptions(search: string) {
     let mounted = true;
     (async () => {
       try {
-        let q = supabase.from('clients').select('id, name').order('name').limit(30);
+        let q = supabase.from('clients').select('id, name').eq('status', 'active').order('name');
         const term = search.trim();
         if (term.length > 0) {
           q = q.ilike('name', `%${term.replace(LIKE_WILDCARD_RE, (m) => `\\${m}`)}%`);

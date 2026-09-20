@@ -6,6 +6,7 @@ import {
   fetchManagedClientIds,
   hasFullOrgDataAccess,
 } from '@/lib/auth/data-scope';
+import { isDepartmentSupervisor } from '@/lib/auth/supervision';
 
 export type ProjectOption = {
   id: string;
@@ -42,9 +43,13 @@ export async function listProjectsForSelect(
   const supabase = await createClient();
   if (!auth?.role || !isProjectRouteRole(auth.role)) return [];
 
-  let q = supabase.from('projects').select('id, title, client_id, clients(name)').order('updated_at', { ascending: false });
+  let q = supabase
+    .from('projects')
+    .select('id, title, client_id, clients(name)')
+    .neq('status', 'archived')
+    .order('updated_at', { ascending: false });
 
-  if (hasFullOrgDataAccess(auth)) {
+  if (hasFullOrgDataAccess(auth) || isDepartmentSupervisor(auth.employee ?? auth.role)) {
     // no filter
   } else if (auth.role === 'commercial' && auth.employee) {
     const ids = await fetchManagedClientIds(supabase, auth.employee.id);

@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import dynamic from 'next/dynamic';
 import { listTasksEnriched, type TaskListFilters } from '@/lib/data/tasks';
-import { listClients } from '@/lib/data/clients';
+import { listActiveOperationalClientOptions } from '@/lib/data/clients';
 import { listEmployeesForSelect } from '@/lib/data/employees';
 import { getAuthContext } from '@/lib/auth/permissions';
 import { taskListingDenied } from '@/lib/auth/data-scope';
@@ -41,7 +41,7 @@ export default async function TasksPage({
 
   const [tasks, clients, employees] = await Promise.all([
     listTasksEnriched(filters, ctx),
-    listClients({}, ctx),
+    listActiveOperationalClientOptions(ctx),
     listEmployeesForSelect(ctx),
   ]);
 

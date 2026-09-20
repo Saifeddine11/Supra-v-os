@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { Plus } from 'lucide-react';
 import { endOfWeek, isWithinInterval, startOfWeek } from 'date-fns';
 import { listVideosWithClients } from '@/lib/data/videos';
-import { listClients } from '@/lib/data/clients';
+import { listActiveOperationalClientOptions } from '@/lib/data/clients';
 import { listEmployeesForVideoAssign } from '@/lib/data/employees';
 import { getAuthContext } from '@/lib/auth/permissions';
 import { canCreateVideo, canDeleteVideo } from '@/lib/auth/capabilities';
@@ -39,7 +39,7 @@ export default async function VideosPage({
   const ctx = await getAuthContext();
   const [videos, clients, employees] = await Promise.all([
     listVideosWithClients(ctx),
-    listClients({}, ctx),
+    listActiveOperationalClientOptions(ctx),
     listEmployeesForVideoAssign(ctx),
   ]);
   const clientOpts = clients.map((c) => ({

@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import type { AuthContext } from '@/lib/auth/permissions';
 import { assertClientRecordVisible } from '@/lib/auth/data-scope';
 import { actionError, actionOk, type ActionResult } from '@/lib/actions/types';
-import { listClients } from '@/lib/data/clients';
+import { listActiveOperationalClientOptions } from '@/lib/data/clients';
 import { listEmployeesForSelect } from '@/lib/data/employees';
 import { resolveEmployeeAlias } from '@/lib/ai/employee-aliases';
 import { resolveClientAlias } from '@/lib/ai/client-aliases';
@@ -86,7 +86,7 @@ export async function previewClientResolution(
   const name = clientName.trim();
   if (!name) return { status: 'none' };
 
-  const clients = await listClients({}, ctx);
+  const clients = await listActiveOperationalClientOptions(ctx);
   if (clients.length === 0) return { status: 'not_found', query: name };
 
   return mapAliasResult(
