@@ -41,7 +41,7 @@ export default async function TasksPage({
 
   const [tasks, clients, employees] = await Promise.all([
     listTasksEnriched(filters, ctx),
-    listActiveOperationalClientOptions(ctx),
+    listActiveOperationalClientOptions(ctx, undefined, { fullAccessForOperationalTaskManagers: true }),
     listEmployeesForSelect(ctx),
   ]);
 

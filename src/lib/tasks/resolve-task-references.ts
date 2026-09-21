@@ -86,7 +86,9 @@ export async function previewClientResolution(
   const name = clientName.trim();
   if (!name) return { status: 'none' };
 
-  const clients = await listActiveOperationalClientOptions(ctx);
+  const clients = await listActiveOperationalClientOptions(ctx, undefined, {
+    fullAccessForOperationalTaskManagers: true,
+  });
   if (clients.length === 0) return { status: 'not_found', query: name };
 
   return mapAliasResult(

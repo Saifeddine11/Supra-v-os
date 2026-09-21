@@ -1,7 +1,8 @@
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import type { AuthContext } from '@/lib/auth/permissions';
 import { getAuthContext } from '@/lib/auth/permissions';
-import { canViewClientContractFinancials } from '@/lib/auth/capabilities';
+import { canManageOperationalTasks, canViewClientContractFinancials } from '@/lib/auth/capabilities';
 import { resolveVisibleClientIds } from '@/lib/auth/data-scope';
 import type { Client, ClientStatus } from '@/types/database';
 import { clampSearchInput, parseUuidParam } from '@/lib/security/input-validation';
@@ -72,15 +73,21 @@ export async function listClients(
 export async function listActiveOperationalClientOptions(
   ctx: AuthContext | null = null,
   search?: string,
+  opts: { fullAccessForOperationalTaskManagers?: boolean } = {},
 ): Promise<OperationalClientOption[]> {
   const auth = ctx ?? (await getAuthContext());
   const supabase = await createClient();
   if (!auth?.role) return [];
 
-  const scope = await resolveVisibleClientIds(supabase, auth);
+  const useVerifiedManagerRead =
+    opts.fullAccessForOperationalTaskManagers === true &&
+    canManageOperationalTasks(auth.role, auth.employee?.is_department_supervisor === true);
+
+  const db = useVerifiedManagerRead ? createAdminClient() : supabase;
+  const scope = useVerifiedManagerRead ? 'all' : await resolveVisibleClientIds(supabase, auth);
   if (scope !== 'all' && scope.length === 0) return [];
 
-  let q = supabase
+  let q = db
     .from('clients')
     .select('id, name, color_hex, color_label')
     .eq('status', 'active')

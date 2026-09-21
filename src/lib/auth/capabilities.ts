@@ -86,6 +86,10 @@ export function canManageAllTasks(role: UserRole | null): boolean {
   return role === 'admin' || role === PM;
 }
 
+export function canManageOperationalTasks(role: UserRole | null, isDepartmentSupervisor = false): boolean {
+  return role === 'admin' || role === PM || role === 'department_supervisor' || isDepartmentSupervisor;
+}
+
 /** Alias explicite — création / édition / statuts / kanban tâches. */
 export const canManageTasks = canManageAllTasks;
 

@@ -21,7 +21,7 @@ export async function GET() {
   }
 
   const [clients, employees] = await Promise.all([
-    listActiveOperationalClientOptions(ctx),
+    listActiveOperationalClientOptions(ctx, undefined, { fullAccessForOperationalTaskManagers: true }),
     listEmployeesForSelect(ctx),
   ]);
 
