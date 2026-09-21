@@ -8,10 +8,10 @@ import {
   canCreateTasks,
 } from '@/lib/auth/capabilities';
 import {
-  assertClientRecordVisible,
   shouldScopeTasksToAssignee,
   taskListingDenied,
 } from '@/lib/auth/data-scope';
+import { assertActiveOperationalClientSelection } from '@/lib/data/clients';
 import {
   assertAssigneesInSupervisionScope,
   resolveCreatedTaskDepartment,
@@ -110,7 +110,7 @@ export async function createTaskCore(
     if (!deadlineCheck.ok) return actionError(deadlineCheck.message);
   }
 
-  if (clientId && !(await assertClientRecordVisible(readSb, ctx, clientId))) {
+  if (clientId && !(await assertActiveOperationalClientSelection(ctx, clientId))) {
     return actionError('Client non autorisé pour cette tâche.');
   }
 

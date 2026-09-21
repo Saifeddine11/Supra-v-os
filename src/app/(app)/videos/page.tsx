@@ -39,7 +39,7 @@ export default async function VideosPage({
   const ctx = await getAuthContext();
   const [videos, clients, employees] = await Promise.all([
     listVideosWithClients(ctx),
-    listActiveOperationalClientOptions(ctx),
+    listActiveOperationalClientOptions(ctx, undefined, { fullAccessForOperationalManagers: true }),
     listEmployeesForVideoAssign(ctx),
   ]);
   const clientOpts = clients.map((c) => ({

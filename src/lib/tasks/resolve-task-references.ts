@@ -1,10 +1,8 @@
 import 'server-only';
 
-import { createClient } from '@/lib/supabase/server';
 import type { AuthContext } from '@/lib/auth/permissions';
-import { assertClientRecordVisible } from '@/lib/auth/data-scope';
 import { actionError, actionOk, type ActionResult } from '@/lib/actions/types';
-import { listActiveOperationalClientOptions } from '@/lib/data/clients';
+import { assertActiveOperationalClientSelection, listActiveOperationalClientOptions } from '@/lib/data/clients';
 import { listEmployeesForSelect } from '@/lib/data/employees';
 import { resolveEmployeeAlias } from '@/lib/ai/employee-aliases';
 import { resolveClientAlias } from '@/lib/ai/client-aliases';
@@ -46,15 +44,15 @@ export async function resolveClientForTask(
   clientId?: string | null,
   clientName?: string | null,
 ): Promise<ActionResult<{ id: string; label: string }>> {
-  const supabase = await createClient();
-
   if (clientId?.trim()) {
     const id = clientId.trim();
-    if (!(await assertClientRecordVisible(supabase, ctx, id))) {
+    if (!(await assertActiveOperationalClientSelection(ctx, id))) {
       return actionError('Client non autorisé pour cette tâche.');
     }
-    const { data } = await supabase.from('clients').select('name').eq('id', id).maybeSingle();
-    return actionOk({ id, label: String(data?.name ?? 'Client') });
+    const matches = await listActiveOperationalClientOptions(ctx, undefined, {
+      fullAccessForOperationalManagers: true,
+    });
+    return actionOk({ id, label: matches.find((client) => client.id === id)?.name ?? 'Client' });
   }
 
   const name = clientName?.trim();
@@ -87,7 +85,7 @@ export async function previewClientResolution(
   if (!name) return { status: 'none' };
 
   const clients = await listActiveOperationalClientOptions(ctx, undefined, {
-    fullAccessForOperationalTaskManagers: true,
+    fullAccessForOperationalManagers: true,
   });
   if (clients.length === 0) return { status: 'not_found', query: name };
 

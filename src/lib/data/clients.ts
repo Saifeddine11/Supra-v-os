@@ -2,8 +2,8 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { AuthContext } from '@/lib/auth/permissions';
 import { getAuthContext } from '@/lib/auth/permissions';
-import { canManageOperationalTasks, canViewClientContractFinancials } from '@/lib/auth/capabilities';
-import { resolveVisibleClientIds } from '@/lib/auth/data-scope';
+import { canManageOperationalWork, canViewClientContractFinancials } from '@/lib/auth/capabilities';
+import { assertClientRecordVisible, resolveVisibleClientIds } from '@/lib/auth/data-scope';
 import type { Client, ClientStatus } from '@/types/database';
 import { clampSearchInput, parseUuidParam } from '@/lib/security/input-validation';
 
@@ -73,15 +73,15 @@ export async function listClients(
 export async function listActiveOperationalClientOptions(
   ctx: AuthContext | null = null,
   search?: string,
-  opts: { fullAccessForOperationalTaskManagers?: boolean } = {},
+  opts: { fullAccessForOperationalManagers?: boolean } = {},
 ): Promise<OperationalClientOption[]> {
   const auth = ctx ?? (await getAuthContext());
   const supabase = await createClient();
   if (!auth?.role) return [];
 
   const useVerifiedManagerRead =
-    opts.fullAccessForOperationalTaskManagers === true &&
-    canManageOperationalTasks(auth.role, auth.employee?.is_department_supervisor === true);
+    opts.fullAccessForOperationalManagers === true &&
+    canManageOperationalWork(auth.role, auth.employee?.is_department_supervisor === true);
 
   const db = useVerifiedManagerRead ? createAdminClient() : supabase;
   const scope = useVerifiedManagerRead ? 'all' : await resolveVisibleClientIds(supabase, auth);
@@ -103,6 +103,37 @@ export async function listActiveOperationalClientOptions(
   const { data, error } = await q;
   if (error) throw new Error(error.message);
   return (data ?? []) as OperationalClientOption[];
+}
+
+export async function assertActiveOperationalClientSelection(
+  ctx: AuthContext,
+  clientId: string,
+): Promise<boolean> {
+  const id = parseUuidParam(clientId);
+  if (!id) return false;
+
+  if (canManageOperationalWork(ctx.role, ctx.employee?.is_department_supervisor === true)) {
+    const admin = createAdminClient();
+    const { data, error } = await admin
+      .from('clients')
+      .select('id')
+      .eq('id', id)
+      .eq('status', 'active')
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    return Boolean(data);
+  }
+
+  const supabase = await createClient();
+  if (!(await assertClientRecordVisible(supabase, ctx, id))) return false;
+  const { data, error } = await supabase
+    .from('clients')
+    .select('id')
+    .eq('id', id)
+    .eq('status', 'active')
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return Boolean(data);
 }
 
 export async function getClientById(

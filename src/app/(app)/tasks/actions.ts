@@ -13,10 +13,10 @@ import {
   canUpdateTasks,
 } from '@/lib/auth/capabilities';
 import {
-  assertClientRecordVisible,
   assertTaskRecordVisible,
   taskListingDenied,
 } from '@/lib/auth/data-scope';
+import { assertActiveOperationalClientSelection } from '@/lib/data/clients';
 import {
   assertAssigneesInSupervisionScope,
   resolveUpdatedTaskDepartment,
@@ -168,7 +168,7 @@ export async function updateTaskAction(id: string, formData: FormData): Promise<
     if (!deadlineCheck.ok) return actionError(deadlineCheck.message);
   }
 
-  if (clientId && !(await assertClientRecordVisible(readSb, ctx, clientId))) {
+  if (clientId && !(await assertActiveOperationalClientSelection(ctx, clientId))) {
     return actionError('Client non autorisé pour cette tâche.');
   }
 

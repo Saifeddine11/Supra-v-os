@@ -4,9 +4,9 @@ import type { AuthContext } from '@/lib/auth/permissions';
 import { resolveTaskMutationClient } from '@/lib/auth/task-mutation-client';
 import { canManageAllTasks } from '@/lib/auth/capabilities';
 import {
-  assertClientRecordVisible,
   assertTaskRecordVisible,
 } from '@/lib/auth/data-scope';
+import { assertActiveOperationalClientSelection } from '@/lib/data/clients';
 import { actionError, actionOk, getPostgrestError, type ActionResult } from '@/lib/actions/types';
 import { createClient } from '@/lib/supabase/server';
 import { requireAssignableEmployee } from '@/lib/data/employee-guards';
@@ -83,7 +83,7 @@ export async function updateTaskCore(
 
   const clientId =
     input.clientId !== undefined ? input.clientId || null : current.client_id;
-  if (clientId && !(await assertClientRecordVisible(readSb, ctx, clientId))) {
+  if (clientId && !(await assertActiveOperationalClientSelection(ctx, clientId))) {
     return actionError('Client non autorisé pour cette tâche.');
   }
 

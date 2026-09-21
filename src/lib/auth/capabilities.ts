@@ -86,9 +86,11 @@ export function canManageAllTasks(role: UserRole | null): boolean {
   return role === 'admin' || role === PM;
 }
 
-export function canManageOperationalTasks(role: UserRole | null, isDepartmentSupervisor = false): boolean {
+export function canManageOperationalWork(role: UserRole | null, isDepartmentSupervisor = false): boolean {
   return role === 'admin' || role === PM || role === 'department_supervisor' || isDepartmentSupervisor;
 }
+
+export const canManageOperationalTasks = canManageOperationalWork;
 
 /** Alias explicite — création / édition / statuts / kanban tâches. */
 export const canManageTasks = canManageAllTasks;
@@ -123,6 +125,7 @@ export function canManageVideos(role: UserRole | null): boolean {
   return (
     role === 'admin' ||
     role === PM ||
+    role === 'department_supervisor' ||
     role === 'editor' ||
     role === 'cameraman' ||
     role === 'community_manager' ||

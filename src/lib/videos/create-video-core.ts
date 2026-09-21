@@ -5,13 +5,12 @@ import { createClient } from '@/lib/supabase/server';
 import type { AuthContext } from '@/lib/auth/permissions';
 import {
   assertCanCreateVideo,
-  assertClientRecordVisible,
   videoMutationDenied,
 } from '@/lib/auth/data-scope';
 import { actionError, actionOk, getPostgrestError, type ActionResult } from '@/lib/actions/types';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { TaskPriority, VideoPublicStatus, VideoStatus } from '@/types/database';
-import { listClients } from '@/lib/data/clients';
+import { assertActiveOperationalClientSelection, listActiveOperationalClientOptions } from '@/lib/data/clients';
 import { logStaffActivity } from '@/lib/activity/log-activity';
 import {
   requireAssignableAsVideoCameraman,
@@ -72,11 +71,9 @@ async function resolveClientIdForVideo(
   clientId?: string | null,
   clientName?: string | null,
 ): Promise<ActionResult<{ id: string }>> {
-  const supabase = await createClient();
-
   if (clientId?.trim()) {
     const id = clientId.trim();
-    if (!(await assertClientRecordVisible(supabase, ctx, id))) {
+    if (!(await assertActiveOperationalClientSelection(ctx, id))) {
       return actionError('Client non autorisé pour cette vidéo.');
     }
     return actionOk({ id });
@@ -89,7 +86,7 @@ async function resolveClientIdForVideo(
     );
   }
 
-  const matches = await listClients({ search: name }, ctx);
+  const matches = await listActiveOperationalClientOptions(ctx, name, { fullAccessForOperationalManagers: true });
   if (matches.length === 0) {
     return actionError(
       `Client « ${name} » introuvable dans votre périmètre — vérifiez le nom ou créez la vidéo depuis /videos.`,

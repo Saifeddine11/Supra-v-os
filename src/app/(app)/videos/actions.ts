@@ -6,12 +6,12 @@ import { getAuthContext } from '@/lib/auth/permissions';
 import { canDeleteVideo, canManageAllTasks } from '@/lib/auth/capabilities';
 import {
   assertCanCreateVideo,
-  assertClientRecordVisible,
   assertVideoRecordVisible,
   effectiveRole,
   hasFullOrgDataAccess,
   videoMutationDenied,
 } from '@/lib/auth/data-scope';
+import { assertActiveOperationalClientSelection } from '@/lib/data/clients';
 import { actionError, actionOk, getPostgrestError, type ActionResult } from '@/lib/actions/types';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { TaskPriority, VideoPublicStatus, VideoStatus } from '@/types/database';
@@ -204,7 +204,7 @@ export async function createVideoAction(formData: FormData): Promise<ActionResul
   const clientId = String(formData.get('client_id') ?? '').trim();
   if (!clientId) return actionError('Le client est requis.');
 
-  if (!(await assertClientRecordVisible(supabase, ctx, clientId))) {
+  if (!(await assertActiveOperationalClientSelection(ctx, clientId))) {
     return actionError('Client non autorisé pour cette vidéo.');
   }
 
@@ -324,7 +324,7 @@ export async function updateVideoAction(id: string, formData: FormData): Promise
   const clientId = String(formData.get('client_id') ?? '').trim();
   if (!clientId) return actionError('Le client est requis.');
 
-  if (!(await assertClientRecordVisible(supabase, ctx, clientId))) {
+  if (!(await assertActiveOperationalClientSelection(ctx, clientId))) {
     return actionError('Client non autorisé pour cette vidéo.');
   }
 
