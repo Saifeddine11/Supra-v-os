@@ -6,7 +6,8 @@ import { listActiveOperationalClientOptions } from '@/lib/data/clients';
 import { listEmployeesForSelect } from '@/lib/data/employees';
 import { getAuthContext } from '@/lib/auth/permissions';
 import { taskListingDenied } from '@/lib/auth/data-scope';
-import { canChangeTaskStatus, canCreateTasks, canDeleteTask, canUpdateTasks } from '@/lib/auth/capabilities';
+import { canChangeTaskStatus, canCreateTasks, canDeleteTask, canManageOperationalWork, canUpdateTasks } from '@/lib/auth/capabilities';
+import { TaskAccountabilityQueue } from './task-accountability-panel';
 import { TasksNewTaskOpener } from './tasks-new-task-opener';
 import type { TaskPriority } from '@/types/database';
 import { SectionCard } from '@/components/shared/section-card';
@@ -55,6 +56,13 @@ export default async function TasksPage({
   const canEdit = canUpdateTasks(ctx?.role ?? null);
   const canChangeStatus = canChangeTaskStatus(ctx?.role ?? null);
   const canCreate = canCreateTasks(ctx?.role ?? null);
+  const canReview = canManageOperationalWork(
+    ctx?.role ?? null,
+    ctx?.employee?.is_department_supervisor === true,
+  );
+  const boardTasks = tasks.filter(
+    (t) => t.status !== 'proposed' && t.status !== 'completed_pending_validation',
+  );
   const allowKanbanDrag = Boolean(ctx && canChangeStatus && !taskListingDenied(ctx));
   const lockedDepartment = ctx ? lockedTaskDepartmentForActor(ctx) : null;
 
@@ -75,17 +83,20 @@ export default async function TasksPage({
         clients={clientOptions}
         employees={employees}
         canCreate={canCreate}
+        createLabel={canReview ? 'Nouvelle tâche' : 'Ajouter une tâche proposée'}
         defaultQ={sp?.q}
         defaultAssignee={sp?.assignee}
         defaultPriority={sp?.priority}
       />
+
+      <TaskAccountabilityQueue tasks={tasks} canReview={canReview} />
 
       <SectionCard
         title="Board"
         description="Glissez une tâche ou utilisez le menu de chaque carte."
         className="[&>div]:p-2 md:[&>div]:p-2.5 [&>header]:gap-2 [&>header]:px-4 [&>header]:py-2.5"
       >
-        {tasks.length === 0 ? (
+        {boardTasks.length === 0 ? (
           <EmptyState
             title="Aucune tâche"
             description="Créez une tâche ou élargissez les filtres pour voir les cartes ici."
@@ -96,7 +107,7 @@ export default async function TasksPage({
               Sur mobile, utilisez le menu de statut sur chaque carte.
             </p>
             <TasksKanban
-              tasks={tasks}
+              tasks={boardTasks}
               clients={clientOptions}
               employees={employees}
               canDelete={canDelete}

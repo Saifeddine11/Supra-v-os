@@ -6,6 +6,8 @@ import { type AuthContext } from '@/lib/auth/permissions';
 import { resolveTaskMutationClient } from '@/lib/auth/task-mutation-client';
 import {
   canCreateTasks,
+  canDeleteTask,
+  canManageOperationalWork,
 } from '@/lib/auth/capabilities';
 import {
   shouldScopeTasksToAssignee,
@@ -140,9 +142,16 @@ export async function createTaskCore(
 
   const primary = legacyPrimaryAssignee(assigneeIds);
 
-  const status = (input.status ?? 'todo') as TaskStatus;
-  if (!isTaskStatusAllowedInWorkflow(status)) {
+  const canOpenOfficial = canManageOperationalWork(
+    ctx.role,
+    ctx.employee?.is_department_supervisor === true,
+  );
+  const status = (canOpenOfficial ? (input.status ?? 'todo') : 'proposed') as TaskStatus;
+  if (canOpenOfficial && !isTaskStatusAllowedInWorkflow(status)) {
     return actionError('Statut non disponible dans le workflow.');
+  }
+  if (!canOpenOfficial && status !== 'proposed') {
+    return actionError('Une tâche employé doit être proposée.');
   }
 
   const row = {
@@ -166,7 +175,9 @@ export async function createTaskCore(
   try {
     await replaceTaskAssignments(writeSb, data.id, assigneeIds);
   } catch (e) {
-    await writeSb.from('tasks').delete().eq('id', data.id);
+    if (canDeleteTask(ctx.role)) {
+      await writeSb.from('tasks').delete().eq('id', data.id);
+    }
     console.error('[createTaskCore] task_assignments:', e);
     return actionError(formatTaskMutationDbError(e));
   }

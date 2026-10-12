@@ -220,6 +220,10 @@ export function getTaskStatusColorKey(status: TaskStatus): OperationalColorKey {
       return 'danger';
     case 'archived':
       return 'muted';
+    case 'proposed':
+      return 'muted';
+    case 'completed_pending_validation':
+      return 'postProd';
     default:
       return 'neutral';
   }

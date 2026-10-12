@@ -11,6 +11,7 @@ export function TasksToolbar({
   clients,
   employees,
   canCreate,
+  createLabel = 'Nouvelle tâche',
   defaultQ,
   defaultAssignee,
   defaultPriority,
@@ -18,6 +19,7 @@ export function TasksToolbar({
   clients: Pick<Client, 'id' | 'name' | 'color_hex' | 'color_label'>[];
   employees: Pick<Employee, 'id' | 'full_name'>[];
   canCreate: boolean;
+  createLabel?: string;
   defaultQ?: string;
   defaultAssignee?: string;
   defaultPriority?: string;
@@ -59,7 +61,7 @@ export function TasksToolbar({
           <Link href="/tasks/calendar">Calendrier</Link>
         </Button>
         {canCreate ? (
-          <QuickTaskCreateButton clients={clients} employees={employees} className="gap-2" />
+          <QuickTaskCreateButton clients={clients} employees={employees} label={createLabel} className="gap-2" />
         ) : null}
       </div>
     </div>

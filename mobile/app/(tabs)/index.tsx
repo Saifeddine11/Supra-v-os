@@ -10,7 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/hooks/useAuth';
 import { useHomeSummary } from '@/hooks/useHomeSummary';
-import { ROLE_LABELS, hasTaskAccess, hasVideoAccess, isAdminOrPM } from '@/lib/roles';
+import { canCreateTasks, canReviewTasks, hasTaskAccess, hasVideoAccess, roleLabel } from '@/lib/roles';
 import { formatDateTime } from '@/lib/task-meta';
 import { hapticLight } from '@/lib/haptics';
 import { Card, ErrorBanner, SectionLabel, Skeleton } from '@/components/ui';
@@ -156,7 +156,7 @@ export default function HomeScreen() {
         </View>
         {role ? (
           <View style={styles.roleBadge}>
-            <Text style={styles.roleBadgeText}>{ROLE_LABELS[role]}</Text>
+            <Text style={styles.roleBadgeText}>{roleLabel(role)}</Text>
           </View>
         ) : null}
       </View>
@@ -247,9 +247,13 @@ export default function HomeScreen() {
       )}
 
       <View style={styles.quickRow}>
-        {isAdminOrPM(role) ? (
+        {canCreateTasks(role) ? (
           <QuickAction
-            label="Nouvelle tâche"
+            label={
+              canReviewTasks(role, employee?.is_department_supervisor === true)
+                ? 'Nouvelle tâche'
+                : 'Ajouter une tâche proposée'
+            }
             icon="add"
             accent
             onPress={() => router.push('/tasks/new')}

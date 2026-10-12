@@ -186,3 +186,30 @@ export function canViewSettingsTechnicalSection(role: UserRole | null): boolean 
 export function canManageAgencySettingsInUi(role: UserRole | null): boolean {
   return role === 'admin';
 }
+
+// ─── Reels Studio (montage vertical) ─────────────────────────────────────────
+
+/**
+ * Accès au module Studio Reels (upload, édition, découpage, rendu).
+ * Aligné sur la fonction RLS `auth_can_use_studio()`.
+ */
+export function canUseStudio(role: UserRole | null): boolean {
+  return (
+    role === 'admin' ||
+    role === PM ||
+    role === 'department_supervisor' ||
+    role === 'editor' ||
+    role === 'cameraman' ||
+    role === 'community_manager'
+  );
+}
+
+/** Suppression de source / clip / export — admin + chef de projet. */
+export function canManageStudio(role: UserRole | null): boolean {
+  return role === 'admin' || role === PM;
+}
+
+/** Relecture / commentaires horodatés — tout salarié interne. */
+export function canReviewStudio(role: UserRole | null): boolean {
+  return role != null && role !== 'client';
+}

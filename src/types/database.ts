@@ -49,7 +49,11 @@ export type TaskStatus =
   | 'review'
   | 'blocked'
   | 'done'
-  | 'archived';
+  | 'archived'
+  | 'proposed'
+  | 'completed_pending_validation';
+
+export type TaskDeletionRequestStatus = 'pending' | 'approved' | 'rejected';
 
 export type TaskPriority = 'low' | 'normal' | 'high' | 'urgent';
 
@@ -347,6 +351,19 @@ export interface Task {
   estimated_hours: number | null;
   actual_hours: number;
   checklist: ChecklistItem[];
+  proof_url: string | null;
+  proof_note: string | null;
+  proof_added_at: string | null;
+  proof_added_by: string | null;
+  deletion_requested_at: string | null;
+  deletion_request_reason: string | null;
+  deletion_requested_by: string | null;
+  deletion_request_status: TaskDeletionRequestStatus | null;
+  deletion_reviewed_at: string | null;
+  deletion_reviewed_by: string | null;
+  deletion_review_note: string | null;
+  deleted_at: string | null;
+  deleted_by: string | null;
   created_at: string;
   updated_at: string;
   created_by: string | null;

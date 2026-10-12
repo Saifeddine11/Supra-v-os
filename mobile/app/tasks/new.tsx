@@ -24,7 +24,7 @@ import {
   useClientOptions,
   useEmployeeOptions,
 } from '@/hooks/useCreateTask';
-import { isAdminOrPM } from '@/lib/roles';
+import { canCreateTasks, canReviewTasks } from '@/lib/roles';
 import { PRIORITY_MAP, formatDateTime } from '@/lib/task-meta';
 import { Card, ErrorBanner, PrimaryButton } from '@/components/ui';
 import { colors, radius, spacing } from '@/constants/theme';
@@ -55,9 +55,11 @@ export default function NewTaskScreen() {
   if (!session || !employee) {
     return <Redirect href="/(auth)/login" />;
   }
-  if (!isAdminOrPM(employee.role)) {
+  if (!canCreateTasks(employee.role)) {
     return <Redirect href="/(tabs)/tasks" />;
   }
+
+  const asProposal = !canReviewTasks(employee.role, employee.is_department_supervisor === true);
 
   const toggleAssignee = (id: string) => {
     setAssigneeIds((prev) =>
@@ -89,7 +91,7 @@ export default function NewTaskScreen() {
     setFormError(null);
     setSubmitting(true);
     const { error } = await createTask(
-      { title, description, deadline, priority, clientId, assigneeIds },
+      { title, description, deadline, priority, clientId, assigneeIds, asProposal },
       employee.full_name ?? null,
     );
     setSubmitting(false);
@@ -128,7 +130,7 @@ export default function NewTaskScreen() {
         contentContainerStyle={[styles.container, { paddingBottom: insets.bottom + spacing.xl }]}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.title}>Nouvelle tâche</Text>
+        <Text style={styles.title}>{asProposal ? 'Ajouter une tâche proposée' : 'Nouvelle tâche'}</Text>
 
         {formError ? <ErrorBanner message={formError} /> : null}
         {success ? (

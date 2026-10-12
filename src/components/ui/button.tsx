@@ -9,15 +9,15 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          'rounded-full border border-border bg-secondary text-secondary-foreground shadow-sm hover:border-primary/45 hover:bg-primary/[0.08]',
+          'rounded-full border border-border/70 bg-background/30 text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.22)] hover:border-primary/45 hover:bg-primary/[0.08]',
         primary:
-          'rounded-full border border-primary/25 bg-primary text-primary-foreground shadow-[0_0_24px_-4px_rgba(255,69,15,0.28)] hover:border-primary/35 hover:bg-primary/90 hover:text-primary-foreground dark:hover:bg-primary/88 dark:hover:text-primary-foreground',
-        ghost: 'hover:bg-accent/60 hover:text-foreground',
+          'rounded-full border border-white/25 bg-primary text-primary-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.38),0_10px_28px_-8px_rgba(255,69,15,0.55)] hover:border-white/35 hover:bg-primary/90 hover:text-primary-foreground',
+        ghost: 'rounded-full hover:bg-white/10 hover:text-foreground',
         outline:
-          'border border-border/80 bg-transparent text-foreground hover:border-primary/35 hover:bg-primary/[0.04]',
-        /** Actions rapides (topbar, etc.) : jamais texte foncé sur fond brun. */
+          'rounded-full border border-border/70 bg-background/25 text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] hover:border-primary/40 hover:bg-primary/[0.08]',
+        /** Actions rapides (topbar, etc.) : verre, jamais texte foncé sur fond brun. */
         quickSecondary:
-          'rounded-full border border-primary/40 bg-background font-medium text-foreground shadow-sm hover:border-primary/55 hover:bg-primary/[0.07] dark:border-primary/45 dark:bg-secondary dark:text-secondary-foreground dark:hover:border-primary/55 dark:hover:bg-secondary/90 dark:hover:text-secondary-foreground',
+          'rounded-full border border-border/70 bg-background/30 font-medium text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.22)] hover:border-primary/50 hover:bg-primary/[0.08]',
         link: 'text-primary underline-offset-4 hover:underline',
       },
       size: {

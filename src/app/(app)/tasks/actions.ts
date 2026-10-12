@@ -10,6 +10,7 @@ import {
   canCreateTasks,
   canDeleteTask,
   canManageAllTasks,
+  canManageOperationalWork,
   canUpdateTasks,
 } from '@/lib/auth/capabilities';
 import {
@@ -43,6 +44,7 @@ import {
   replaceTaskAssignments,
 } from '@/lib/data/task-assignments';
 import { validateOperationalFutureDate } from '@/lib/dates/validate-future-date';
+import { syncVideoAfterValidatedShootingTask } from '@/lib/tasks/sync-video-after-shooting-task-done';
 
 const TASK_MUTATION_DENIED =
   'Action impossible : vous n’avez pas l’autorisation ou la tâche est invalide.';
@@ -272,6 +274,13 @@ export async function updateTaskAction(id: string, formData: FormData): Promise<
     await notifyTaskAssignees(newly, id, title);
   }
 
+  await syncVideoAfterValidatedShootingTask({
+    ctx,
+    taskId: id,
+    previousStatus: (curTask?.status as TaskStatus | undefined) ?? null,
+    nextStatus: status,
+  });
+
   revalidatePath('/tasks');
   revalidatePath('/tasks/calendar');
   revalidatePath('/dashboard');
@@ -282,8 +291,13 @@ export async function updateTaskStatusAction(id: string, status: TaskStatus): Pr
   const ctx = await getAuthContext();
   if (!ctx) return actionError('Non authentifié.');
   if (!canChangeTaskStatus(ctx.role)) return actionError('Action non autorisée pour votre rôle.');
-  if (!isTaskStatusAllowedInWorkflow(status)) {
+  if (!isTaskStatusAllowedInWorkflow(status) && status !== 'completed_pending_validation') {
     return actionError('Statut non disponible dans le workflow.');
+  }
+
+  const manages = canManageOperationalWork(ctx.role, ctx.employee?.is_department_supervisor === true);
+  if (!manages && (status === 'done' || status === 'archived' || status === 'proposed')) {
+    return actionError('Vous ne pouvez pas valider définitivement cette tâche.');
   }
 
   const readSb = await createClient();
@@ -293,7 +307,18 @@ export async function updateTaskStatusAction(id: string, status: TaskStatus): Pr
     return actionError('Tâche inaccessible.');
   }
 
-  const { data: currentStatusRow } = await readSb.from('tasks').select('status').eq('id', id).maybeSingle();
+  const { data: currentStatusRow } = await readSb
+    .from('tasks')
+    .select('status, proof_url, proof_note')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (!manages && status === 'completed_pending_validation') {
+    const hasProof = Boolean(
+      String(currentStatusRow?.proof_url ?? '').trim() || String(currentStatusRow?.proof_note ?? '').trim(),
+    );
+    if (!hasProof) return actionError('Ajoutez une preuve avant de marquer la tâche terminée.');
+  }
 
   const patch: Record<string, unknown> = {
     status,
@@ -336,6 +361,13 @@ export async function updateTaskStatusAction(id: string, status: TaskStatus): Pr
     if (row?.assignee_id) all.add(row.assignee_id as string);
     await notifyTaskBlocked([...all], id, t?.title ?? 'Tâche');
   }
+
+  await syncVideoAfterValidatedShootingTask({
+    ctx,
+    taskId: id,
+    previousStatus: (currentStatusRow?.status as TaskStatus | undefined) ?? null,
+    nextStatus: status,
+  });
 
   revalidatePath('/tasks');
   revalidatePath('/tasks/calendar');

@@ -21,7 +21,8 @@ export type NavIconName =
   | 'Globe'
   | 'Bell'
   | 'Settings'
-  | 'Sparkles';
+  | 'Sparkles'
+  | 'Scissors';
 
 export interface NavItem {
   href: string;
@@ -47,6 +48,7 @@ export const APP_NAV_GROUPS: NavGroup[] = [
     items: [
       { href: '/clients', label: 'Clients', icon: 'Users' },
       { href: '/videos', label: 'Vidéos', icon: 'Clapperboard' },
+      { href: '/studio', label: 'Studio Reels', icon: 'Scissors' },
       { href: '/editorial', label: 'Calendrier éditorial', icon: 'CalendarRange' },
       { href: '/tasks', label: 'Tâches', icon: 'ListTodo' },
       { href: '/tasks/calendar', label: 'Calendrier tâches', icon: 'CalendarDays' },

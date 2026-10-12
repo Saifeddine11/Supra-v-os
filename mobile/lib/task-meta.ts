@@ -19,6 +19,8 @@ export const TASK_STATUS_MAP: Record<TaskStatus, BadgeConfig> = {
   blocked: { label: 'Bloqué', color: '#E05252' },
   done: { label: 'Terminé', color: '#3DBD7D' },
   archived: { label: 'Archivé', color: '#525252' },
+  proposed: { label: 'Proposée', color: '#A8A19A' },
+  completed_pending_validation: { label: 'À valider', color: '#E07B3A' },
 };
 
 export const PRIORITY_MAP: Record<TaskPriority, BadgeConfig> = {

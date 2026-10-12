@@ -102,6 +102,7 @@ export async function listTasks(
     .from('tasks')
     .select('*')
     .neq('status', 'archived')
+    .is('deleted_at', null)
     .order('deadline', { ascending: true, nullsFirst: false });
 
   if (shouldScopeTasksToDepartment(auth) && auth.employee?.department) {

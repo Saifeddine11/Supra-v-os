@@ -5,6 +5,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { webAppBaseUrl } from '@/lib/web-links';
 import { logDevError, toUserMessage } from '@/lib/errors';
 import type { TaskPriority, TaskStatus } from '@/types/db';
 
@@ -40,6 +41,11 @@ export interface TaskDetail extends TaskListItem {
   linkedVideo: LinkedVideoInfo | null;
   created_at: string;
   updated_at: string;
+  proof_url: string | null;
+  proof_note: string | null;
+  deletion_request_status: string | null;
+  deletion_request_reason: string | null;
+  department: string | null;
 }
 
 export type TaskFilter =
@@ -69,6 +75,7 @@ const LIST_COLUMNS =
 
 const DETAIL_COLUMNS =
   'id, title, description, status, priority, deadline, completed_at, client_id, video_id, created_at, updated_at, ' +
+  'proof_url, proof_note, deletion_request_status, deletion_request_reason, department, ' +
   'clients(name), ' +
   'task_assignments(employees(id, full_name, avatar_initials, avatar_color)), ' +
   'assignee:employees(id, full_name, avatar_initials, avatar_color)';
@@ -92,6 +99,11 @@ interface RawTaskRow {
   client_id: string | null;
   created_at?: string;
   updated_at?: string;
+  proof_url?: string | null;
+  proof_note?: string | null;
+  deletion_request_status?: string | null;
+  deletion_request_reason?: string | null;
+  department?: string | null;
   clients: { name: string } | null;
   task_assignments: { employees: RawEmployee | null }[] | null;
   assignee: RawEmployee | null;
@@ -297,6 +309,11 @@ export function useTaskDetail(taskId: string | null) {
         linkedVideo,
         created_at: row.created_at ?? '',
         updated_at: row.updated_at ?? '',
+        proof_url: row.proof_url ?? null,
+        proof_note: row.proof_note ?? null,
+        deletion_request_status: row.deletion_request_status ?? null,
+        deletion_request_reason: row.deletion_request_reason ?? null,
+        department: row.department ?? null,
       });
     } catch (e) {
       logDevError('useTaskDetail', e);
@@ -326,7 +343,7 @@ export const RLS_DENIED_MSG = 'Vous n’avez pas l’autorisation de modifier ce
  * workflow side effects that mobile must not duplicate. Archive/delete are
  * out of scope entirely.
  */
-export const SAFE_STATUSES: TaskStatus[] = ['todo', 'in_progress', 'review', 'done'];
+export const SAFE_STATUSES: TaskStatus[] = ['todo', 'in_progress', 'review'];
 
 /**
  * Safe status change. Mirrors the web's updateTaskStatusAction patch
@@ -344,11 +361,11 @@ export async function updateTaskStatus(
   if (!SAFE_STATUSES.includes(status)) {
     return { error: 'Statut non disponible sur mobile.' };
   }
+  if (status === 'done' || status === 'archived') {
+    return { error: 'La validation finale est réservée à un responsable.' };
+  }
   const nowIso = new Date().toISOString();
   const patch: Record<string, unknown> = { status, updated_at: nowIso };
-  if (status === 'done') {
-    patch.completed_at = nowIso;
-  }
   const { data, error } = await supabase
     .from('tasks')
     .update(patch)
@@ -367,7 +384,102 @@ export async function updateTaskStatus(
   return { error: null };
 }
 
-/** Backwards-compatible helper used by the detail screen's primary button. */
-export function markTaskDone(taskId: string): Promise<{ error: string | null }> {
-  return updateTaskStatus(taskId, 'done');
+async function patchTask(
+  taskId: string,
+  patch: Record<string, unknown>,
+): Promise<{ error: string | null }> {
+  const { data, error } = await supabase.from('tasks').update(patch).eq('id', taskId).select('id');
+  if (error) {
+    logDevError('patchTask', error);
+    if (/policy|permission|denied|preuve|autoris/i.test(error.message)) {
+      return { error: error.message };
+    }
+    return { error: toUserMessage(error, 'La mise à jour a échoué. Réessayez.') };
+  }
+  if (!data || data.length === 0) return { error: RLS_DENIED_MSG };
+  return { error: null };
+}
+
+export async function saveTaskProof(
+  taskId: string,
+  proofUrl: string,
+  proofNote: string,
+): Promise<{ error: string | null }> {
+  const url = proofUrl.trim();
+  const note = proofNote.trim();
+  if (!url && !note) return { error: 'Ajoutez un lien ou une note de preuve.' };
+  return patchTask(taskId, {
+    proof_url: url || null,
+    proof_note: note || null,
+    updated_at: new Date().toISOString(),
+  });
+}
+
+export async function markTaskPendingValidation(taskId: string): Promise<{ error: string | null }> {
+  return patchTask(taskId, {
+    status: 'completed_pending_validation',
+    updated_at: new Date().toISOString(),
+  });
+}
+
+export async function requestTaskDeletion(
+  taskId: string,
+  reason: string,
+): Promise<{ error: string | null }> {
+  const clean = reason.trim();
+  if (!clean) return { error: 'Indiquez la raison de la demande.' };
+  const { data: sess } = await supabase.auth.getSession();
+  const userId = sess.session?.user?.id;
+  if (!userId) return { error: 'Session expirée. Veuillez vous reconnecter.' };
+  return patchTask(taskId, {
+    deletion_request_status: 'pending',
+    deletion_request_reason: clean,
+    deletion_requested_by: userId,
+    deletion_requested_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  });
+}
+
+export async function reviewTaskDecision(
+  taskId: string,
+  patch: Record<string, unknown>,
+): Promise<{ error: string | null }> {
+  if (patch.status === 'done') {
+    return { error: 'La validation finale passe par le serveur.' };
+  }
+  return patchTask(taskId, { ...patch, updated_at: new Date().toISOString() });
+}
+
+/**
+ * Validates `completed_pending_validation` → `done` on the web API so the
+ * linked shooting video can leave Tournage. Does not write `done` directly.
+ */
+export async function validateTaskCompletion(taskId: string): Promise<{ error: string | null }> {
+  const { data: sess } = await supabase.auth.getSession();
+  const token = sess.session?.access_token;
+  if (!token) return { error: 'Session expirée. Veuillez vous reconnecter.' };
+
+  let response: Response;
+  try {
+    response = await fetch(`${webAppBaseUrl()}/api/tasks/${encodeURIComponent(taskId)}/validate-completion`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/json',
+      },
+    });
+  } catch {
+    return { error: 'Serveur injoignable. Réessayez.' };
+  }
+
+  let body: { error?: string } = {};
+  try {
+    body = (await response.json()) as { error?: string };
+  } catch {
+    body = {};
+  }
+  if (!response.ok) {
+    return { error: body.error || 'La validation a échoué. Réessayez.' };
+  }
+  return { error: null };
 }

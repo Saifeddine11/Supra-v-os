@@ -4,14 +4,23 @@
  * only hides the button; the server decides.
  */
 import React, { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { hapticError, hapticSuccess } from '@/lib/haptics';
 import { useAuth } from '@/hooks/useAuth';
-import { SAFE_STATUSES, updateTaskStatus, useTaskDetail } from '@/hooks/useTasks';
-import { hasTaskAccess, hasVideoAccess } from '@/lib/roles';
+import {
+  SAFE_STATUSES,
+  markTaskPendingValidation,
+  requestTaskDeletion,
+  reviewTaskDecision,
+  saveTaskProof,
+  updateTaskStatus,
+  validateTaskCompletion,
+  useTaskDetail,
+} from '@/hooks/useTasks';
+import { canReviewTasks, hasTaskAccess, hasVideoAccess } from '@/lib/roles';
 import { VIDEO_STATUS_MAP } from '@/lib/video-meta';
 import { PRIORITY_MAP, TASK_STATUS_MAP, formatDateTime, formatDeadline, isTaskOverdue } from '@/lib/task-meta';
 import type { TaskStatus, VideoStatus } from '@/types/db';
@@ -32,6 +41,10 @@ export default function TaskDetailScreen() {
   const [saving, setSaving] = useState<TaskStatus | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const [proofUrl, setProofUrl] = useState('');
+  const [proofNote, setProofNote] = useState('');
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
 
   // Protected route: this screen lives outside (tabs), so guard it directly.
   if (!session || !employee) {
@@ -54,7 +67,27 @@ export default function TaskDetailScreen() {
       return;
     }
     hapticSuccess();
-    if (status === 'done') setDone(true);
+    await reload();
+  };
+
+  const canReview = canReviewTasks(role, employee.is_department_supervisor === true);
+  const proofReady = Boolean(
+    task?.proof_url?.trim() || task?.proof_note?.trim() || proofUrl.trim() || proofNote.trim(),
+  );
+
+  const runBusy = async (fn: () => Promise<{ error: string | null }>, success: string) => {
+    if (busy) return;
+    setBusy(true);
+    setActionError(null);
+    const { error: err } = await fn();
+    setBusy(false);
+    if (err) {
+      hapticError();
+      setActionError(err);
+      return;
+    }
+    hapticSuccess();
+    setDone(success === 'validated');
     await reload();
   };
 
@@ -183,13 +216,113 @@ export default function TaskDetailScreen() {
               </Card>
             ) : null}
 
-            {task.status !== 'done' && task.status !== 'archived' ? (
-              <PrimaryButton
-                title="Marquer comme terminé"
-                onPress={() => void onChangeStatus('done')}
-                loading={saving === 'done'}
-                disabled={saving != null}
-              />
+            {!canReview && task.status !== 'done' && task.status !== 'archived' ? (
+              <Card>
+                <Text style={styles.sectionLabel}>Preuve</Text>
+                <TextInput
+                  value={proofUrl}
+                  onChangeText={setProofUrl}
+                  placeholder="Lien de preuve"
+                  placeholderTextColor={colors.muted}
+                  style={styles.input}
+                />
+                <TextInput
+                  value={proofNote}
+                  onChangeText={setProofNote}
+                  placeholder="Note de preuve"
+                  placeholderTextColor={colors.muted}
+                  style={styles.input}
+                />
+                <PrimaryButton
+                  title="Ajouter la preuve"
+                  onPress={() => void runBusy(() => saveTaskProof(task.id, proofUrl, proofNote), 'proof')}
+                  loading={busy}
+                />
+                <PrimaryButton
+                  title="Marquer terminé"
+                  disabled={!proofReady || task.status === 'proposed' || task.status === 'completed_pending_validation'}
+                  onPress={() =>
+                    void runBusy(async () => {
+                      const saved = await saveTaskProof(task.id, proofUrl || task.proof_url || '', proofNote || task.proof_note || '');
+                      if (saved.error && !task.proof_url && !task.proof_note) return saved;
+                      return markTaskPendingValidation(task.id);
+                    }, 'pending')
+                  }
+                  loading={busy}
+                />
+                <TextInput
+                  value={reason}
+                  onChangeText={setReason}
+                  placeholder="Raison de suppression"
+                  placeholderTextColor={colors.muted}
+                  style={styles.input}
+                />
+                <PrimaryButton
+                  title="Demander suppression"
+                  disabled={task.deletion_request_status === 'pending'}
+                  onPress={() => void runBusy(() => requestTaskDeletion(task.id, reason), 'deletion')}
+                  loading={busy}
+                />
+              </Card>
+            ) : null}
+
+            {canReview && task.status === 'proposed' ? (
+              <Card>
+                <Text style={styles.sectionLabel}>Tâche proposée</Text>
+                <TextInput value={reason} onChangeText={setReason} placeholder="Raison du refus" placeholderTextColor={colors.muted} style={styles.input} />
+                <PrimaryButton title="Approuver" loading={busy} onPress={() => void runBusy(() => reviewTaskDecision(task.id, { status: 'todo' }), 'approved')} />
+                <PrimaryButton title="Refuser" loading={busy} onPress={() => void runBusy(() => reviewTaskDecision(task.id, { status: 'archived' }), 'rejected')} />
+              </Card>
+            ) : null}
+
+            {canReview && task.status === 'completed_pending_validation' ? (
+              <Card>
+                <Text style={styles.sectionLabel}>À valider</Text>
+                <TextInput value={reason} onChangeText={setReason} placeholder="Raison du refus" placeholderTextColor={colors.muted} style={styles.input} />
+                <PrimaryButton
+                  title="Valider"
+                  loading={busy}
+                  onPress={() => void runBusy(() => validateTaskCompletion(task.id), 'validated')}
+                />
+                <PrimaryButton title="Refuser" loading={busy} onPress={() => void runBusy(() => reviewTaskDecision(task.id, { status: 'in_progress' }), 'rejected')} />
+              </Card>
+            ) : null}
+
+            {canReview && task.deletion_request_status === 'pending' ? (
+              <Card>
+                <Text style={styles.sectionLabel}>Demande de suppression</Text>
+                <Text style={styles.description}>{task.deletion_request_reason ?? '—'}</Text>
+                <TextInput value={reason} onChangeText={setReason} placeholder="Raison du refus" placeholderTextColor={colors.muted} style={styles.input} />
+                <PrimaryButton
+                  title="Approuver"
+                  loading={busy}
+                  onPress={() =>
+                    void runBusy(
+                      () =>
+                        reviewTaskDecision(task.id, {
+                          deletion_request_status: 'approved',
+                          deletion_review_note: reason.trim() || null,
+                          deleted_at: new Date().toISOString(),
+                        }),
+                      'approved',
+                    )
+                  }
+                />
+                <PrimaryButton
+                  title="Refuser"
+                  loading={busy}
+                  onPress={() =>
+                    void runBusy(
+                      () =>
+                        reviewTaskDecision(task.id, {
+                          deletion_request_status: 'rejected',
+                          deletion_review_note: reason.trim() || null,
+                        }),
+                      'rejected',
+                    )
+                  }
+                />
+              </Card>
             ) : null}
           </>
         )}
@@ -244,6 +377,16 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   description: { fontSize: 15, color: colors.black, lineHeight: 22 },
+  input: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: spacing.sm,
+    color: colors.black,
+    backgroundColor: colors.white,
+  },
   infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

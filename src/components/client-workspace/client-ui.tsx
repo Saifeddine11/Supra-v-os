@@ -23,7 +23,7 @@ export function ClientSurface({
   return (
     <section
       className={cn(
-        'rounded-2xl border border-white/[0.07] bg-white/[0.03] p-5 shadow-[0_20px_50px_-28px_rgba(0,0,0,0.7)] backdrop-blur-sm',
+        'liquid-glass rounded-2xl border border-border/50 p-5',
         className,
       )}
     >

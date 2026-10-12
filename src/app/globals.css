@@ -3,10 +3,10 @@
 @tailwind utilities;
 
 /* ============================================================================
-   SUPRA V. AGENCY OS — DESIGN SYSTEM (noir profond + orange Supra)
+   SUPRA V. AGENCY OS — DESIGN SYSTEM (liquid glass, noir + orange Supra)
    ============================================================================
    Dark-first. Tokens en HSL pour shadcn/ui. Orange #FF450F / #FF3D0A en accent
-   premium (dosé) — pas d’or / doré.
+   premium (dosé). Surfaces : verre translucide, flou, liseré spéculaire.
    ============================================================================ */
 
 @layer base {
@@ -54,14 +54,22 @@
     --destructive: 12 62% 48%;
     --destructive-foreground: 37 33% 97%;
 
-    --border: 13 45% 24%; /* #6B2416 adouci pour UI */
-    --input: 12 58% 10%;
+    --border: 20 22% 34%;
+    --input: 20 14% 18%;
     --ring: 14 95% 56%;
     --surface: 30 6% 6.5%;
     --surface-secondary: 15 10% 9%;
     --orange-glow: 20 100% 58%;
 
-    --radius: 0.625rem;
+    --radius: 1rem;
+
+    /* Liquid glass — painted sheen only, no backdrop blur */
+    --glass-fill: #161311;
+    --glass-fill-chrome: #120f0d;
+    --glass-sheen: color-mix(in srgb, white 8%, transparent);
+    --glass-highlight: color-mix(in srgb, white 16%, transparent);
+    --glass-edge: color-mix(in srgb, white 14%, transparent);
+    --glass-inset: #1c1916;
 
     /* Succès / paiement validé uniquement */
     --success: 154 52% 45%;
@@ -116,6 +124,13 @@
     --surface-secondary: 32 36% 97%; /* #FAF8F5 */
     --orange-glow: 20 100% 58%;
 
+    --glass-fill: #fffcfa;
+    --glass-fill-chrome: #ffffff;
+    --glass-sheen: color-mix(in srgb, white 70%, transparent);
+    --glass-highlight: color-mix(in srgb, white 90%, transparent);
+    --glass-edge: hsl(var(--border));
+    --glass-inset: #f3f0eb;
+
     --chart-grid: rgba(120, 90, 75, 0.12);
     --chart-axis: rgba(26, 7, 3, 0.45);
     --chart-card-bg: rgba(255, 247, 244, 0.82);
@@ -132,9 +147,13 @@
     @apply antialiased;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    background-color: hsl(var(--background));
+    background-image:
+      radial-gradient(ellipse 78% 48% at 50% -12%, color-mix(in srgb, var(--supra-orange) 14%, transparent), transparent 58%),
+      radial-gradient(ellipse 36% 28% at 100% 0%, color-mix(in srgb, white 6%, transparent), transparent 46%);
   }
   body {
-    @apply bg-background text-foreground font-sans transition-colors duration-200;
+    @apply bg-transparent text-foreground font-sans;
     font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   }
 
@@ -277,6 +296,74 @@
   .cockpit-enter {
     animation: none;
   }
+}
+
+/* ─── Liquid glass ────────────────────────────────────────────────────────
+   Sheen and rim only. Backdrop blur is skipped: it resampled the page
+   behind every card, input, and menu and made scrolling feel heavy.
+   ──────────────────────────────────────────────────────────────────────── */
+.liquid-glass,
+.liquid-glass-chrome,
+:is(
+    .bg-card,
+    .bg-card\/40,
+    .bg-card\/50,
+    .bg-card\/60,
+    .bg-card\/70,
+    .bg-card\/80,
+    .bg-card\/85,
+    .bg-card\/90,
+    .bg-card\/92,
+    .bg-card\/95,
+    .dark\:bg-card,
+    .dark\:bg-card\/40,
+    .dark\:bg-card\/50,
+    .dark\:bg-card\/90,
+    .bg-popover,
+    .bg-popover\/95,
+    .bg-muted\/10,
+    .bg-muted\/15,
+    .bg-muted\/20,
+    .bg-muted\/25,
+    .bg-muted\/30,
+    .dark\:bg-muted\/10,
+    .dark\:bg-muted\/15,
+    .bg-white\/\[0\.03\]
+  ):not(tr, td, th, span, button, a, input, textarea, select, label) {
+  background-color: var(--glass-fill);
+  background-image: linear-gradient(180deg, var(--glass-sheen) 0%, transparent 42%);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
+}
+
+.liquid-glass-chrome {
+  background-color: var(--glass-fill-chrome);
+  border-color: var(--glass-edge);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
+}
+
+input:where(
+    :not(
+      [type='checkbox'],
+      [type='radio'],
+      [type='range'],
+      [type='file'],
+      [type='hidden'],
+      [type='color'],
+      [type='submit'],
+      [type='button'],
+      [type='image']
+    )
+  ),
+textarea,
+select {
+  background-color: var(--glass-inset);
+  border-color: var(--glass-edge);
+  box-shadow: inset 0 1px 0 var(--glass-highlight);
+}
+
+[class*='backdrop-blur'] {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 /* ─── Sonner : toast critique compact, largeur max premium (desktop) ───────── */

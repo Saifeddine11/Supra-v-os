@@ -65,4 +65,4 @@ export function kanbanStatusAccentStyle(): CSSProperties {
 }
 
 export const KANBAN_CARD_SHELL =
-  'relative shrink-0 max-w-full overflow-hidden rounded-xl border shadow-sm';
+  'relative shrink-0 max-w-full overflow-hidden rounded-xl border shadow-[inset_0_1px_0_rgba(255,255,255,0.16)]';

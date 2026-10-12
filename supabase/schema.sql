@@ -65,7 +65,9 @@ create type task_status as enum (
   'review',
   'blocked',
   'done',
-  'archived'
+  'archived',
+  'proposed',
+  'completed_pending_validation'
 );
 
 -- Task priority
@@ -459,6 +461,21 @@ create table tasks (
 
   -- Checklist (stored as jsonb array of {id, text, done})
   checklist         jsonb default '[]'::jsonb,
+
+  -- Accountability
+  proof_url         text,
+  proof_note        text,
+  proof_added_at    timestamptz,
+  proof_added_by    uuid references auth.users(id) on delete set null,
+  deletion_requested_at timestamptz,
+  deletion_request_reason text,
+  deletion_requested_by uuid references auth.users(id) on delete set null,
+  deletion_request_status text,
+  deletion_reviewed_at timestamptz,
+  deletion_reviewed_by uuid references auth.users(id) on delete set null,
+  deletion_review_note text,
+  deleted_at        timestamptz,
+  deleted_by        uuid references auth.users(id) on delete set null,
 
   -- Audit
   created_at        timestamptz not null default now(),

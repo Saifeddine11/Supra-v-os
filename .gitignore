@@ -4,6 +4,11 @@ node_modules/
 .pnp.js
 .yarn/install-state.gz
 
+# Python / worker
+.venv/
+__pycache__/
+*.pyc
+
 # Testing
 coverage/
 

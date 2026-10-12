@@ -18,7 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/hooks/useAuth';
 import { TASK_FILTERS, useTasks, type TaskFilter } from '@/hooks/useTasks';
-import { hasTaskAccess, isAdminOrPM } from '@/lib/roles';
+import { canCreateTasks, canReviewTasks, hasTaskAccess } from '@/lib/roles';
 import { hapticLight } from '@/lib/haptics';
 import { TaskCard } from '@/components/task-card';
 import { Card, ErrorBanner, FilterChips, Skeleton } from '@/components/ui';
@@ -75,14 +75,18 @@ export default function TasksScreen() {
     <View style={[styles.flex, { paddingTop: insets.top + layout.screenTop }]}>
       <View style={styles.titleRow}>
         <Text style={type.largeTitle}>Tâches</Text>
-        {isAdminOrPM(role) ? (
+        {canCreateTasks(role) ? (
           <Pressable
             onPress={() => {
               hapticLight();
               router.push('/tasks/new');
             }}
             accessibilityRole="button"
-            accessibilityLabel="Nouvelle tâche"
+            accessibilityLabel={
+              canReviewTasks(role, employee?.is_department_supervisor === true)
+                ? 'Nouvelle tâche'
+                : 'Ajouter une tâche proposée'
+            }
             style={({ pressed }) => [styles.newButton, pressed && { opacity: 0.85 }]}
             hitSlop={6}
           >

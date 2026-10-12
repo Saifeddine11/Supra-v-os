@@ -210,10 +210,8 @@ export function GlobalCriticalAlertBar() {
     criticalCount > 0 ? summarizeCriticalAlertTotals(totals) : 'À traiter aujourd’hui';
 
   const barSurface = cn(
-    'border-b border-border bg-background text-foreground',
-    criticalCount > 0
-      ? 'dark:border-[rgba(255,106,42,0.18)]'
-      : '',
+    'border-t border-white/10 bg-transparent text-foreground',
+    criticalCount > 0 ? 'bg-[color-mix(in_srgb,var(--supra-orange)_10%,transparent)]' : '',
   );
 
   const iconWrap = cn(

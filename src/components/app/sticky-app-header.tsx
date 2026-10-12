@@ -30,8 +30,8 @@ export function StickyAppHeader({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <div ref={ref} className="sticky top-0 z-[48]">
-      {children}
+    <div ref={ref} className="sticky top-0 z-[48] px-4 pt-3 lg:px-6">
+      <div className="liquid-glass-chrome overflow-hidden rounded-[1.35rem] border">{children}</div>
     </div>
   );
 }

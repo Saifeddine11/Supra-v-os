@@ -3,7 +3,7 @@ import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/hooks/useAuth';
-import { ROLE_LABELS } from '@/lib/roles';
+import { roleLabel } from '@/lib/roles';
 import { Card, ListRow, PrimaryButton, SectionLabel } from '@/components/ui';
 import { colors, layout, radius, spacing, type } from '@/constants/theme';
 
@@ -57,7 +57,7 @@ export default function ProfileScreen() {
           <Text style={type.headline}>{employee?.full_name ?? '—'}</Text>
           <View style={styles.roleBadge}>
             <Text style={styles.roleBadgeText}>
-              {employee ? ROLE_LABELS[employee.role] : ''}
+              {roleLabel(employee?.role ?? null)}
             </Text>
           </View>
         </View>
@@ -67,7 +67,7 @@ export default function ProfileScreen() {
         <SectionLabel>Compte</SectionLabel>
         <Card style={styles.groupCard}>
           <ListRow label="E-mail" value={employee?.email ?? session?.user?.email ?? '—'} />
-          <ListRow label="Rôle" value={employee ? ROLE_LABELS[employee.role] : '—'} />
+          <ListRow label="Rôle" value={roleLabel(employee?.role ?? null)} />
           <ListRow
             label="Statut"
             value={employee?.is_active ? 'Actif' : 'Inactif'}

@@ -2,7 +2,7 @@ import 'server-only';
 
 import type { AuthContext } from '@/lib/auth/permissions';
 import { resolveTaskMutationClient } from '@/lib/auth/task-mutation-client';
-import { canManageAllTasks } from '@/lib/auth/capabilities';
+import { canManageAllTasks, canManageOperationalWork } from '@/lib/auth/capabilities';
 import {
   assertTaskRecordVisible,
 } from '@/lib/auth/data-scope';
@@ -28,6 +28,7 @@ import type { TaskDepartment, TaskPriority, TaskStatus } from '@/types/database'
 import { isTaskStatusAllowedInWorkflow } from '@/types/domain';
 import { revalidatePath } from 'next/cache';
 import { validateOperationalFutureDate } from '@/lib/dates/validate-future-date';
+import { syncVideoAfterValidatedShootingTask } from '@/lib/tasks/sync-video-after-shooting-task-done';
 
 const TASK_MUTATION_DENIED =
   'Action impossible : vous n’avez pas l’autorisation ou la tâche est invalide.';
@@ -116,8 +117,15 @@ export async function updateTaskCore(
   if (current.assignee_id) prevSet.add(current.assignee_id);
 
   const status = (input.status ?? current.status) as TaskStatus;
-  if (!isTaskStatusAllowedInWorkflow(status)) {
+  if (!isTaskStatusAllowedInWorkflow(status) && status !== 'proposed' && status !== 'completed_pending_validation') {
     return actionError('Statut non disponible dans le workflow.');
+  }
+  const manages = canManageOperationalWork(ctx.role, ctx.employee?.is_department_supervisor === true);
+  if (!manages && (status === 'done' || status === 'archived' || status === 'completed_pending_validation')) {
+    return actionError('Vous ne pouvez pas valider définitivement cette tâche.');
+  }
+  if (!manages && current.status === 'proposed' && status !== 'proposed') {
+    return actionError('Une tâche proposée doit être approuvée par un responsable.');
   }
 
   const priority = (input.priority ?? current.priority) as TaskPriority;
@@ -193,6 +201,13 @@ export async function updateTaskCore(
     const all = new Set(assigneeIds);
     await notifyTaskBlocked([...all], taskId, title);
   }
+
+  await syncVideoAfterValidatedShootingTask({
+    ctx,
+    taskId,
+    previousStatus: current.status,
+    nextStatus: status,
+  });
 
   revalidatePath('/tasks');
   revalidatePath('/tasks/calendar');

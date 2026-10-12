@@ -49,7 +49,7 @@ interface AuthState {
 const AuthContext = createContext<AuthState | null>(null);
 
 const EMPLOYEE_COLUMNS =
-  'id, user_id, full_name, role, email, avatar_url, avatar_initials, avatar_color, is_active, archived_at, must_change_password';
+  'id, user_id, full_name, role, email, avatar_url, avatar_initials, avatar_color, is_active, archived_at, must_change_password, department, is_department_supervisor';
 
 async function fetchEmployee(userId: string): Promise<Employee | null> {
   const { data, error } = await supabase

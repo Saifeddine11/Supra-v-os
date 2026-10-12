@@ -32,6 +32,8 @@ export const ALLOWED_TASK_STATUSES: readonly TaskStatus[] = [
   'blocked',
   'done',
   'archived',
+  'proposed',
+  'completed_pending_validation',
 ] as const;
 
 export const ALLOWED_INTERNAL_PRIORITIES: readonly InternalPriority[] = ['low', 'normal', 'high', 'critical'] as const;

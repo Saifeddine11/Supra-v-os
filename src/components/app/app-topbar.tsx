@@ -32,7 +32,7 @@ export function AppTopbar({
   const title = titleForPathname(pathname);
 
   return (
-    <header className="relative z-30 border-b border-border/80 bg-background/95 backdrop-blur-md">
+    <header className="relative z-30">
       <div className="flex h-16 items-center gap-3 px-4 sm:gap-4 sm:px-6 lg:px-8">
         <div className="min-w-0 flex-1">
           <h1 className="truncate font-sans text-lg font-semibold tracking-tight text-foreground sm:text-xl">
@@ -45,7 +45,7 @@ export function AppTopbar({
           <input
             type="search"
             placeholder="Rechercher clients, tâches, factures…"
-            className="h-10 w-full rounded-full border border-border/80 bg-card py-2 pl-10 pr-4 text-sm text-foreground outline-none ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/40"
+            className="h-10 w-full rounded-full border py-2 pl-10 pr-4 text-sm text-foreground outline-none ring-offset-background placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/40"
             aria-label="Recherche globale"
           />
         </div>

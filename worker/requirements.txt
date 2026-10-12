@@ -1,0 +1,5 @@
+# Python deps for the transcription step (faster-whisper).
+faster-whisper==1.0.3
+# Pulled in transitively by huggingface_hub, pinned here so a fresh venv
+# always has it (model download fails without it).
+requests>=2.31.0

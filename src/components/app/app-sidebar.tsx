@@ -37,8 +37,8 @@ export function AppSidebar({ employee, email }: AppSidebarProps) {
     return cn(
       'group flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors',
       active
-        ? 'bg-primary/[0.12] text-primary ring-1 ring-primary/25'
-        : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
+        ? 'bg-primary/15 text-primary shadow-[inset_0_1px_0_rgba(255,255,255,0.18)] ring-1 ring-primary/30'
+        : 'text-muted-foreground hover:bg-foreground/5 hover:text-foreground'
     );
   };
 
@@ -81,7 +81,7 @@ export function AppSidebar({ employee, email }: AppSidebarProps) {
       {/* Mobile toggle */}
       <button
         type="button"
-        className="fixed bottom-5 right-5 z-40 flex h-12 w-12 items-center justify-center rounded-full border border-border bg-secondary text-secondary-foreground shadow-lg lg:hidden"
+        className="liquid-glass fixed bottom-5 right-5 z-40 flex h-12 w-12 items-center justify-center rounded-full border text-foreground lg:hidden"
         onClick={() => setOpen(true)}
         aria-label="Ouvrir le menu"
       >
@@ -92,7 +92,7 @@ export function AppSidebar({ employee, email }: AppSidebarProps) {
       {open ? (
         <button
           type="button"
-          className="fixed inset-0 z-40 bg-black/45 backdrop-blur-sm lg:hidden"
+          className="fixed inset-0 z-40 bg-black/55 lg:hidden"
           aria-label="Fermer le menu"
           onClick={() => setOpen(false)}
         />
@@ -101,7 +101,7 @@ export function AppSidebar({ employee, email }: AppSidebarProps) {
       {/* Sidebar drawer mobile / fixed desktop */}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 flex w-[272px] flex-col border-r border-border/80 bg-surface-secondary/95 backdrop-blur-xl transition-transform lg:w-[224px] lg:translate-x-0',
+          'liquid-glass-chrome fixed inset-y-0 left-0 z-50 flex w-[272px] flex-col border-r transition-transform lg:inset-y-3 lg:left-3 lg:w-[224px] lg:overflow-hidden lg:rounded-[1.35rem] lg:border lg:translate-x-0',
           open ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
         )}
       >
@@ -140,7 +140,7 @@ export function AppSidebar({ employee, email }: AppSidebarProps) {
           <form action={signOutAction} className="mt-2">
             <button
               type="submit"
-              className="flex w-full items-center justify-center rounded-lg border border-border bg-secondary py-2 text-xs font-semibold text-secondary-foreground transition-colors hover:border-primary/40 hover:bg-primary/[0.08]"
+              className="flex w-full items-center justify-center rounded-full border border-border/70 bg-background/30 py-2 text-xs font-semibold text-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] transition-colors hover:border-primary/40 hover:bg-primary/[0.08]"
             >
               Déconnexion
             </button>

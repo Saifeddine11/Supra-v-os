@@ -49,12 +49,8 @@ export function AppShell({
 }: AppShellProps) {
   if (mode === 'password_gate') {
     return (
-      <div className="relative min-h-screen bg-background">
-        <div
-          className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,color-mix(in_srgb,hsl(var(--orange-glow))_16%,transparent),transparent_55%)]"
-          aria-hidden
-        />
-        <header className="relative z-20 flex items-center justify-between gap-3 border-b border-border/60 bg-card/60 px-4 py-3 backdrop-blur-md sm:px-6">
+      <div className="relative min-h-screen">
+        <header className="liquid-glass-chrome relative z-20 mx-3 mt-3 flex items-center justify-between gap-3 rounded-[1.25rem] border px-4 py-3 sm:mx-6">
           <span className="min-w-0 truncate font-serif text-base font-medium text-supra-gradient sm:text-lg">
             {AGENCY.name}
           </span>
@@ -76,14 +72,10 @@ export function AppShell({
   }
 
   return (
-    <div className="relative min-h-screen bg-background">
+    <div className="relative min-h-screen">
       <NotificationSoundBootstrap />
-      <div
-        className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,color-mix(in_srgb,hsl(var(--orange-glow))_16%,transparent),transparent_55%)]"
-        aria-hidden
-      />
       <AppSidebar employee={employee} email={email} />
-      <div className="lg:pl-[224px]">
+      <div className="lg:pl-[236px]">
         <StickyAppHeader>
           <AppTopbar
             employee={employee}

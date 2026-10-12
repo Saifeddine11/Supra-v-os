@@ -37,6 +37,7 @@ export interface CreateTaskInput {
   priority: TaskPriority;
   clientId: string | null;
   assigneeIds: string[];
+  asProposal?: boolean;
 }
 
 const LIKE_WILDCARD_RE = /[\\%_]/g;
@@ -182,7 +183,7 @@ export async function createTask(
     description: input.description.trim() || null,
     client_id: input.clientId || null,
     assignee_id: assigneeIds[0] ?? null,
-    status: 'todo',
+    status: input.asProposal ? 'proposed' : 'todo',
     priority: input.priority,
     deadline: input.deadline ? input.deadline.toISOString() : null,
     created_by: userId,
@@ -205,7 +206,9 @@ export async function createTask(
     if (pivotError) {
       // Web parity: roll the task back rather than leaving it half-created.
       logDevError('createTask:assignments', pivotError);
-      await supabase.from('tasks').delete().eq('id', taskId);
+      if (!input.asProposal) {
+        await supabase.from('tasks').delete().eq('id', taskId);
+      }
       return { id: null, error: toUserMessage(pivotError, CREATE_FAILED_MSG) };
     }
   }

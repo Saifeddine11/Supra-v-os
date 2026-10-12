@@ -65,6 +65,16 @@ export function navItemVisible(href: string, role: UserRole, flags?: NavFlags): 
         r === 'cameraman' ||
         r === 'community_manager'
       );
+    case '/studio':
+      return (
+        r === 'admin' ||
+        r === 'project_manager' ||
+        r === 'department_supervisor' ||
+        sup ||
+        r === 'editor' ||
+        r === 'cameraman' ||
+        r === 'community_manager'
+      );
     case '/editorial':
       return r === 'admin' || r === 'project_manager' || r === 'department_supervisor' || sup || r === 'community_manager';
     case '/tasks':
@@ -157,6 +167,7 @@ export function canAccessPath(role: UserRole | null, pathname: string, flags?: N
   if (p.startsWith('/tasks')) return navItemVisible('/tasks', role, flags);
   if (p.startsWith('/clients')) return navItemVisible('/clients', role, flags);
   if (p.startsWith('/videos')) return navItemVisible('/videos', role, flags);
+  if (p.startsWith('/studio')) return navItemVisible('/studio', role, flags);
   if (p.startsWith('/editorial')) return navItemVisible('/editorial', role, flags);
   if (p.startsWith('/projects')) return navItemVisible('/projects', role, flags);
   if (p.startsWith('/internal')) return navItemVisible('/internal', role, flags);

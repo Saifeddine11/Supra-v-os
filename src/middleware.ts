@@ -116,6 +116,14 @@ export async function middleware(request: NextRequest) {
   if (!user && pathname === '/api/discord/admin') {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
+  if (!user && pathname.startsWith('/api/studio/')) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  if (!user && /^\/api\/tasks\/[0-9a-f-]{36}\/validate-completion$/i.test(pathname)) {
+    const bearer = request.headers.get('authorization') ?? '';
+    if (/^Bearer\s+\S+/i.test(bearer)) return response;
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 
   /**
    * Invite / recovery links often land on Site URL (`/`) or `/login` with `?code=`

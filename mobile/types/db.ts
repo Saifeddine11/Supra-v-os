@@ -7,6 +7,7 @@
 export type UserRole =
   | 'admin'
   | 'project_manager'
+  | 'department_supervisor'
   | 'editor'
   | 'cameraman'
   | 'developer'
@@ -25,7 +26,9 @@ export type TaskStatus =
   | 'review'
   | 'blocked'
   | 'done'
-  | 'archived';
+  | 'archived'
+  | 'proposed'
+  | 'completed_pending_validation';
 
 export type TaskPriority = 'low' | 'normal' | 'high' | 'urgent';
 
@@ -78,6 +81,8 @@ export interface Employee {
   is_active: boolean;
   archived_at: string | null;
   must_change_password: boolean;
+  department: string | null;
+  is_department_supervisor: boolean;
 }
 
 export interface TaskSummary {
