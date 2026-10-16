@@ -116,7 +116,12 @@ export async function createTaskCore(
     return actionError('Client non autorisé pour cette tâche.');
   }
 
-  if (shouldScopeTasksToAssignee(ctx) && ctx.employee && !isDepartmentSupervisor(ctx.employee ?? ctx.role)) {
+  const selfScoped =
+    shouldScopeTasksToAssignee(ctx) &&
+    Boolean(ctx.employee) &&
+    !isDepartmentSupervisor(ctx.employee ?? ctx.role);
+
+  if (selfScoped && ctx.employee) {
     const eid = ctx.employee.id;
     if (assigneeIds.some((id) => id && id !== eid)) {
       return actionError('Vous ne pouvez vous assigner des tâches qu’à vous-même.');
@@ -142,12 +147,11 @@ export async function createTaskCore(
 
   const primary = legacyPrimaryAssignee(assigneeIds);
 
-  const canOpenOfficial = canManageOperationalWork(
-    ctx.role,
-    ctx.employee?.is_department_supervisor === true,
-  );
-  const status = (canOpenOfficial ? (input.status ?? 'todo') : 'proposed') as TaskStatus;
-  if (canOpenOfficial && !isTaskStatusAllowedInWorkflow(status)) {
+  const canOpenOfficial =
+    selfScoped ||
+    canManageOperationalWork(ctx.role, ctx.employee?.is_department_supervisor === true);
+  const status = (selfScoped ? 'todo' : canOpenOfficial ? (input.status ?? 'todo') : 'proposed') as TaskStatus;
+  if (canOpenOfficial && !isTaskStatusAllowedInWorkflow(status) && status !== 'todo') {
     return actionError('Statut non disponible dans le workflow.');
   }
   if (!canOpenOfficial && status !== 'proposed') {

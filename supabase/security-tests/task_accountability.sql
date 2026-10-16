@@ -51,14 +51,18 @@ begin
   execute 'set local role authenticated';
 
   begin
-    insert into public.tasks (title, status, created_by, department)
-    values ('cheat official', 'todo', v_editor_user, 'production_video');
-    raise exception 'FAIL: employee inserted an official task';
+    insert into public.tasks (title, status, created_by, assignee_id, department)
+    values ('cheat official for other', 'todo', v_editor_user, v_other_emp, 'production_video');
+    raise exception 'FAIL: employee inserted an official task for someone else';
   exception
     when insufficient_privilege or check_violation or others then
       if sqlerrm ilike '%FAIL:%' then raise; end if;
-      raise notice 'PASS: employee cannot create an official task (%).', sqlerrm;
+      raise notice 'PASS: employee cannot create an official task for someone else (%).', sqlerrm;
   end;
+
+  insert into public.tasks (title, status, created_by, assignee_id, department)
+  values ('own official', 'todo', v_editor_user, v_editor_emp, 'production_video');
+  raise notice 'PASS: employee can create an official task assigned to themselves';
 
   insert into public.tasks (title, status, created_by, assignee_id, department)
   values ('proposed work', 'proposed', v_editor_user, v_editor_emp, 'production_video')

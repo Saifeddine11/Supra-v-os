@@ -5,19 +5,25 @@ import type { TaskDepartment } from '@/types/database';
 
 type TaskFormConstraints = {
   lockedDepartment: TaskDepartment | null;
+  lockSelfAssigneeId: string | null;
 };
 
-const TaskFormConstraintsContext = createContext<TaskFormConstraints>({ lockedDepartment: null });
+const TaskFormConstraintsContext = createContext<TaskFormConstraints>({
+  lockedDepartment: null,
+  lockSelfAssigneeId: null,
+});
 
 export function TaskFormConstraintsProvider({
   lockedDepartment,
+  lockSelfAssigneeId = null,
   children,
 }: {
   lockedDepartment: TaskDepartment | null;
+  lockSelfAssigneeId?: string | null;
   children: React.ReactNode;
 }) {
   return (
-    <TaskFormConstraintsContext.Provider value={{ lockedDepartment }}>
+    <TaskFormConstraintsContext.Provider value={{ lockedDepartment, lockSelfAssigneeId }}>
       {children}
     </TaskFormConstraintsContext.Provider>
   );

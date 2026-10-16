@@ -241,8 +241,13 @@ create policy "tasks_insert_operational"
     auth_is_admin_or_pm()
     or (
       auth_employee_id() is not null
+      and created_by = auth.uid()
       and auth_user_role() in (
         'editor', 'cameraman', 'developer', 'designer', 'seo', 'community_manager'
+      )
+      and (
+        status = 'proposed'
+        or (status = 'todo' and assignee_id = auth_employee_id())
       )
     )
   );

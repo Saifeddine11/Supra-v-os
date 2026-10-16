@@ -3,6 +3,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AuthContext } from '@/lib/auth/permissions';
 import { actionError, type ActionResult } from '@/lib/actions/types';
+import { shouldScopeTasksToAssignee } from '@/lib/auth/data-scope';
 import {
   canAssignTaskToEmployee,
   canManageEmployee,
@@ -25,6 +26,14 @@ export function lockedTaskDepartmentForActor(ctx: AuthContext): TaskDepartment |
   return ctx.employee?.department ?? null;
 }
 
+/** Operational staff create tasks assigned only to themselves. */
+export function lockedSelfAssigneeIdForActor(ctx: AuthContext): string | null {
+  if (!ctx.employee) return null;
+  if (isDepartmentSupervisor(ctx.employee ?? ctx.role)) return null;
+  if (!shouldScopeTasksToAssignee(ctx)) return null;
+  return ctx.employee.id;
+}
+
 export function resolveCreatedTaskDepartment(
   ctx: AuthContext,
   requested: TaskDepartment | null,
@@ -36,8 +45,12 @@ export function resolveCreatedTaskDepartment(
     }
     return { ok: true, value: dept };
   }
-  if (!requested) return { ok: false, error: 'Le département est requis.' };
-  return { ok: true, value: requested };
+  if (requested) return { ok: true, value: requested };
+  const inferred = ctx.employee
+    ? resolveEmployeeDepartment(ctx.employee)
+    : null;
+  if (!inferred) return { ok: false, error: 'Le département est requis.' };
+  return { ok: true, value: inferred };
 }
 
 export function resolveUpdatedTaskDepartment(
@@ -75,7 +88,9 @@ export async function assertAssigneesInSupervisionScope(
   if (error) return actionError(error.message);
 
   const byId = new Map((data ?? []).map((row) => [row.id as string, row]));
+  const selfId = ctx.employee?.id ?? null;
   for (const id of assigneeIds) {
+    if (selfId && id === selfId) continue;
     const row = byId.get(id);
     if (!row) return actionError('Collaborateur introuvable pour l’assignation.');
     const employeeDept = resolveEmployeeDepartment(row as Pick<Employee, 'department' | 'role' | 'operational_skills'>);

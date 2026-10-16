@@ -32,7 +32,7 @@ import { CalendarToolbar, type CalendarNav } from './calendar-toolbar';
 import { CalendarMobileDefaultRedirect } from './calendar-mobile-default';
 import dynamic from 'next/dynamic';
 import { TaskFormConstraintsProvider } from '../task-form-constraints';
-import { lockedTaskDepartmentForActor } from '@/lib/auth/supervision-server';
+import { lockedSelfAssigneeIdForActor, lockedTaskDepartmentForActor } from '@/lib/auth/supervision-server';
 
 const TasksCalendarExperience = dynamic(
   () => import('./tasks-calendar-experience').then((m) => ({ default: m.TasksCalendarExperience })),
@@ -170,7 +170,10 @@ export default async function TasksCalendarPage({
     view === 'month' ? 'Mois' : view === 'week' ? 'Semaine' : 'Jour';
 
   return (
-    <TaskFormConstraintsProvider lockedDepartment={calCtx ? lockedTaskDepartmentForActor(calCtx) : null}>
+    <TaskFormConstraintsProvider
+      lockedDepartment={calCtx ? lockedTaskDepartmentForActor(calCtx) : null}
+      lockSelfAssigneeId={calCtx ? lockedSelfAssigneeIdForActor(calCtx) : null}
+    >
     <div className="space-y-6">
       <Suspense fallback={null}>
         <CalendarMobileDefaultRedirect />

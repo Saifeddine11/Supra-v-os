@@ -70,9 +70,10 @@ export function TaskFormDialog({
   const isEdit = Boolean(task);
   const taskKey = task?.id ?? '__create__';
   const videoLinked = Boolean(task?.video_id);
-  const { lockedDepartment } = useTaskFormConstraints();
+  const { lockedDepartment, lockSelfAssigneeId } = useTaskFormConstraints();
   const departmentLocked = Boolean(lockedDepartment);
   const departmentValue = lockedDepartment ?? task?.department ?? (videoLinked ? 'production_video' : '');
+  const selfAssignLocked = Boolean(lockSelfAssigneeId) && !isEdit;
 
   useEffect(() => {
     if (!open) setErr(null);
@@ -80,10 +81,14 @@ export function TaskFormDialog({
 
   useEffect(() => {
     if (!open) return;
-    setAssigneeSel(initialAssigneeSet(task ?? null));
+    setAssigneeSel(
+      !task && lockSelfAssigneeId
+        ? new Set([lockSelfAssigneeId])
+        : initialAssigneeSet(task ?? null),
+    );
     setClientSel(task?.client_id ?? '');
     setDeadline(toDatetimeLocalValue(task?.deadline ?? null));
-  }, [open, taskKey, task]);
+  }, [open, taskKey, task, lockSelfAssigneeId]);
 
   const sortedEmployees = useMemo(
     () => [...employees].sort((a, b) => a.full_name.localeCompare(b.full_name, 'fr', { sensitivity: 'base' })),
@@ -181,7 +186,7 @@ export function TaskFormDialog({
                 <select
                   id="task-department"
                   name="department"
-                  required={!isEdit}
+                  required={!isEdit && !selfAssignLocked}
                   defaultValue={departmentValue}
                   className="h-10 rounded-lg border border-border bg-muted px-3 text-sm"
                 >
@@ -202,6 +207,11 @@ export function TaskFormDialog({
                 {assigneeSel.size === 0 ? 'Non assigné' : `${assigneeSel.size} personne(s)`}
               </span>
             </div>
+            {selfAssignLocked ? (
+              <p className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                Cette tâche vous est assignée. Un chef de projet peut la réassigner ensuite.
+              </p>
+            ) : null}
             {videoLinked ? (
               <p className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
                 Tâche liée à une vidéo : les assignés sont synchronisés depuis la fiche vidéo lors des mises à jour
@@ -211,7 +221,7 @@ export function TaskFormDialog({
             <div
               className={cn(
                 'max-h-44 space-y-1 overflow-y-auto rounded-xl border border-border/70 bg-muted/20 p-3',
-                videoLinked && 'pointer-events-none opacity-60',
+                (videoLinked || selfAssignLocked) && 'pointer-events-none opacity-60',
               )}
             >
               {sortedEmployees.map((e) => (
@@ -248,6 +258,14 @@ export function TaskFormDialog({
           <div className="grid gap-2 sm:grid-cols-2">
             <div className="grid gap-2">
               <Label htmlFor="task-status">Statut</Label>
+              {selfAssignLocked ? (
+                <>
+                  <input type="hidden" name="status" value="todo" />
+                  <p className="flex h-10 items-center rounded-lg border border-border bg-muted px-3 text-sm">
+                    {TASK_STATUS_MAP.todo.label}
+                  </p>
+                </>
+              ) : (
               <select
                 id="task-status"
                 name="status"
@@ -260,6 +278,7 @@ export function TaskFormDialog({
                   </option>
                 ))}
               </select>
+              )}
             </div>
             <div className="grid gap-2">
               <Label htmlFor="task-prio">Priorité</Label>

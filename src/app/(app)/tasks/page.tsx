@@ -14,7 +14,7 @@ import { SectionCard } from '@/components/shared/section-card';
 import { EmptyState } from '@/components/shared/empty-state';
 import { TasksToolbar } from './tasks-toolbar';
 import { TaskFormConstraintsProvider } from './task-form-constraints';
-import { lockedTaskDepartmentForActor } from '@/lib/auth/supervision-server';
+import { lockedSelfAssigneeIdForActor, lockedTaskDepartmentForActor } from '@/lib/auth/supervision-server';
 
 export const metadata: Metadata = { title: 'Tâches' };
 
@@ -65,9 +65,13 @@ export default async function TasksPage({
   );
   const allowKanbanDrag = Boolean(ctx && canChangeStatus && !taskListingDenied(ctx));
   const lockedDepartment = ctx ? lockedTaskDepartmentForActor(ctx) : null;
+  const lockSelfAssigneeId = ctx ? lockedSelfAssigneeIdForActor(ctx) : null;
 
   return (
-    <TaskFormConstraintsProvider lockedDepartment={lockedDepartment}>
+    <TaskFormConstraintsProvider
+      lockedDepartment={lockedDepartment}
+      lockSelfAssigneeId={lockSelfAssigneeId}
+    >
     <div className="space-y-3.5">
       <Suspense fallback={null}>
         <TasksNewTaskOpener clients={clientOptions} employees={employees} />
@@ -83,7 +87,7 @@ export default async function TasksPage({
         clients={clientOptions}
         employees={employees}
         canCreate={canCreate}
-        createLabel={canReview ? 'Nouvelle tâche' : 'Ajouter une tâche proposée'}
+        createLabel="Nouvelle tâche"
         defaultQ={sp?.q}
         defaultAssignee={sp?.assignee}
         defaultPriority={sp?.priority}

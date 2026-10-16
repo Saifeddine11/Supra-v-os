@@ -1,6 +1,6 @@
 /**
- * Nouvelle tâche — admin / project_manager only (same roles as the web's
- * task-creation UI for full-scope creation; RLS enforces server-side).
+ * Nouvelle tâche — mêmes rôles que le web (`canCreateTasks`).
+ * L’équipe s’assigne à elle-même ; admin / PM / superviseur choisissent les assignés.
  */
 import React, { useState } from 'react';
 import {
@@ -32,6 +32,15 @@ import type { TaskPriority } from '@/types/db';
 
 const PRIORITIES: TaskPriority[] = ['low', 'normal', 'high', 'urgent'];
 
+const ROLE_DEPARTMENT: Partial<Record<string, string>> = {
+  community_manager: 'community_management',
+  editor: 'production_video',
+  cameraman: 'production_video',
+  developer: 'web_seo',
+  designer: 'web_seo',
+  seo: 'web_seo',
+};
+
 export default function NewTaskScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -59,7 +68,8 @@ export default function NewTaskScreen() {
     return <Redirect href="/(tabs)/tasks" />;
   }
 
-  const asProposal = !canReviewTasks(employee.role, employee.is_department_supervisor === true);
+  const canReview = canReviewTasks(employee.role, employee.is_department_supervisor === true);
+  const asProposal = false;
 
   const toggleAssignee = (id: string) => {
     setAssigneeIds((prev) =>
@@ -91,7 +101,16 @@ export default function NewTaskScreen() {
     setFormError(null);
     setSubmitting(true);
     const { error } = await createTask(
-      { title, description, deadline, priority, clientId, assigneeIds, asProposal },
+      {
+        title,
+        description,
+        deadline,
+        priority,
+        clientId,
+        assigneeIds: canReview ? assigneeIds : [employee.id],
+        asProposal,
+        department: employee.department ?? ROLE_DEPARTMENT[employee.role] ?? null,
+      },
       employee.full_name ?? null,
     );
     setSubmitting(false);
@@ -255,6 +274,7 @@ export default function NewTaskScreen() {
           </View>
         </View>
 
+        {canReview ? (
         <View style={styles.field}>
           <Text style={styles.label}>Assignés</Text>
           <View style={styles.chipRow}>
@@ -278,6 +298,12 @@ export default function NewTaskScreen() {
             ) : null}
           </View>
         </View>
+        ) : (
+          <View style={styles.field}>
+            <Text style={styles.label}>Assigné</Text>
+            <Text style={styles.emptyHint}>Cette tâche vous sera assignée.</Text>
+          </View>
+        )}
 
         <PrimaryButton
           title="Créer la tâche"

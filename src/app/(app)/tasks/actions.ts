@@ -120,7 +120,6 @@ export async function createTaskAction(formData: FormData): Promise<ActionResult
   const status = (String(formData.get('status') ?? 'todo') || 'todo') as TaskStatus;
   const departmentParsed = parseTaskDepartmentInput(formData.get('department'));
   if (!departmentParsed.ok) return actionError(departmentParsed.error);
-  if (!departmentParsed.value) return actionError('Le département est requis.');
 
   return createTaskCore(ctx, {
     title,
@@ -130,7 +129,7 @@ export async function createTaskAction(formData: FormData): Promise<ActionResult
     deadline: deadlineRaw || null,
     priority: (String(formData.get('priority') ?? 'normal') || 'normal') as TaskPriority,
     status,
-    department: departmentParsed.value,
+    department: departmentParsed.value ?? null,
   });
 }
 

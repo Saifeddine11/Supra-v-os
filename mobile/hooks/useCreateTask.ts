@@ -38,6 +38,7 @@ export interface CreateTaskInput {
   clientId: string | null;
   assigneeIds: string[];
   asProposal?: boolean;
+  department?: string | null;
 }
 
 const LIKE_WILDCARD_RE = /[\\%_]/g;
@@ -185,6 +186,7 @@ export async function createTask(
     assignee_id: assigneeIds[0] ?? null,
     status: input.asProposal ? 'proposed' : 'todo',
     priority: input.priority,
+    department: input.department ?? null,
     deadline: input.deadline ? input.deadline.toISOString() : null,
     created_by: userId,
   };
