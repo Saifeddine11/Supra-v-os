@@ -41,12 +41,16 @@ describe('video stage permissions', () => {
     assert.equal(videoKanbanColumnDropDenial(youli, youliVideo, 'editing', 'client_review'), null);
   });
 
-  it('keeps publication, client approval, and archive away from Youli', () => {
-    assert.equal(videoStatusTransitionDenial(youli, youliVideo, 'published'), VIDEO_PUBLICATION_DENIED);
+  it('lets Youli drag through every board column, including Livré', () => {
+    assert.equal(videoStatusTransitionDenial(youli, youliVideo, 'published'), null);
+    assert.equal(videoKanbanColumnDropDenial(youli, youliVideo, 'editing', 'delivered'), null);
+    assert.equal(videoKanbanColumnDropDenial(youli, youliVideo, 'shooting_planned', 'editing'), null);
+  });
+
+  it('keeps client approval and archive away from Youli', () => {
     assert.equal(videoStatusTransitionDenial(youli, youliVideo, 'validated'), VIDEO_PUBLICATION_DENIED);
     assert.equal(videoStatusTransitionDenial(youli, youliVideo, 'archived'), VIDEO_ARCHIVE_DENIED);
     assert.equal(videoStatusTransitionDenial(youli, youliVideo, 'cancelled'), VIDEO_ARCHIVE_DENIED);
-    assert.equal(videoKanbanColumnDropDenial(youli, youliVideo, 'editing', 'delivered'), VIDEO_PUBLICATION_DENIED);
   });
 
   it('still blocks a cameraman who is not supervisor and not the editor', () => {
@@ -62,14 +66,14 @@ describe('video stage permissions', () => {
     const assigned: VideoStageAssignment = { editorIds: [YOULI], cameramanIds: [] };
     assert.equal(videoStatusTransitionDenial(cameraman, assigned, 'editing'), null);
     assert.equal(videoStatusTransitionDenial(cameraman, assigned, 'sent_to_client'), null);
-    assert.equal(videoStatusTransitionDenial(cameraman, assigned, 'published'), VIDEO_PUBLICATION_DENIED);
+    assert.equal(videoStatusTransitionDenial(cameraman, assigned, 'published'), null);
   });
 
-  it('lets an editor role handle operational stages but not publication', () => {
+  it('lets an editor role move a video through the board, including Livré', () => {
     const editor = actor({ role: 'editor', department: 'production_video' });
     assert.equal(videoStatusTransitionDenial(editor, none, 'editing'), null);
     assert.equal(videoStatusTransitionDenial(editor, none, 'sent_to_client'), null);
-    assert.equal(videoStatusTransitionDenial(editor, none, 'published'), VIDEO_PUBLICATION_DENIED);
+    assert.equal(videoStatusTransitionDenial(editor, none, 'published'), null);
     assert.equal(videoStatusTransitionDenial(editor, none, 'archived'), VIDEO_ARCHIVE_DENIED);
   });
 
@@ -89,7 +93,7 @@ describe('video stage permissions', () => {
       department: 'community_management',
     });
     assert.equal(videoStatusTransitionDenial(supervisor, none, 'sent_to_client'), null);
-    assert.equal(videoStatusTransitionDenial(supervisor, none, 'published'), VIDEO_PUBLICATION_DENIED);
+    assert.equal(videoStatusTransitionDenial(supervisor, none, 'published'), null);
     const web = actor({
       role: 'developer',
       isDepartmentSupervisor: true,

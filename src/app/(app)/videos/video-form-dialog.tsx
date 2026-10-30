@@ -129,6 +129,7 @@ export function VideoFormDialog({
   const [editorSel, setEditorSel] = useState<Set<string>>(() => new Set());
   const [camSel, setCamSel] = useState<Set<string>>(() => new Set());
   const [clientSel, setClientSel] = useState(video?.client_id ?? clients[0]?.id ?? '');
+  const [shootingEnabled, setShootingEnabled] = useState(false);
   const [shootingLocal, setShootingLocal] = useState('');
   const [deliveryLocal, setDeliveryLocal] = useState('');
   const isEdit = Boolean(video);
@@ -145,7 +146,9 @@ export function VideoFormDialog({
     const { editors, cameramen } = initialAssignSets(video ?? null);
     setEditorSel(new Set(editors));
     setCamSel(new Set(cameramen));
-    setShootingLocal(toDatetimeLocalValue(video?.shooting_date));
+    const shootingValue = toDatetimeLocalValue(video?.shooting_date);
+    setShootingEnabled(Boolean(shootingValue));
+    setShootingLocal(shootingValue);
     setDeliveryLocal(
       toDatetimeLocalValue(
         video?.client_delivery_at ??
@@ -219,9 +222,18 @@ export function VideoFormDialog({
             e.preventDefault();
             setErr(null);
             setPending(true);
-            const shootErr = getOperationalDatetimeSubmitError(shootingLocal, {
-              unchangedFrom: video?.shooting_date ?? null,
-            });
+            if (shootingEnabled && !shootingLocal.trim()) {
+              const msg = 'Indiquez la date de tournage, ou décochez l’option.';
+              setErr(msg);
+              toast.error(msg);
+              setPending(false);
+              return;
+            }
+            const shootErr = shootingEnabled
+              ? getOperationalDatetimeSubmitError(shootingLocal, {
+                  unchangedFrom: video?.shooting_date ?? null,
+                })
+              : null;
             if (shootErr) {
               setErr(`Date de tournage : ${shootErr}`);
               toast.error(`Date de tournage : ${shootErr}`);
@@ -241,7 +253,10 @@ export function VideoFormDialog({
             }
             const form = e.currentTarget;
             const fd = new FormData(form);
-            fd.set('shooting_at', shootingLocal ? new Date(shootingLocal).toISOString() : '');
+            fd.set(
+              'shooting_at',
+              shootingEnabled && shootingLocal ? new Date(shootingLocal).toISOString() : '',
+            );
             fd.set('client_delivery_at', deliveryLocal ? new Date(deliveryLocal).toISOString() : '');
             try {
               const res = isEdit ? await updateVideoAction(video!.id, fd) : await createVideoAction(fd);
@@ -463,18 +478,37 @@ export function VideoFormDialog({
                 ) : null}
               </FormSection>
 
-              <FormSection title="Dates importantes" description="Planification tournage et engagement client.">
+              <FormSection title="Dates importantes" description="Le tournage est facultatif. La livraison client reste à planifier si elle est connue.">
                 <div className="grid grid-cols-1 gap-5 md:grid-cols-2 md:gap-6">
-                  <div className="grid min-w-0 gap-2 rounded-xl border border-border/60 bg-muted/15 p-4">
-                    <OperationalDatetimeField
-                      id="v-shoot-dt"
-                      label="Date de tournage"
-                      value={shootingLocal}
-                      onValueChange={setShootingLocal}
-                      unchangedBaseline={video?.shooting_date ?? undefined}
-                      inputClassName="w-full bg-background/80"
-                      hint="Visible dans le calendrier équipe et le portail client."
-                    />
+                  <div className="grid min-w-0 gap-3 rounded-xl border border-border/60 bg-muted/15 p-4">
+                    <label className="flex cursor-pointer items-start gap-2.5 text-sm">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5 h-4 w-4 shrink-0 rounded border-border accent-primary"
+                        checked={shootingEnabled}
+                        onChange={(ev) => {
+                          const next = ev.target.checked;
+                          setShootingEnabled(next);
+                          if (!next) setShootingLocal('');
+                        }}
+                      />
+                      <span>
+                        <span className="font-medium text-foreground">Date de tournage</span>
+                        <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
+                          Optionnel. Cochez seulement si le tournage est déjà planifié.
+                        </span>
+                      </span>
+                    </label>
+                    {shootingEnabled ? (
+                      <OperationalDatetimeField
+                        id="v-shoot-dt"
+                        value={shootingLocal}
+                        onValueChange={setShootingLocal}
+                        unchangedBaseline={video?.shooting_date ?? undefined}
+                        inputClassName="w-full bg-background/80"
+                        hint="Visible dans le calendrier équipe et le portail client."
+                      />
+                    ) : null}
                   </div>
                   <div className="grid min-w-0 gap-2 rounded-xl border border-border/60 bg-muted/15 p-4">
                     <OperationalDatetimeField

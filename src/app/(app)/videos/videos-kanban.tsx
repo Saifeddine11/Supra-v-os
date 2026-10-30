@@ -84,7 +84,6 @@ export function VideosKanban({
 
   const [localVideos, setLocalVideos] = useState<VideoWithClient[]>(videos);
   const [activeSourceColumn, setActiveSourceColumn] = useState<VideoKanbanDropColumnKey | 'terminal' | null>(null);
-  const [activeVideoId, setActiveVideoId] = useState<string | null>(null);
   const stageActor = videoStageActorFromEmployee(viewerRole, viewerEmployeeId
     ? { id: viewerEmployeeId, is_department_supervisor: viewerIsDepartmentSupervisor, department: viewerDepartment }
     : null);
@@ -110,7 +109,6 @@ export function VideosKanban({
     async (event: DragEndEvent) => {
       const { active, over } = event;
       setActiveSourceColumn(null);
-      setActiveVideoId(null);
       if (!dragEnabled || !over) return;
 
       const videoId = String(active.id);
@@ -156,13 +154,10 @@ export function VideosKanban({
       const id = String(event.active.id);
       const v = localVideos.find((x) => x.id === id);
       if (!v) return;
-      setActiveVideoId(v.id);
       setActiveSourceColumn(columnKeyForVideo(v));
     },
     [columnKeyForVideo, dragEnabled, localVideos],
   );
-
-  const activeVideo = activeVideoId ? localVideos.find((video) => video.id === activeVideoId) ?? null : null;
 
   const terminalColumn = {
     key: 'terminal' as const,
@@ -176,10 +171,7 @@ export function VideosKanban({
       sensors={sensors}
       collisionDetection={rectIntersection}
       onDragStart={handleDragStart}
-      onDragCancel={() => {
-        setActiveSourceColumn(null);
-        setActiveVideoId(null);
-      }}
+      onDragCancel={() => setActiveSourceColumn(null)}
       onDragEnd={handleDragEnd}
     >
       <div className={KANBAN_BOARD_OUTER_CLASS}>
@@ -188,16 +180,7 @@ export function VideosKanban({
         </p>
         <div className={KANBAN_SCROLL_CLASS}>
           <div className={KANBAN_COLUMNS_ROW_CLASS}>
-            {VIDEO_KANBAN_COLUMNS.map((col) => {
-              const dropLockMessage = activeVideo
-                ? videoKanbanColumnDropDenial(
-                    stageActor,
-                    videoStageAssignmentFromVideo(activeVideo),
-                    activeVideo.status,
-                    col.key,
-                  )
-                : null;
-              return (
+            {VIDEO_KANBAN_COLUMNS.map((col) => (
               <VideoKanbanColumn
                 key={col.key}
                 columnKey={col.key}
@@ -209,7 +192,6 @@ export function VideosKanban({
                 employees={employees}
                 canDelete={canDelete}
                 dragEnabled={dragEnabled}
-                dropLockMessage={dropLockMessage}
                 stackOnTop={dragEnabled && activeSourceColumn === col.key}
                 onOpenDetail={onOpenDetail}
                 highlightVideoId={highlightVideoId}
@@ -219,8 +201,7 @@ export function VideosKanban({
                 viewerIsDepartmentSupervisor={viewerIsDepartmentSupervisor}
                 viewerDepartment={viewerDepartment}
               />
-              );
-            })}
+            ))}
             <VideoKanbanColumn
               key={terminalColumn.key}
               columnKey={terminalColumn.key}

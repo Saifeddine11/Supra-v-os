@@ -7,7 +7,8 @@ import { targetVideoStatusForKanbanColumn, type VideoKanbanDropColumnKey } from 
  * Le rôle métier (`employees.role`) reste la base.
  * Un superviseur de pôle vidéo peut faire avancer les étapes opérationnelles de son département.
  * Une personne assignée comme monteur peut faire avancer les étapes de montage, même si son rôle est cadreur.
- * Validation client, publication, archivage et annulation restent réservés à l’admin et au chef de projet.
+ * Le glisser entre les colonnes du tableau, y compris Livré, reste ouvert.
+ * La validation client, l’archivage et l’annulation restent réservés à l’admin et au chef de projet.
  */
 
 const SHOOTING_STATUSES: readonly VideoStatus[] = [
@@ -92,18 +93,25 @@ function supervisesVideoProduction(actor: VideoStageActor): boolean {
   return actor.isDepartmentSupervisor && actor.department != null && VIDEO_DEPARTMENTS.includes(actor.department);
 }
 
+function canSweepProductionBoard(actor: VideoStageActor, assignment: VideoStageAssignment): boolean {
+  const role = actor.role;
+  return (
+    supervisesVideoProduction(actor) ||
+    role === 'editor' ||
+    role === 'community_manager' ||
+    hasId(assignment.editorIds, actor.employeeId)
+  );
+}
+
 function allowedOperationalStatuses(actor: VideoStageActor, assignment: VideoStageAssignment): Set<VideoStatus> {
   const allowed = new Set<VideoStatus>();
-  const role = actor.role;
-  const assignedEditor = hasId(assignment.editorIds, actor.employeeId);
-  const assignedCameraman = hasId(assignment.cameramanIds, actor.employeeId);
-
-  if (supervisesVideoProduction(actor) || role === 'editor' || role === 'community_manager' || assignedEditor) {
+  if (canSweepProductionBoard(actor, assignment)) {
     for (const status of OPERATIONAL_STATUSES) allowed.add(status);
+    allowed.add('published');
     return allowed;
   }
 
-  if (role === 'cameraman' || assignedCameraman) {
+  if (actor.role === 'cameraman' || hasId(assignment.cameramanIds, actor.employeeId)) {
     for (const status of SHOOTING_STATUSES) allowed.add(status);
   }
 
