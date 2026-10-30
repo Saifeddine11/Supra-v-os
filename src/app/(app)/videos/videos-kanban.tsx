@@ -12,7 +12,7 @@ import {
 } from '@dnd-kit/core';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import type { Client, UserRole } from '@/types/database';
+import type { Client, TaskDepartment, UserRole } from '@/types/database';
 import type { VideoAssignEmployeeRow } from '@/lib/data/employees';
 import type { VideoWithClient } from '@/lib/data/videos';
 import type { VideoStatus } from '@/types/database';
@@ -24,6 +24,11 @@ import {
   targetVideoStatusForKanbanColumn,
   type VideoKanbanDropColumnKey,
 } from '@/lib/videos/video-kanban-dnd';
+import {
+  videoKanbanColumnDropDenial,
+  videoStageActorFromEmployee,
+  videoStageAssignmentFromVideo,
+} from '@/lib/videos/video-stage-permissions';
 import {
   KANBAN_BOARD_OUTER_CLASS,
   KANBAN_COLUMNS_ROW_CLASS,
@@ -57,6 +62,8 @@ export function VideosKanban({
   scheduleNow,
   viewerRole,
   viewerEmployeeId,
+  viewerIsDepartmentSupervisor = false,
+  viewerDepartment = null,
 }: {
   videos: VideoWithClient[];
   clients: Pick<Client, 'id' | 'name' | 'color_hex' | 'color_label'>[];
@@ -68,6 +75,8 @@ export function VideosKanban({
   scheduleNow: Date;
   viewerRole: UserRole | null;
   viewerEmployeeId: string | null;
+  viewerIsDepartmentSupervisor?: boolean;
+  viewerDepartment?: TaskDepartment | null;
 }) {
   const router = useRouter();
   const isDesktop = useDesktopDragEnabled();
@@ -75,6 +84,10 @@ export function VideosKanban({
 
   const [localVideos, setLocalVideos] = useState<VideoWithClient[]>(videos);
   const [activeSourceColumn, setActiveSourceColumn] = useState<VideoKanbanDropColumnKey | 'terminal' | null>(null);
+  const [activeVideoId, setActiveVideoId] = useState<string | null>(null);
+  const stageActor = videoStageActorFromEmployee(viewerRole, viewerEmployeeId
+    ? { id: viewerEmployeeId, is_department_supervisor: viewerIsDepartmentSupervisor, department: viewerDepartment }
+    : null);
 
   useEffect(() => {
     setLocalVideos(videos);
@@ -97,6 +110,7 @@ export function VideosKanban({
     async (event: DragEndEvent) => {
       const { active, over } = event;
       setActiveSourceColumn(null);
+      setActiveVideoId(null);
       if (!dragEnabled || !over) return;
 
       const videoId = String(active.id);
@@ -108,6 +122,17 @@ export function VideosKanban({
 
       const nextStatus = targetVideoStatusForKanbanColumn(columnKey as VideoKanbanDropColumnKey, video.status);
       if (!nextStatus || nextStatus === video.status) return;
+
+      const denial = videoKanbanColumnDropDenial(
+        stageActor,
+        videoStageAssignmentFromVideo(video),
+        video.status,
+        columnKey,
+      );
+      if (denial) {
+        toast.error(denial);
+        return;
+      }
 
       const prevStatus = video.status;
       setLocalVideos((list) => list.map((v) => (v.id === videoId ? { ...v, status: nextStatus } : v)));
@@ -122,7 +147,7 @@ export function VideosKanban({
       toast.success('Statut vidéo mis à jour', { duration: 2000 });
       router.refresh();
     },
-    [dragEnabled, localVideos, router],
+    [dragEnabled, localVideos, router, stageActor],
   );
 
   const handleDragStart = useCallback(
@@ -131,10 +156,13 @@ export function VideosKanban({
       const id = String(event.active.id);
       const v = localVideos.find((x) => x.id === id);
       if (!v) return;
+      setActiveVideoId(v.id);
       setActiveSourceColumn(columnKeyForVideo(v));
     },
     [columnKeyForVideo, dragEnabled, localVideos],
   );
+
+  const activeVideo = activeVideoId ? localVideos.find((video) => video.id === activeVideoId) ?? null : null;
 
   const terminalColumn = {
     key: 'terminal' as const,
@@ -148,7 +176,10 @@ export function VideosKanban({
       sensors={sensors}
       collisionDetection={rectIntersection}
       onDragStart={handleDragStart}
-      onDragCancel={() => setActiveSourceColumn(null)}
+      onDragCancel={() => {
+        setActiveSourceColumn(null);
+        setActiveVideoId(null);
+      }}
       onDragEnd={handleDragEnd}
     >
       <div className={KANBAN_BOARD_OUTER_CLASS}>
@@ -157,7 +188,16 @@ export function VideosKanban({
         </p>
         <div className={KANBAN_SCROLL_CLASS}>
           <div className={KANBAN_COLUMNS_ROW_CLASS}>
-            {VIDEO_KANBAN_COLUMNS.map((col) => (
+            {VIDEO_KANBAN_COLUMNS.map((col) => {
+              const dropLockMessage = activeVideo
+                ? videoKanbanColumnDropDenial(
+                    stageActor,
+                    videoStageAssignmentFromVideo(activeVideo),
+                    activeVideo.status,
+                    col.key,
+                  )
+                : null;
+              return (
               <VideoKanbanColumn
                 key={col.key}
                 columnKey={col.key}
@@ -169,14 +209,18 @@ export function VideosKanban({
                 employees={employees}
                 canDelete={canDelete}
                 dragEnabled={dragEnabled}
+                dropLockMessage={dropLockMessage}
                 stackOnTop={dragEnabled && activeSourceColumn === col.key}
                 onOpenDetail={onOpenDetail}
                 highlightVideoId={highlightVideoId}
                 scheduleNow={scheduleNow}
                 viewerRole={viewerRole}
                 viewerEmployeeId={viewerEmployeeId}
+                viewerIsDepartmentSupervisor={viewerIsDepartmentSupervisor}
+                viewerDepartment={viewerDepartment}
               />
-            ))}
+              );
+            })}
             <VideoKanbanColumn
               key={terminalColumn.key}
               columnKey={terminalColumn.key}
@@ -194,6 +238,8 @@ export function VideosKanban({
               scheduleNow={scheduleNow}
               viewerRole={viewerRole}
               viewerEmployeeId={viewerEmployeeId}
+              viewerIsDepartmentSupervisor={viewerIsDepartmentSupervisor}
+              viewerDepartment={viewerDepartment}
             />
           </div>
         </div>

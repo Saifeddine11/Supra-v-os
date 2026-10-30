@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { toast } from 'sonner';
-import type { Client, UserRole } from '@/types/database';
+import type { Client, TaskDepartment, UserRole } from '@/types/database';
 import type { VideoWithClient } from '@/lib/data/videos';
 import type { VideoAssignEmployeeRow } from '@/lib/data/employees';
 import {
@@ -50,6 +50,8 @@ export function VideosWorkspace({
   scheduleNowIso,
   viewerRole,
   viewerEmployeeId,
+  viewerIsDepartmentSupervisor = false,
+  viewerDepartment = null,
 }: {
   view: 'table' | 'kanban';
   rows: VideoWithClient[];
@@ -61,6 +63,8 @@ export function VideosWorkspace({
   scheduleNowIso: string;
   viewerRole: UserRole | null;
   viewerEmployeeId: string | null;
+  viewerIsDepartmentSupervisor?: boolean;
+  viewerDepartment?: TaskDepartment | null;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -164,6 +168,8 @@ export function VideosWorkspace({
       scheduleNow={scheduleNow}
       viewerRole={viewerRole}
       viewerEmployeeId={viewerEmployeeId}
+      viewerIsDepartmentSupervisor={viewerIsDepartmentSupervisor}
+      viewerDepartment={viewerDepartment}
     />
   ) : null;
 
@@ -181,6 +187,8 @@ export function VideosWorkspace({
           scheduleNow={scheduleNow}
           viewerRole={viewerRole}
           viewerEmployeeId={viewerEmployeeId}
+          viewerIsDepartmentSupervisor={viewerIsDepartmentSupervisor}
+          viewerDepartment={viewerDepartment}
         />
         {dialog}
       </>

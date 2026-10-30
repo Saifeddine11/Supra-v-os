@@ -3,18 +3,18 @@
 import { useDraggable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 import { useTransition } from 'react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { GripVertical, MoreHorizontal } from 'lucide-react';
-import type { Client, UserRole } from '@/types/database';
+import type { Client, TaskDepartment, UserRole } from '@/types/database';
 import type { VideoAssignEmployeeRow } from '@/lib/data/employees';
 import type { VideoWithClient } from '@/lib/data/videos';
 import type { VideoStatus } from '@/types/database';
 import { VIDEO_PUBLIC_STATUS_MAP, PRIORITY_MAP } from '@/types/domain';
 import {
   videoStaffProductionStatusLabel,
-  videoStaffProductionStatusSelectOptions,
   videoStaffProductionStatusSelectValue,
   videoStaffShowsSingleDeliveredBadge,
 } from '@/lib/videos/video-staff-status';
@@ -52,6 +52,11 @@ import { deleteVideoAction, updateVideoStatusAction } from '../actions';
 import { ClientColorDot } from '@/components/shared/client-color-dot';
 import { getClientColor } from '@/lib/ui/client-colors';
 import { videoShowsShootingConfirmBadge } from '@/lib/videos/shooting-confirmation';
+import {
+  selectableProductionStatuses,
+  videoStageActorFromEmployee,
+  videoStageAssignmentFromVideo,
+} from '@/lib/videos/video-stage-permissions';
 
 function VideoCardActionsMenu({
   video: v,
@@ -59,12 +64,14 @@ function VideoCardActionsMenu({
   employees,
   canDelete,
   onOpenDetail,
+  statusOptions,
 }: {
   video: VideoWithClient;
   clients: Pick<Client, 'id' | 'name' | 'color_hex' | 'color_label'>[];
   employees: VideoAssignEmployeeRow[];
   canDelete: boolean;
   onOpenDetail?: () => void;
+  statusOptions: Array<{ value: VideoStatus; label: string }>;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -97,13 +104,17 @@ function VideoCardActionsMenu({
         <DropdownMenuSub>
           <DropdownMenuSubTrigger>Changer le statut</DropdownMenuSubTrigger>
           <DropdownMenuSubContent>
-            {(videoStaffProductionStatusSelectOptions()).map((opt) => (
+            {statusOptions.map((opt) => (
               <DropdownMenuItem
                 key={opt.value}
                 disabled={pending || v.status === opt.value || (opt.value === 'published' && v.status === 'validated')}
                 onSelect={() => {
                   startTransition(async () => {
-                    await updateVideoStatusAction(v.id, opt.value);
+                    const res = await updateVideoStatusAction(v.id, opt.value);
+                    if (!res.ok) {
+                      toast.error(res.error || 'Modification impossible');
+                      return;
+                    }
                     router.refresh();
                   });
                 }}
@@ -153,6 +164,8 @@ export function DraggableVideoKanbanCard({
   scheduleNow,
   viewerRole,
   viewerEmployeeId,
+  viewerIsDepartmentSupervisor = false,
+  viewerDepartment = null,
 }: {
   video: VideoWithClient;
   clients: Pick<Client, 'id' | 'name' | 'color_hex' | 'color_label'>[];
@@ -165,6 +178,8 @@ export function DraggableVideoKanbanCard({
   scheduleNow: Date;
   viewerRole: UserRole | null;
   viewerEmployeeId: string | null;
+  viewerIsDepartmentSupervisor?: boolean;
+  viewerDepartment?: TaskDepartment | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -180,6 +195,17 @@ export function DraggableVideoKanbanCard({
 
   const od = isVideoDeliveryOverdue(v);
   const needsShootingConfirm = videoShowsShootingConfirmBadge(v, scheduleNow, viewerRole, viewerEmployeeId);
+  const statusOptions = selectableProductionStatuses(
+    videoStageActorFromEmployee(viewerRole, viewerEmployeeId
+      ? {
+          id: viewerEmployeeId,
+          is_department_supervisor: viewerIsDepartmentSupervisor,
+          department: viewerDepartment,
+        }
+      : null),
+    videoStageAssignmentFromVideo(v),
+    v.status,
+  );
   const clientHex = v.clients?.name
     ? getClientColor({ name: v.clients.name, color_hex: v.clients.color_hex })
     : null;
@@ -310,6 +336,7 @@ export function DraggableVideoKanbanCard({
               clients={clients}
               employees={employees}
               canDelete={canDelete}
+              statusOptions={statusOptions}
               onOpenDetail={onOpenDetail ? () => onOpenDetail(v) : undefined}
             />
           </div>
@@ -411,12 +438,17 @@ export function DraggableVideoKanbanCard({
               onChange={(e) => {
                 const s = e.target.value as VideoStatus;
                 startTransition(async () => {
-                  await updateVideoStatusAction(v.id, s);
+                  const res = await updateVideoStatusAction(v.id, s);
+                  if (!res.ok) {
+                    toast.error(res.error || 'Modification impossible');
+                    return;
+                  }
+                  toast.success('Statut vidéo mis à jour', { duration: 2000 });
                   router.refresh();
                 });
               }}
             >
-              {videoStaffProductionStatusSelectOptions().map((opt) => (
+              {statusOptions.map((opt) => (
                 <option key={opt.value} value={opt.value}>
                   {opt.label}
                 </option>

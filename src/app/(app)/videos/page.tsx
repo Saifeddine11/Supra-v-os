@@ -192,6 +192,8 @@ export default async function VideosPage({
               scheduleNowIso={scheduleNowIso}
               viewerRole={ctx?.role ?? null}
               viewerEmployeeId={ctx?.employee?.id ?? null}
+              viewerIsDepartmentSupervisor={ctx?.employee?.is_department_supervisor === true}
+              viewerDepartment={ctx?.employee?.department ?? null}
             />
           </Suspense>
         )}

@@ -1,7 +1,7 @@
 'use client';
 
 import { useDroppable } from '@dnd-kit/core';
-import type { Client, UserRole } from '@/types/database';
+import type { Client, TaskDepartment, UserRole } from '@/types/database';
 import type { VideoAssignEmployeeRow } from '@/lib/data/employees';
 import type { VideoWithClient } from '@/lib/data/videos';
 import type { VideoStatus } from '@/types/database';
@@ -25,12 +25,15 @@ export function VideoKanbanColumn({
   employees,
   canDelete,
   dragEnabled,
+  dropLockMessage = null,
   stackOnTop,
   onOpenDetail,
   highlightVideoId,
   scheduleNow,
   viewerRole,
   viewerEmployeeId,
+  viewerIsDepartmentSupervisor = false,
+  viewerDepartment = null,
 }: {
   columnKey: string;
   label: string;
@@ -41,17 +44,21 @@ export function VideoKanbanColumn({
   employees: VideoAssignEmployeeRow[];
   canDelete: boolean;
   dragEnabled: boolean;
+  dropLockMessage?: string | null;
   stackOnTop: boolean;
   onOpenDetail?: (video: VideoWithClient) => void;
   highlightVideoId?: string | null;
   scheduleNow: Date;
   viewerRole: UserRole | null;
   viewerEmployeeId: string | null;
+  viewerIsDepartmentSupervisor?: boolean;
+  viewerDepartment?: TaskDepartment | null;
 }) {
   const droppable = columnKey !== 'terminal';
+  const locked = Boolean(dropLockMessage);
   const { setNodeRef, isOver } = useDroppable({
     id: columnKey,
-    disabled: !dragEnabled || !droppable,
+    disabled: !dragEnabled || !droppable || locked,
   });
 
   const items = videos.filter((v) => statuses.includes(v.status));
@@ -66,9 +73,11 @@ export function VideoKanbanColumn({
         KANBAN_COLUMN_WIDTH_CLASS,
         'flex flex-col overflow-hidden rounded-[20px] border bg-card/95 shadow-sm dark:bg-card/90',
         stackOnTop && 'relative z-[100]',
-        dragEnabled && droppable && isOver
-          ? 'border-primary/45 ring-2 ring-primary/20 dark:border-primary/35'
-          : 'border-border/70',
+        locked
+          ? 'border-border/80 opacity-80'
+          : dragEnabled && droppable && isOver
+            ? 'border-primary/45 ring-2 ring-primary/20 dark:border-primary/35'
+            : 'border-border/70',
       )}
     >
       <div
@@ -80,11 +89,17 @@ export function VideoKanbanColumn({
           {items.length}
         </span>
       </div>
+      {dropLockMessage ? (
+        <p className="border-b border-border/60 px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
+          {dropLockMessage}
+        </p>
+      ) : null}
       <div
         ref={setNodeRef}
         className={cn(
           'kanban-column-scroll flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overscroll-y-contain p-2.5 transition-colors',
-          dragEnabled && droppable && isOver && 'bg-primary/[0.06] dark:bg-primary/[0.09]',
+          locked && 'bg-muted/30',
+          !locked && dragEnabled && droppable && isOver && 'bg-primary/[0.06] dark:bg-primary/[0.09]',
         )}
       >
         {items.length === 0 ? (
@@ -96,7 +111,7 @@ export function VideoKanbanColumn({
                 : 'border-border/60 text-muted-foreground',
             )}
           >
-            {dragEnabled && droppable ? (
+            {dragEnabled && droppable && !locked ? (
               <>
                 <span className="font-medium text-foreground/90">Déposer ici</span>
                 <span className="mt-1 text-[11px] text-muted-foreground">Relâchez la carte dans cette colonne</span>
@@ -120,6 +135,8 @@ export function VideoKanbanColumn({
               scheduleNow={scheduleNow}
               viewerRole={viewerRole}
               viewerEmployeeId={viewerEmployeeId}
+              viewerIsDepartmentSupervisor={viewerIsDepartmentSupervisor}
+              viewerDepartment={viewerDepartment}
             />
           ))
         )}

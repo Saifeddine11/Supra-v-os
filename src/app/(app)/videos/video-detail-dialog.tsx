@@ -5,18 +5,23 @@ import { format, isToday, isTomorrow } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 import { X } from 'lucide-react';
-import type { Client, UserRole, VideoPublicStatus, VideoStatus } from '@/types/database';
+import type { Client, TaskDepartment, UserRole, VideoPublicStatus, VideoStatus } from '@/types/database';
 import type { VideoWithClient } from '@/lib/data/videos';
 import type { VideoAssignEmployeeRow } from '@/lib/data/employees';
 import { VIDEO_PUBLIC_STATUS_MAP, PRIORITY_MAP } from '@/types/domain';
 import {
   videoStaffProductionStatusLabel,
-  videoStaffProductionStatusSelectOptions,
   videoStaffProductionStatusSelectValue,
   videoStaffPublicStatusLabel,
   videoStaffShowsSingleDeliveredBadge,
 } from '@/lib/videos/video-staff-status';
+import {
+  selectableProductionStatuses,
+  videoStageActorFromEmployee,
+  videoStageAssignmentFromVideo,
+} from '@/lib/videos/video-stage-permissions';
 import { Dialog, DialogClose, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -35,7 +40,6 @@ import {
 import { ShootingConfirmationInline } from '@/components/videos/shooting-confirmation-inline';
 import { videoShowsShootingConfirmBadge } from '@/lib/videos/shooting-confirmation';
 
-const STATUSES = videoStaffProductionStatusSelectOptions();
 const PUBLIC_STATUSES = Object.keys(VIDEO_PUBLIC_STATUS_MAP) as VideoPublicStatus[];
 
 function formatDt(iso: string | null | undefined, pattern: string): string {
@@ -86,6 +90,8 @@ export function VideoDetailDialog({
   scheduleNow,
   viewerRole,
   viewerEmployeeId,
+  viewerIsDepartmentSupervisor = false,
+  viewerDepartment = null,
 }: {
   video: VideoWithClient;
   open: boolean;
@@ -97,6 +103,8 @@ export function VideoDetailDialog({
   scheduleNow: Date;
   viewerRole: UserRole | null;
   viewerEmployeeId: string | null;
+  viewerIsDepartmentSupervisor?: boolean;
+  viewerDepartment?: TaskDepartment | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -109,6 +117,17 @@ export function VideoDetailDialog({
     scheduleNow,
     viewerRole,
     viewerEmployeeId,
+  );
+  const statusOptions = selectableProductionStatuses(
+    videoStageActorFromEmployee(viewerRole, viewerEmployeeId
+      ? {
+          id: viewerEmployeeId,
+          is_department_supervisor: viewerIsDepartmentSupervisor,
+          department: viewerDepartment,
+        }
+      : null),
+    videoStageAssignmentFromVideo(video),
+    video.status,
   );
   const clientRow = clients.find((c) => c.id === video.client_id);
   const clientHex = clientRow
@@ -349,12 +368,17 @@ export function VideoDetailDialog({
                     onChange={(e) => {
                       const s = e.target.value as VideoStatus;
                       startTransition(async () => {
-                        await updateVideoStatusAction(video.id, s);
+                        const res = await updateVideoStatusAction(video.id, s);
+                        if (!res.ok) {
+                          toast.error(res.error || 'Modification impossible');
+                          return;
+                        }
+                        toast.success('Statut vidéo mis à jour', { duration: 2000 });
                         router.refresh();
                       });
                     }}
                   >
-                    {STATUSES.map((opt) => (
+                    {statusOptions.map((opt) => (
                       <option key={opt.value} value={opt.value}>
                         {opt.label}
                       </option>
@@ -373,7 +397,11 @@ export function VideoDetailDialog({
                     onChange={(e) => {
                       const pub = e.target.value as VideoPublicStatus;
                       startTransition(async () => {
-                        await updateVideoStatusAction(video.id, video.status, pub);
+                        const res = await updateVideoStatusAction(video.id, video.status, pub);
+                        if (!res.ok) {
+                          toast.error(res.error || 'Modification impossible');
+                          return;
+                        }
                         router.refresh();
                       });
                     }}

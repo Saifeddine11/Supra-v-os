@@ -8,15 +8,13 @@ import {
   assertCanCreateVideo,
   assertVideoRecordVisible,
   effectiveRole,
-  hasFullOrgDataAccess,
   videoMutationDenied,
 } from '@/lib/auth/data-scope';
 import { assertActiveOperationalClientSelection } from '@/lib/data/clients';
 import { actionError, actionOk, getPostgrestError, type ActionResult } from '@/lib/actions/types';
 import { createAdminClient } from '@/lib/supabase/admin';
 import type { TaskPriority, VideoPublicStatus, VideoStatus } from '@/types/database';
-import { appBaseUrl } from '@/lib/cron/app-base-url';
-import { getEmployeeUserId, insertNotifications } from '@/lib/notifications/notify';
+import { notifyVideoReleasedToClient } from '@/lib/videos/review/side-effects';
 import { logStaffActivity } from '@/lib/activity/log-activity';
 import {
   requireAssignableAsVideoCameraman,
@@ -27,6 +25,11 @@ import { syncVideoLinkedProductionTaskFromDb, upsertVideoProductionTask } from '
 import { scheduleVideoKanbanAdvancement } from '@/lib/discord/kanban-advancement';
 import { getVideoById, type VideoWithClient } from '@/lib/data/videos';
 import { validateOperationalFutureDate } from '@/lib/dates/validate-future-date';
+import {
+  videoStageActorFromEmployee,
+  videoStatusTransitionDenial,
+  type VideoStageAssignment,
+} from '@/lib/videos/video-stage-permissions';
 
 /** Ne pas exposer les messages techniques RLS / Postgres au formulaire. */
 function formatVideoMutationDbError(err: unknown): string {
@@ -78,33 +81,16 @@ function validateVideoFormOperationalDates(
   return actionOk(null);
 }
 
-/** Étapes autorisées pour un cadreur (drag Kanban ou changement rapide). */
-const CAMERAMAN_ALLOWED_PRODUCTION_STATUSES: VideoStatus[] = [
-  'idea',
-  'brief_pending',
-  'brief_validated',
-  'shooting_planned',
-  'shooting_done',
-  'rushes_received',
-];
+function stageActor(ctx: NonNullable<Awaited<ReturnType<typeof getAuthContext>>>) {
+  return videoStageActorFromEmployee(ctx.role, ctx.employee);
+}
 
-function assertVideoKanbanStatusTransitionAllowed(
+function denyVideoStatusTransition(
   ctx: NonNullable<Awaited<ReturnType<typeof getAuthContext>>>,
+  assignment: VideoStageAssignment,
   next: VideoStatus,
 ): string | null {
-  if (hasFullOrgDataAccess(ctx)) return null;
-  const er = effectiveRole(ctx.role);
-  if (er === 'cameraman') {
-    if (!CAMERAMAN_ALLOWED_PRODUCTION_STATUSES.includes(next)) {
-      return 'Votre rôle ne permet pas de passer la vidéo à cette étape de production.';
-    }
-  }
-  if (er === 'editor' || er === 'community_manager') {
-    if (next === 'archived' || next === 'cancelled') {
-      return 'Seuls l’administrateur ou le chef de projet peuvent archiver ou annuler une vidéo depuis le flux.';
-    }
-  }
-  return null;
+  return videoStatusTransitionDenial(stageActor(ctx), assignment, next);
 }
 
 function parseJsonIdArray(raw: unknown): string[] {
@@ -235,6 +221,9 @@ export async function createVideoAction(formData: FormData): Promise<ActionResul
   }
 
   const primary = legacyPrimaryAssignees(editorIds, cameramanIds);
+  const initialStatus = (String(formData.get('status') ?? 'idea') || 'idea') as VideoStatus;
+  const statusDenied = denyVideoStatusTransition(ctx, { editorIds, cameramanIds }, initialStatus);
+  if (statusDenied) return actionError(statusDenied);
 
   const row = {
     client_id: clientId,
@@ -242,7 +231,7 @@ export async function createVideoAction(formData: FormData): Promise<ActionResul
     topic: String(formData.get('topic') ?? '').trim() || null,
     brief: String(formData.get('brief') ?? '').trim() || null,
     type: String(formData.get('type') ?? '').trim() || null,
-    status: (String(formData.get('status') ?? 'idea') || 'idea') as VideoStatus,
+    status: initialStatus,
     public_status: (String(formData.get('public_status') ?? 'topic_proposed') ||
       'topic_proposed') as VideoPublicStatus,
     priority: (String(formData.get('priority') ?? 'normal') || 'normal') as TaskPriority,
@@ -363,6 +352,12 @@ export async function updateVideoAction(id: string, formData: FormData): Promise
   }
 
   const primary = legacyPrimaryAssignees(editorIds, cameramanIds);
+  const nextStatus = String(formData.get('status') ?? 'idea') as VideoStatus;
+  const previousStatus = curVideoDates?.status as VideoStatus | undefined;
+  if (previousStatus && previousStatus !== nextStatus) {
+    const statusDenied = denyVideoStatusTransition(ctx, { editorIds, cameramanIds }, nextStatus);
+    if (statusDenied) return actionError(statusDenied);
+  }
 
   const { error } = await supabase
     .from('videos')
@@ -372,7 +367,7 @@ export async function updateVideoAction(id: string, formData: FormData): Promise
       topic: String(formData.get('topic') ?? '').trim() || null,
       brief: String(formData.get('brief') ?? '').trim() || null,
       type: String(formData.get('type') ?? '').trim() || null,
-      status: String(formData.get('status') ?? 'idea') as VideoStatus,
+      status: nextStatus,
       public_status: String(formData.get('public_status') ?? 'topic_proposed') as VideoPublicStatus,
       priority: String(formData.get('priority') ?? 'normal') as TaskPriority,
       editor_id: primary.editor_id,
@@ -389,7 +384,7 @@ export async function updateVideoAction(id: string, formData: FormData): Promise
   scheduleVideoKanbanAdvancement(
     id,
     curVideoDates?.status as VideoStatus | undefined,
-    String(formData.get('status') ?? 'idea') as VideoStatus,
+    nextStatus,
   );
 
   try {
@@ -454,7 +449,7 @@ export async function updateVideoStatusAction(
 
   const { data: beforeRow, error: beforeErr } = await supabase
     .from('videos')
-    .select('status')
+    .select('status, editor_id, cameraman_id')
     .eq('id', id)
     .maybeSingle();
   if (beforeErr) return actionError(getPostgrestError(beforeErr));
@@ -462,8 +457,28 @@ export async function updateVideoStatusAction(
   const prevStatus = beforeRow.status as VideoStatus;
   if (prevStatus === status && public_status == null) return actionOk();
 
-  const perm = assertVideoKanbanStatusTransitionAllowed(ctx, status);
-  if (perm) return actionError(perm);
+  if (prevStatus !== status) {
+    const { data: assignmentRows, error: assignmentErr } = await supabase
+      .from('video_assignments')
+      .select('employee_id, assignment_role')
+      .eq('video_id', id);
+    if (assignmentErr) return actionError(getPostgrestError(assignmentErr));
+    const editorIds = new Set<string>();
+    const cameramanIds = new Set<string>();
+    if (beforeRow.editor_id) editorIds.add(String(beforeRow.editor_id));
+    if (beforeRow.cameraman_id) cameramanIds.add(String(beforeRow.cameraman_id));
+    for (const row of assignmentRows ?? []) {
+      const employeeId = String(row.employee_id ?? '');
+      if (!employeeId) continue;
+      if (row.assignment_role === 'editor') editorIds.add(employeeId);
+      if (row.assignment_role === 'cameraman') cameramanIds.add(employeeId);
+    }
+    const perm = denyVideoStatusTransition(ctx, {
+      editorIds: [...editorIds],
+      cameramanIds: [...cameramanIds],
+    }, status);
+    if (perm) return actionError(perm);
+  }
 
   const patch: Record<string, unknown> = {
     status,
@@ -484,44 +499,21 @@ export async function updateVideoStatusAction(
   });
 
   if (status === 'sent_to_client') {
-    const { data: v } = await supabase.from('videos').select('editor_id,title').eq('id', id).maybeSingle();
-    const { data: asg } = await supabase
-      .from('video_assignments')
-      .select('employee_id')
-      .eq('video_id', id)
-      .eq('assignment_role', 'editor');
-    const editorRecipients = new Set<string>();
-    for (const r of asg ?? []) {
-      if (r.employee_id) editorRecipients.add(r.employee_id as string);
+    const { data: v } = await supabase
+      .from('videos')
+      .select('editor_id,title,client_id')
+      .eq('id', id)
+      .maybeSingle();
+    if (v) {
+      await notifyVideoReleasedToClient({
+        videoId: id,
+        title: String(v.title),
+        clientId: String(v.client_id),
+        editorId: (v.editor_id as string | null) ?? null,
+        prevStatus,
+        nextStatus: status,
+      });
     }
-    if (v?.editor_id) editorRecipients.add(v.editor_id as string);
-    const base = appBaseUrl();
-    const rows: {
-      recipient_user_id: string;
-      type: 'system';
-      priority: 'normal';
-      title: string;
-      message: string;
-      related_entity_type: 'video';
-      related_entity_id: string;
-      link_url: string;
-    }[] = [];
-    for (const empId of editorRecipients) {
-      const uid = await getEmployeeUserId(empId);
-      if (uid && v) {
-        rows.push({
-          recipient_user_id: uid,
-          type: 'system',
-          priority: 'normal',
-          title: 'Vidéo envoyée au client',
-          message: String(v.title),
-          related_entity_type: 'video',
-          related_entity_id: id,
-          link_url: `${base}/videos`,
-        });
-      }
-    }
-    if (rows.length) await insertNotifications(rows);
   }
 
   try {
